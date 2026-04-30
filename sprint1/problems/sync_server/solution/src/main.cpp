@@ -29,7 +29,7 @@ http::response<http::string_body> HandleRequest(const http::request<http::string
         // Удаляем ведущий символ '/'
         std::string name;
         if (target == "/") {
-            name = "";  // Пустое имя для корневого пути
+            name = "";
         } else if (!target.empty() && target[0] == '/') {
             name = target.substr(1);
         } else {
@@ -45,7 +45,7 @@ http::response<http::string_body> HandleRequest(const http::request<http::string
         res.set(http::field::content_length, std::to_string(body.size()));
         
     } else if (req.method() == http::verb::head) {
-        // Обработка HEAD запроса - тело должно быть пустым, но Content-Length как у GET
+        // Обработка HEAD запроса - тело пустое, но Content-Length как у GET
         std::string target = std::string(req.target());
         
         // Удаляем ведущий символ '/'
@@ -63,12 +63,13 @@ http::response<http::string_body> HandleRequest(const http::request<http::string
         
         res.result(http::status::ok);
         res.set(http::field::content_type, "text/html");
-        res.body() = "";  // HEAD запрос - пустое тело
+        res.body() = "";
         res.set(http::field::content_length, std::to_string(body_content.size()));
         
     } else {
         // Обработка других методов (405 Method Not Allowed)
-        std::string body = "Invalid method.";
+        // ВАЖНО: тело ответа "Invalid method" БЕЗ точки в конце
+        std::string body = "Invalid method";
         
         res.result(http::status::method_not_allowed);
         res.set(http::field::content_type, "text/html");
@@ -95,10 +96,10 @@ int main() {
         // Создаём acceptor
         tcp::acceptor acceptor(ioc, {address, port});
         
-        // ВАЖНО: выводим сообщение до начала цикла обработки
+        // Выводим сообщение о готовности сервера
         std::cout << "Server has started..."sv << std::endl;
         
-        // Основной цикл
+        // Основной цикл обработки запросов
         while (true) {
             // Принимаем соединение
             tcp::socket socket(ioc);
@@ -113,7 +114,7 @@ int main() {
             http::read(socket, buffer, req, ec);
             
             if (ec) {
-                continue; // Ошибка чтения - пропускаем
+                continue;
             }
             
             // Обрабатываем запрос
@@ -122,7 +123,7 @@ int main() {
             // Отправляем ответ
             http::write(socket, res, ec);
             if (ec) {
-                continue; // Ошибка отправки - пропускаем
+                continue;
             }
             
             // Закрываем соединение
