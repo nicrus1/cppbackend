@@ -30,7 +30,7 @@ public:
                       beast::bind_front_handler(&SessionBase::Read, shared_from_this()));
     }
 
-protected:
+    // Write метод - должен быть public чтобы лямбда в Session могла его вызвать
     template <typename Body, typename Fields>
     void Write(http::response<Body, Fields>&& response) {
         auto safe_response = std::make_shared<http::response<Body, Fields>>(std::move(response));
@@ -41,8 +41,6 @@ protected:
                               self->OnWrite(safe_response->need_eof(), ec, bytes_written);
                           });
     }
-
-    virtual void HandleRequest(http::request<http::string_body>&& req) = 0;
 
 private:
     void Read() {
@@ -86,13 +84,16 @@ private:
         Read();
     }
 
+protected:
+    virtual void HandleRequest(http::request<http::string_body>&& req) = 0;
+
     beast::tcp_stream stream_;
     beast::flat_buffer buffer_;
     http::request<http::string_body> req_;
 };
 
 template <typename RequestHandler>
-class Session : public SessionBase, public std::enable_shared_from_this<Session<RequestHandler>> {
+class Session : public SessionBase {
 public:
     template <typename Handler>
     Session(tcp::socket&& socket, Handler&& request_handler)
