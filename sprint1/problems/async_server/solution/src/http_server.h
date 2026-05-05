@@ -17,7 +17,6 @@ using tcp = net::ip::tcp;
 namespace beast = boost::beast;
 namespace http = beast::http;
 
-// Базовый класс для сессии
 class SessionBase : public std::enable_shared_from_this<SessionBase> {
 public:
     SessionBase(tcp::socket&& socket)
@@ -59,7 +58,6 @@ protected:
     http::request<http::string_body> req_;
 };
 
-// Шаблонный класс сессии
 template <typename RequestHandler>
 class Session : public SessionBase {
 public:
@@ -70,7 +68,7 @@ public:
 
 private:
     void HandleRequest(http::request<http::string_body>&& req) override {
-        auto self = shared_from_this();
+        auto self = std::static_pointer_cast<Session<RequestHandler>>(shared_from_this());
         handler_(std::move(req), [self](http::response<http::string_body>&& response) {
             auto keep_alive = response.keep_alive();
             http::async_write(self->stream_, response,
@@ -90,7 +88,6 @@ private:
     RequestHandler handler_;
 };
 
-// Класс слушателя
 template <typename RequestHandler>
 class Listener : public std::enable_shared_from_this<Listener<RequestHandler>> {
 public:
