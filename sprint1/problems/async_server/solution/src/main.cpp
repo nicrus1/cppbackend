@@ -62,7 +62,8 @@ StringResponse HandleRequest(StringRequest&& req) {
     }
     
     // Остальные методы - 405 Method Not Allowed
-    auto response = MakeStringResponse(http::status::method_not_allowed, "Invalid method.", 
+    // Убрали точку в конце строки: "Invalid method" вместо "Invalid method."
+    auto response = MakeStringResponse(http::status::method_not_allowed, "Invalid method", 
                                         req.version(), req.keep_alive());
     response.set(http::field::allow, "GET, HEAD");
     return response;
