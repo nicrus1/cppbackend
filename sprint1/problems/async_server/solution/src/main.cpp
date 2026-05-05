@@ -92,7 +92,6 @@ int main() {
     net::signal_set signals(ioc, SIGINT, SIGTERM);
     signals.async_wait([&ioc](const sys::error_code& ec, [[maybe_unused]] int signal_number) {
         if (!ec) {
-            std::cout << "Shutting down..." << std::endl;
             ioc.stop();
         }
     });

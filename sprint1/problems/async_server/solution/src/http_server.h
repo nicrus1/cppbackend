@@ -30,47 +30,6 @@ public:
                       beast::bind_front_handler(&SessionBase::Read, shared_from_this()));
     }
 
-private:
-    void Read() {
-        using namespace std::literals;
-        request_ = {};
-        stream_.expires_after(30s);
-        http::async_read(stream_, buffer_, request_,
-                         beast::bind_front_handler(&SessionBase::OnRead, shared_from_this()));
-    }
-
-    void OnRead(beast::error_code ec, [[maybe_unused]] std::size_t bytes_read) {
-        using namespace std::literals;
-        if (ec == http::error::end_of_stream) {
-            return Close();
-        }
-        if (ec) {
-            return ReportError(ec, "read"sv);
-        }
-        HandleRequest(std::move(request_));
-    }
-
-    void Close() {
-        beast::error_code ec;
-        stream_.socket().shutdown(tcp::socket::shutdown_send, ec);
-    }
-
-    void ReportError(beast::error_code ec, std::string_view what) {
-        std::cerr << what << ": " << ec.message() << std::endl;
-    }
-
-    void OnWrite(bool close, beast::error_code ec, [[maybe_unused]] std::size_t bytes_written) {
-        if (ec) {
-            return ReportError(ec, "write"sv);
-        }
-
-        if (close) {
-            return Close();
-        }
-
-        Read();
-    }
-
 protected:
     template <typename Body, typename Fields>
     void Write(http::response<Body, Fields>&& response) {
@@ -85,29 +44,70 @@ protected:
 
     virtual void HandleRequest(http::request<http::string_body>&& req) = 0;
 
+private:
+    void Read() {
+        using namespace std::literals;
+        req_ = {};
+        stream_.expires_after(30s);
+        http::async_read(stream_, buffer_, req_,
+                         beast::bind_front_handler(&SessionBase::OnRead, shared_from_this()));
+    }
+
+    void OnRead(beast::error_code ec, [[maybe_unused]] std::size_t bytes_read) {
+        using namespace std::literals;
+        if (ec == http::error::end_of_stream) {
+            return Close();
+        }
+        if (ec) {
+            return ReportError(ec, "read"sv);
+        }
+        HandleRequest(std::move(req_));
+    }
+
+    void Close() {
+        beast::error_code ec;
+        stream_.socket().shutdown(tcp::socket::shutdown_send, ec);
+    }
+
+    void ReportError(beast::error_code ec, std::string_view what) {
+        std::cerr << what << ": " << ec.message() << std::endl;
+    }
+
+    void OnWrite(bool close, beast::error_code ec, [[maybe_unused]] std::size_t bytes_written) {
+        using namespace std::literals;
+        if (ec) {
+            return ReportError(ec, "write"sv);
+        }
+
+        if (close) {
+            return Close();
+        }
+
+        Read();
+    }
+
     beast::tcp_stream stream_;
     beast::flat_buffer buffer_;
     http::request<http::string_body> req_;
 };
 
 template <typename RequestHandler>
-class Session : public SessionBase {
+class Session : public SessionBase, public std::enable_shared_from_this<Session<RequestHandler>> {
 public:
     template <typename Handler>
-    Session(tcp::socket&& socket, Handler&& handler)
+    Session(tcp::socket&& socket, Handler&& request_handler)
         : SessionBase(std::move(socket))
-        , handler_(std::forward<Handler>(handler)) {
+        , request_handler_(std::forward<Handler>(request_handler)) {
     }
 
 private:
-    void HandleRequest(http::request<http::string_body>&& req) override {
-        auto self = shared_from_this();
-        handler_(std::move(req), [self](auto&& response) {
+    void HandleRequest(http::request<http::string_body>&& request) override {
+        request_handler_(std::move(request), [self = this->shared_from_this()](auto&& response) {
             self->Write(std::move(response));
         });
     }
 
-    RequestHandler handler_;
+    RequestHandler request_handler_;
 };
 
 template <typename RequestHandler>
