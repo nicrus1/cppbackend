@@ -19,7 +19,7 @@ namespace http = beast::http;
 
 class SessionBase : public std::enable_shared_from_this<SessionBase> {
 public:
-    SessionBase(tcp::socket&& socket)
+    explicit SessionBase(tcp::socket&& socket)
         : stream_(std::move(socket)) {}
 
     virtual ~SessionBase() = default;
@@ -35,28 +35,38 @@ protected:
         stream_.socket().shutdown(tcp::socket::shutdown_send, ec);
     }
 
-    virtual void HandleRequest(http::request<http::string_body>&& req) = 0;
+    beast::tcp_stream& Stream() {
+        return stream_;
+    }
 
-    beast::tcp_stream stream_;
-    beast::flat_buffer buffer_;
-    http::request<http::string_body> req_;
+    virtual void HandleRequest(http::request<http::string_body>&& req) = 0;
 
 private:
     void ReadRequest() {
-        http::async_read(stream_, buffer_, req_,
-            beast::bind_front_handler(&SessionBase::OnRead, shared_from_this()));
+        http::async_read(
+            stream_,
+            buffer_,
+            req_,
+            beast::bind_front_handler(&SessionBase::OnRead, shared_from_this())
+        );
     }
 
     void OnRead(beast::error_code ec, std::size_t) {
         if (ec == http::error::end_of_stream) {
             return Close();
         }
+
         if (ec) {
             return;
         }
 
         HandleRequest(std::move(req_));
     }
+
+protected:
+    beast::tcp_stream stream_;
+    beast::flat_buffer buffer_;
+    http::request<http::string_body> req_;
 };
 
 template <typename RequestHandler>
@@ -68,33 +78,40 @@ public:
 
 private:
     void HandleRequest(http::request<http::string_body>&& req) override {
-        auto self = std::static_pointer_cast<Session>(shared_from_this());
+        auto self = std::static_pointer_cast<Session<RequestHandler>>(this->shared_from_this());
 
         handler_(std::move(req),
             [self](http::response<http::string_body>&& response) mutable {
                 bool keep_alive = response.keep_alive();
 
+                auto& stream = self->Stream();
+
                 http::async_write(
-                    self->stream_,
+                    stream,
                     response,
                     [self, keep_alive](beast::error_code ec, std::size_t) {
-                        if (!ec && !keep_alive) {
+                        if (ec) {
+                            return;
+                        }
+
+                        if (!keep_alive) {
                             self->Close();
                         }
-                    });
-            });
+                    }
+                );
+            }
+        );
     }
 
-    RequestHandler handler_;
+    std::decay_t<RequestHandler> handler_;
 };
 
 template <typename RequestHandler>
 class Listener : public std::enable_shared_from_this<Listener<RequestHandler>> {
 public:
-    Listener(net::io_context& ioc,
-             const tcp::endpoint& endpoint,
-             RequestHandler handler)
-        : acceptor_(ioc)
+    Listener(net::io_context& ioc, const tcp::endpoint& endpoint, RequestHandler handler)
+        : ioc_(ioc)
+        , acceptor_(ioc)
         , handler_(std::move(handler)) {
 
         beast::error_code ec;
@@ -121,7 +138,7 @@ private:
         acceptor_.async_accept(
             [self = this->shared_from_this()](beast::error_code ec, tcp::socket socket) {
                 if (!ec) {
-                    std::make_shared<Session<RequestHandler>>(
+                    std::make_shared<Session<std::decay_t<RequestHandler>>>(
                         std::move(socket),
                         self->handler_
                     )->Run();
@@ -130,6 +147,7 @@ private:
             });
     }
 
+    net::io_context& ioc_;
     tcp::acceptor acceptor_;
     RequestHandler handler_;
 };
@@ -138,7 +156,7 @@ template <typename RequestHandler>
 void ServeHttp(net::io_context& ioc,
                const tcp::endpoint& endpoint,
                RequestHandler handler) {
-    std::make_shared<Listener<RequestHandler>>(
+    std::make_shared<Listener<std::decay_t<RequestHandler>>>(
         ioc, endpoint, std::move(handler)
     )->Run();
 }
