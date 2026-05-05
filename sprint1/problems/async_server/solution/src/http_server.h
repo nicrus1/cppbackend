@@ -29,12 +29,12 @@ public:
             beast::bind_front_handler(&SessionBase::ReadRequest, shared_from_this()));
     }
 
-protected:
     void Close() {
         beast::error_code ec;
         stream_.socket().shutdown(tcp::socket::shutdown_send, ec);
     }
 
+protected:
     virtual void HandleRequest(http::request<http::string_body>&& req) = 0;
 
     beast::tcp_stream stream_;
