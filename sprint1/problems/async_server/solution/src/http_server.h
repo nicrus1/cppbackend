@@ -5,6 +5,7 @@
 
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/asio/strand.hpp>
+#include <boost/asio/dispatch.hpp>
 #include <boost/beast/core.hpp>
 #include <boost/beast/http.hpp>
 #include <memory>
@@ -22,11 +23,12 @@ public:
     explicit SessionBase(tcp::socket&& socket)
         : stream_(std::move(socket)) {}
 
-    virtual ~SessionBase() = default;
+    SessionBase(const SessionBase&) = delete;
+    SessionBase& operator=(const SessionBase&) = delete;
 
     void Run() {
         net::dispatch(stream_.get_executor(),
-            beast::bind_front_handler(&SessionBase::ReadRequest, shared_from_this()));
+            beast::bind_front_handler(&SessionBase::Read, shared_from_this()));
     }
 
 protected:
@@ -42,11 +44,14 @@ protected:
     virtual void HandleRequest(http::request<http::string_body>&& req) = 0;
 
 private:
-    void ReadRequest() {
+    void Read() {
+        request_ = {};
+        stream_.expires_after(std::chrono::seconds(30));
+
         http::async_read(
             stream_,
             buffer_,
-            req_,
+            request_,
             beast::bind_front_handler(&SessionBase::OnRead, shared_from_this())
         );
     }
@@ -55,18 +60,17 @@ private:
         if (ec == http::error::end_of_stream) {
             return Close();
         }
-
         if (ec) {
             return;
         }
 
-        HandleRequest(std::move(req_));
+        HandleRequest(std::move(request_));
     }
 
 protected:
     beast::tcp_stream stream_;
     beast::flat_buffer buffer_;
-    http::request<http::string_body> req_;
+    http::request<http::string_body> request_;
 };
 
 template <typename RequestHandler>
@@ -78,12 +82,10 @@ public:
 
 private:
     void HandleRequest(http::request<http::string_body>&& req) override {
-        auto self = std::static_pointer_cast<Session<RequestHandler>>(this->shared_from_this());
+        auto self = std::static_pointer_cast<Session>(shared_from_this());
 
         handler_(std::move(req),
             [self](http::response<http::string_body> response) mutable {
-                // важно: response копируется (иначе UB с async_write)
-
                 bool keep_alive = response.keep_alive();
 
                 http::async_write(
@@ -92,6 +94,10 @@ private:
                     [self, keep_alive](beast::error_code ec, std::size_t) {
                         if (!ec && !keep_alive) {
                             self->Close();
+                            return;
+                        }
+                        if (!ec) {
+                            self->Run();
                         }
                     }
                 );
@@ -99,7 +105,7 @@ private:
         );
     }
 
-    std::decay_t<RequestHandler> handler_;
+    RequestHandler handler_;
 };
 
 template <typename RequestHandler>
@@ -134,7 +140,7 @@ private:
         acceptor_.async_accept(
             [self = this->shared_from_this()](beast::error_code ec, tcp::socket socket) {
                 if (!ec) {
-                    std::make_shared<Session<std::decay_t<RequestHandler>>>(
+                    std::make_shared<Session<RequestHandler>>(
                         std::move(socket),
                         self->handler_
                     )->Run();
