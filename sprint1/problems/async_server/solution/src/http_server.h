@@ -74,7 +74,9 @@ private:
             [self](http::response<http::string_body>&& response) {
                 bool keep_alive = response.keep_alive();
 
-                http::async_write(self->stream_, response,
+                http::async_write(
+                    static_cast<SessionBase&>(*self).stream_,
+                    response,
                     [self, keep_alive](beast::error_code ec, size_t) {
                         if (ec) return;
                         if (!keep_alive) {
