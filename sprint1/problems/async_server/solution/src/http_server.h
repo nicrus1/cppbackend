@@ -81,20 +81,16 @@ private:
         auto self = std::static_pointer_cast<Session<RequestHandler>>(this->shared_from_this());
 
         handler_(std::move(req),
-            [self](http::response<http::string_body>&& response) mutable {
+            [self](http::response<http::string_body> response) mutable {
+                // важно: response копируется (иначе UB с async_write)
+
                 bool keep_alive = response.keep_alive();
 
-                auto& stream = self->Stream();
-
                 http::async_write(
-                    stream,
+                    self->Stream(),
                     response,
                     [self, keep_alive](beast::error_code ec, std::size_t) {
-                        if (ec) {
-                            return;
-                        }
-
-                        if (!keep_alive) {
+                        if (!ec && !keep_alive) {
                             self->Close();
                         }
                     }
