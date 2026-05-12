@@ -1,9 +1,5 @@
 [requires]
-# No external requirements needed
+nlohmann_json/3.11.2
 
 [generators]
 cmake_paths
-
-[options]
-
-[imports]

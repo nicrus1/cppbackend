@@ -10,9 +10,12 @@
 #include <netinet/in.h>
 #include <unistd.h>
 #include <arpa/inet.h>
+#include <nlohmann/json.hpp>
 
+using json = nlohmann::json;
 namespace fs = std::filesystem;
 
+// URL декодирование
 std::string urlDecode(const std::string& str) {
     std::string result;
     for (size_t i = 0; i < str.length(); ++i) {
@@ -31,6 +34,7 @@ std::string urlDecode(const std::string& str) {
     return result;
 }
 
+// MIME типы
 std::string getMimeType(const std::string& path) {
     static const std::unordered_map<std::string, std::string> mime = {
         {".htm", "text/html"}, {".html", "text/html"},
@@ -64,147 +68,20 @@ std::string readFile(const fs::path& path) {
     return buffer.str();
 }
 
-// Формирование JSON ошибки с правильными кодами (как ожидают тесты)
+// Загрузка конфига в JSON
+json loadConfig(const fs::path& config_path) {
+    std::ifstream file(config_path);
+    json config;
+    file >> config;
+    return config;
+}
+
+// Формирование JSON ошибки
 std::string errorJson(const std::string& code, const std::string& message) {
-    return "{\"code\":\"" + code + "\",\"message\":\"" + message + "\"}";
-}
-
-// Получение списка карт из config.json
-std::string getMapsList(const std::string& config) {
-    std::string result = "[";
-    bool first = true;
-    
-    size_t pos = 0;
-    while (true) {
-        // Ищем id
-        size_t id_pos = config.find("\"id\"", pos);
-        if (id_pos == std::string::npos) break;
-        
-        // Находим начало объекта
-        size_t obj_start = id_pos;
-        while (obj_start > 0 && config[obj_start] != '{') {
-            obj_start--;
-        }
-        if (config[obj_start] != '{') {
-            pos = id_pos + 1;
-            continue;
-        }
-        
-        // Находим конец объекта
-        int depth = 0;
-        size_t obj_end = obj_start;
-        bool in_string = false;
-        for (size_t i = obj_start; i < config.length(); ++i) {
-            char c = config[i];
-            if (c == '"' && (i == 0 || config[i-1] != '\\')) {
-                in_string = !in_string;
-            }
-            if (!in_string) {
-                if (c == '{') depth++;
-                else if (c == '}') {
-                    depth--;
-                    if (depth == 0) {
-                        obj_end = i;
-                        break;
-                    }
-                }
-            }
-        }
-        
-        std::string obj = config.substr(obj_start, obj_end - obj_start + 1);
-        
-        // Извлекаем id
-        std::string id, name;
-        size_t id_val_start = obj.find("\"", id_pos + 4);
-        if (id_val_start != std::string::npos) {
-            size_t id_val_end = obj.find("\"", id_val_start + 1);
-            if (id_val_end != std::string::npos) {
-                id = obj.substr(id_val_start + 1, id_val_end - id_val_start - 1);
-            }
-        }
-        
-        // Извлекаем name
-        size_t name_pos = obj.find("\"name\"");
-        if (name_pos != std::string::npos) {
-            size_t name_val_start = obj.find("\"", name_pos + 6);
-            if (name_val_start != std::string::npos) {
-                size_t name_val_end = obj.find("\"", name_val_start + 1);
-                if (name_val_end != std::string::npos) {
-                    name = obj.substr(name_val_start + 1, name_val_end - name_val_start - 1);
-                }
-            }
-        }
-        
-        if (!id.empty() && !name.empty()) {
-            if (!first) result += ",";
-            first = false;
-            result += "{\"id\":\"" + id + "\",\"name\":\"" + name + "\"}";
-        }
-        
-        pos = obj_end + 1;
-    }
-    
-    result += "]";
-    return result;
-}
-
-// Поиск карты по ID
-std::string getMapById(const std::string& config, const std::string& map_id) {
-    size_t pos = 0;
-    
-    while (true) {
-        size_t id_pos = config.find("\"id\"", pos);
-        if (id_pos == std::string::npos) break;
-        
-        // Находим начало объекта
-        size_t obj_start = id_pos;
-        while (obj_start > 0 && config[obj_start] != '{') {
-            obj_start--;
-        }
-        if (config[obj_start] != '{') {
-            pos = id_pos + 1;
-            continue;
-        }
-        
-        // Находим конец объекта
-        int depth = 0;
-        size_t obj_end = obj_start;
-        bool in_string = false;
-        for (size_t i = obj_start; i < config.length(); ++i) {
-            char c = config[i];
-            if (c == '"' && (i == 0 || config[i-1] != '\\')) {
-                in_string = !in_string;
-            }
-            if (!in_string) {
-                if (c == '{') depth++;
-                else if (c == '}') {
-                    depth--;
-                    if (depth == 0) {
-                        obj_end = i;
-                        break;
-                    }
-                }
-            }
-        }
-        
-        std::string obj = config.substr(obj_start, obj_end - obj_start + 1);
-        
-        // Извлекаем id для проверки
-        size_t id_val_start = obj.find("\"", id_pos + 4);
-        if (id_val_start != std::string::npos) {
-            size_t id_val_end = obj.find("\"", id_val_start + 1);
-            if (id_val_end != std::string::npos) {
-                std::string current_id = obj.substr(id_val_start + 1, id_val_end - id_val_start - 1);
-                if (current_id == map_id) {
-                    return obj;
-                }
-            }
-        }
-        
-        pos = obj_end + 1;
-    }
-    
-    return "";
+    json err;
+    err["code"] = code;
+    err["message"] = message;
+    return err.dump();
 }
 
 bool handleStaticFile(const std::string& method, const std::string& uri,
@@ -279,7 +156,6 @@ bool handleApiRequest(const std::string& method, const std::string& uri,
     
     // Проверяем формат API
     if (uri.find("/api/v1/") != 0) {
-        // Тест ожидает код "badRequest" (camelCase!)
         std::string err = errorJson("badRequest", "Invalid API path");
         response = "HTTP/1.1 400 Bad Request\r\n"
                    "Content-Type: application/json\r\n"
@@ -297,8 +173,10 @@ bool handleApiRequest(const std::string& method, const std::string& uri,
         return true;
     }
     
-    std::string config = readFile(config_path);
-    if (config.empty()) {
+    json config;
+    try {
+        config = loadConfig(config_path);
+    } catch (...) {
         std::string err = errorJson("internalError", "Failed to load config");
         response = "HTTP/1.1 500 Internal Server Error\r\n"
                    "Content-Type: application/json\r\n"
@@ -309,11 +187,22 @@ bool handleApiRequest(const std::string& method, const std::string& uri,
     
     // GET /api/v1/maps
     if (uri == "/api/v1/maps") {
-        std::string maps_list = getMapsList(config);
+        json maps_list = json::array();
+        
+        if (config.contains("maps") && config["maps"].is_array()) {
+            for (const auto& map : config["maps"]) {
+                json item;
+                item["id"] = map["id"];
+                item["name"] = map["name"];
+                maps_list.push_back(item);
+            }
+        }
+        
+        std::string result = maps_list.dump();
         response = "HTTP/1.1 200 OK\r\n"
                    "Content-Type: application/json\r\n"
-                   "Content-Length: " + std::to_string(maps_list.size()) + "\r\n"
-                   "Connection: close\r\n\r\n" + maps_list;
+                   "Content-Length: " + std::to_string(result.size()) + "\r\n"
+                   "Connection: close\r\n\r\n" + result;
         return true;
     }
     
@@ -330,20 +219,30 @@ bool handleApiRequest(const std::string& method, const std::string& uri,
             return true;
         }
         
-        std::string map_content = getMapById(config, map_id);
+        // Ищем карту с нужным ID
+        json found_map = nullptr;
         
-        if (map_content.empty()) {
-            // Тест ожидает код "mapNotFound" (camelCase!)
+        if (config.contains("maps") && config["maps"].is_array()) {
+            for (const auto& map : config["maps"]) {
+                if (map.contains("id") && map["id"] == map_id) {
+                    found_map = map;
+                    break;
+                }
+            }
+        }
+        
+        if (found_map.is_null()) {
             std::string err = errorJson("mapNotFound", "Map not found");
             response = "HTTP/1.1 404 Not Found\r\n"
                        "Content-Type: application/json\r\n"
                        "Content-Length: " + std::to_string(err.size()) + "\r\n"
                        "Connection: close\r\n\r\n" + err;
         } else {
+            std::string result = found_map.dump();
             response = "HTTP/1.1 200 OK\r\n"
                        "Content-Type: application/json\r\n"
-                       "Content-Length: " + std::to_string(map_content.size()) + "\r\n"
-                       "Connection: close\r\n\r\n" + map_content;
+                       "Content-Length: " + std::to_string(result.size()) + "\r\n"
+                       "Connection: close\r\n\r\n" + result;
         }
         return true;
     }
