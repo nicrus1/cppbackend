@@ -64,46 +64,75 @@ std::string readFile(const fs::path& path) {
     return buffer.str();
 }
 
-// Функция для поиска значения по ключу в JSON строке
-std::string extractJsonString(const std::string& json, const std::string& key) {
-    std::string search = "\"" + key + "\"";
-    size_t key_pos = json.find(search);
-    if (key_pos == std::string::npos) return "";
+// Прямой поиск карты в JSON - самый простой способ
+std::string findMapDirect(const std::string& config, const std::string& map_id) {
+    // Ищем "id": "map1"
+    std::string search_pattern = "\"id\":\"" + map_id + "\"";
+    size_t id_pos = config.find(search_pattern);
+    if (id_pos == std::string::npos) {
+        return "";
+    }
     
-    size_t colon_pos = json.find(":", key_pos);
-    if (colon_pos == std::string::npos) return "";
+    // Ищем начало объекта {
+    size_t obj_start = id_pos;
+    while (obj_start > 0 && config[obj_start] != '{') {
+        obj_start--;
+    }
+    if (config[obj_start] != '{') {
+        return "";
+    }
     
-    size_t quote_start = json.find("\"", colon_pos);
-    if (quote_start == std::string::npos) return "";
+    // Ищем конец объекта }
+    int brace_count = 0;
+    size_t obj_end = obj_start;
+    bool in_string = false;
     
-    size_t quote_end = json.find("\"", quote_start + 1);
-    if (quote_end == std::string::npos) return "";
+    for (size_t i = obj_start; i < config.length(); ++i) {
+        char c = config[i];
+        if (c == '"' && (i == 0 || config[i-1] != '\\')) {
+            in_string = !in_string;
+        }
+        if (!in_string) {
+            if (c == '{') brace_count++;
+            else if (c == '}') {
+                brace_count--;
+                if (brace_count == 0) {
+                    obj_end = i;
+                    break;
+                }
+            }
+        }
+    }
     
-    return json.substr(quote_start + 1, quote_end - quote_start - 1);
+    return config.substr(obj_start, obj_end - obj_start + 1);
 }
 
-// Получение списка карт (только id и name)
+// Получение списка карт
 std::string getMapsList(const std::string& config) {
-    std::string result = "[";
-    bool first = true;
-    
-    // Ищем массив maps
+    // Находим массив maps
     size_t maps_pos = config.find("\"maps\"");
     if (maps_pos == std::string::npos) return "[]";
     
     size_t array_start = config.find("[", maps_pos);
     if (array_start == std::string::npos) return "[]";
     
-    // Парсим каждый объект в массиве
+    std::string result = "[";
+    bool first = true;
+    
     size_t pos = array_start;
     while (true) {
         size_t obj_start = config.find("{", pos);
-        if (obj_start == std::string::npos || obj_start > config.find("]", pos)) break;
+        if (obj_start == std::string::npos) break;
+        
+        // Проверяем не вышли ли за пределы массива
+        size_t next_bracket = config.find("]", pos);
+        if (next_bracket != std::string::npos && obj_start > next_bracket) break;
         
         // Находим конец объекта
         int brace_count = 0;
         size_t obj_end = obj_start;
         bool in_string = false;
+        
         for (size_t i = obj_start; i < config.length(); ++i) {
             char c = config[i];
             if (c == '"' && (i == 0 || config[i-1] != '\\')) {
@@ -122,8 +151,37 @@ std::string getMapsList(const std::string& config) {
         }
         
         std::string obj = config.substr(obj_start, obj_end - obj_start + 1);
-        std::string id = extractJsonString(obj, "id");
-        std::string name = extractJsonString(obj, "name");
+        
+        // Извлекаем id и name
+        std::string id, name;
+        
+        size_t id_start = obj.find("\"id\"");
+        if (id_start != std::string::npos) {
+            size_t colon = obj.find(":", id_start);
+            if (colon != std::string::npos) {
+                size_t quote1 = obj.find("\"", colon);
+                if (quote1 != std::string::npos) {
+                    size_t quote2 = obj.find("\"", quote1 + 1);
+                    if (quote2 != std::string::npos) {
+                        id = obj.substr(quote1 + 1, quote2 - quote1 - 1);
+                    }
+                }
+            }
+        }
+        
+        size_t name_start = obj.find("\"name\"");
+        if (name_start != std::string::npos) {
+            size_t colon = obj.find(":", name_start);
+            if (colon != std::string::npos) {
+                size_t quote1 = obj.find("\"", colon);
+                if (quote1 != std::string::npos) {
+                    size_t quote2 = obj.find("\"", quote1 + 1);
+                    if (quote2 != std::string::npos) {
+                        name = obj.substr(quote1 + 1, quote2 - quote1 - 1);
+                    }
+                }
+            }
+        }
         
         if (!id.empty() && !name.empty()) {
             if (!first) result += ",";
@@ -136,47 +194,6 @@ std::string getMapsList(const std::string& config) {
     
     result += "]";
     return result;
-}
-
-// Поиск полного объекта карты по ID
-std::string getMapById(const std::string& config, const std::string& map_id) {
-    size_t pos = 0;
-    
-    while (true) {
-        size_t obj_start = config.find("{", pos);
-        if (obj_start == std::string::npos) break;
-        
-        int brace_count = 0;
-        size_t obj_end = obj_start;
-        bool in_string = false;
-        for (size_t i = obj_start; i < config.length(); ++i) {
-            char c = config[i];
-            if (c == '"' && (i == 0 || config[i-1] != '\\')) {
-                in_string = !in_string;
-            }
-            if (!in_string) {
-                if (c == '{') brace_count++;
-                else if (c == '}') {
-                    brace_count--;
-                    if (brace_count == 0) {
-                        obj_end = i;
-                        break;
-                    }
-                }
-            }
-        }
-        
-        std::string obj = config.substr(obj_start, obj_end - obj_start + 1);
-        std::string id = extractJsonString(obj, "id");
-        
-        if (id == map_id) {
-            return obj;
-        }
-        
-        pos = obj_end + 1;
-    }
-    
-    return "";
 }
 
 std::string errorJson(const std::string& code, const std::string& message) {
@@ -302,7 +319,8 @@ bool handleApiRequest(const std::string& method, const std::string& uri,
             return true;
         }
         
-        std::string map_content = getMapById(config, map_id);
+        // Используем прямой поиск
+        std::string map_content = findMapDirect(config, map_id);
         
         if (map_content.empty()) {
             std::string err = errorJson("mapNotFound", "Map not found");
