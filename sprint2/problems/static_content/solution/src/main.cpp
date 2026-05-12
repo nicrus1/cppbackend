@@ -33,11 +33,11 @@ std::string urlDecode(const std::string& str) {
 
 std::string getMimeType(const std::string& path) {
     static const std::unordered_map<std::string, std::string> mime = {
-        {".htm", "text/html"}, {".html", "text/html"},
+        {".html", "text/html"}, {".htm", "text/html"},
         {".css", "text/css"}, {".js", "text/javascript"},
         {".json", "application/json"}, {".xml", "application/xml"},
         {".png", "image/png"}, {".jpg", "image/jpeg"},
-        {".jpe", "image/jpeg"}, {".jpeg", "image/jpeg"},
+        {".jpeg", "image/jpeg"}, {".jpe", "image/jpeg"},
         {".gif", "image/gif"}, {".bmp", "image/bmp"},
         {".ico", "image/vnd.microsoft.icon"},
         {".tiff", "image/tiff"}, {".tif", "image/tiff"},
@@ -64,30 +64,26 @@ std::string readFile(const fs::path& path) {
     return buffer.str();
 }
 
-// Простой поиск объекта карты по ID
-std::string getMapById(const std::string& config, const std::string& map_id) {
-    // Ищем "id":"map1" или "id": "map1"
-    std::string search1 = "\"id\":\"" + map_id + "\"";
-    std::string search2 = "\"id\": \"" + map_id + "\"";
-    
-    size_t pos = config.find(search1);
+// Поиск карты по ID - возвращает полный JSON объекта
+std::string findMapByID(const std::string& config, const std::string& map_id) {
+    // Ищем "id":"map1"
+    std::string pattern = "\"id\":\"" + map_id + "\"";
+    size_t pos = config.find(pattern);
     if (pos == std::string::npos) {
-        pos = config.find(search2);
+        // Пробуем с пробелом: "id": "map1"
+        pattern = "\"id\": \"" + map_id + "\"";
+        pos = config.find(pattern);
     }
-    if (pos == std::string::npos) {
-        return "";
-    }
+    if (pos == std::string::npos) return "";
     
-    // Находим начало объекта
+    // Ищем начало объекта {
     size_t start = pos;
     while (start > 0 && config[start] != '{') {
         start--;
     }
-    if (config[start] != '{') {
-        return "";
-    }
+    if (config[start] != '{') return "";
     
-    // Находим конец объекта
+    // Ищем конец объекта }
     int brace_count = 0;
     size_t end = start;
     for (size_t i = start; i < config.length(); ++i) {
@@ -111,7 +107,6 @@ std::string getMapsList(const std::string& config) {
     
     size_t pos = 0;
     while (true) {
-        // Ищем начало объекта
         size_t obj_start = config.find("{", pos);
         if (obj_start == std::string::npos) break;
         
@@ -135,13 +130,11 @@ std::string getMapsList(const std::string& config) {
         size_t id_pos = obj.find("\"id\"");
         if (id_pos != std::string::npos) {
             size_t colon = obj.find(":", id_pos);
-            if (colon != std::string::npos) {
-                size_t q1 = obj.find("\"", colon);
-                if (q1 != std::string::npos) {
-                    size_t q2 = obj.find("\"", q1 + 1);
-                    if (q2 != std::string::npos) {
-                        id = obj.substr(q1 + 1, q2 - q1 - 1);
-                    }
+            size_t q1 = obj.find("\"", colon);
+            if (q1 != std::string::npos) {
+                size_t q2 = obj.find("\"", q1 + 1);
+                if (q2 != std::string::npos) {
+                    id = obj.substr(q1 + 1, q2 - q1 - 1);
                 }
             }
         }
@@ -151,13 +144,11 @@ std::string getMapsList(const std::string& config) {
         size_t name_pos = obj.find("\"name\"");
         if (name_pos != std::string::npos) {
             size_t colon = obj.find(":", name_pos);
-            if (colon != std::string::npos) {
-                size_t q1 = obj.find("\"", colon);
-                if (q1 != std::string::npos) {
-                    size_t q2 = obj.find("\"", q1 + 1);
-                    if (q2 != std::string::npos) {
-                        name = obj.substr(q1 + 1, q2 - q1 - 1);
-                    }
+            size_t q1 = obj.find("\"", colon);
+            if (q1 != std::string::npos) {
+                size_t q2 = obj.find("\"", q1 + 1);
+                if (q2 != std::string::npos) {
+                    name = obj.substr(q1 + 1, q2 - q1 - 1);
                 }
             }
         }
@@ -249,7 +240,6 @@ bool handleStaticFile(const std::string& method, const std::string& uri,
 bool handleApiRequest(const std::string& method, const std::string& uri,
                       const fs::path& config_path, std::string& response) {
     
-    // Проверяем что URI начинается с /api/v1/
     if (uri.find("/api/v1/") != 0) {
         std::string err = errorJson("badRequest", "Invalid API path");
         response = "HTTP/1.1 400 Bad Request\r\n"
@@ -268,7 +258,6 @@ bool handleApiRequest(const std::string& method, const std::string& uri,
         return true;
     }
     
-    // Загружаем конфиг
     std::string config = readFile(config_path);
     if (config.empty()) {
         std::string err = errorJson("internalError", "Failed to load config");
@@ -279,7 +268,6 @@ bool handleApiRequest(const std::string& method, const std::string& uri,
         return true;
     }
     
-    // GET /api/v1/maps
     if (uri == "/api/v1/maps") {
         std::string maps_list = getMapsList(config);
         response = "HTTP/1.1 200 OK\r\n"
@@ -289,7 +277,6 @@ bool handleApiRequest(const std::string& method, const std::string& uri,
         return true;
     }
     
-    // GET /api/v1/maps/{id}
     if (uri.find("/api/v1/maps/") == 0) {
         std::string map_id = uri.substr(14);
         
@@ -302,7 +289,7 @@ bool handleApiRequest(const std::string& method, const std::string& uri,
             return true;
         }
         
-        std::string map_content = getMapById(config, map_id);
+        std::string map_content = findMapByID(config, map_id);
         
         if (map_content.empty()) {
             std::string err = errorJson("mapNotFound", "Map not found");
@@ -336,13 +323,17 @@ int main(int argc, char* argv[]) {
     fs::path config_path = argv[1];
     fs::path static_dir = argv[2];
     
-    // Проверяем существование статической директории
+    // Проверяем существование файла конфига
+    if (!fs::exists(config_path)) {
+        std::cerr << "Config file not found: " << config_path << std::endl;
+        return 1;
+    }
+    
     if (!fs::exists(static_dir)) {
         std::cerr << "Static directory not found: " << static_dir << std::endl;
         return 1;
     }
     
-    // Создаём сокет
     int server_fd = socket(AF_INET, SOCK_STREAM, 0);
     if (server_fd < 0) {
         std::cerr << "Failed to create socket" << std::endl;
