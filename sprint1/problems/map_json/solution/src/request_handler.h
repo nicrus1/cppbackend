@@ -25,8 +25,17 @@ public:
 private:
     template <typename Body, typename Allocator, typename Send>
     void HandleRequest(http::request<Body, http::basic_fields<Allocator>>&& req, Send&& send) {
-        std::string_view target = req.target();
-        std::string_view method = req.method_string();
+        std::string target = std::string(req.target());
+        std::string method = std::string(req.method_string());
+        
+        // Убираем query string если есть
+        auto query_pos = target.find('?');
+        if (query_pos != std::string::npos) {
+            target = target.substr(0, query_pos);
+        }
+        
+        // Логируем для отладки
+        std::cout << "Request: " << method << " " << target << std::endl;
         
         // Только GET запросы
         if (method != "GET") {
@@ -38,7 +47,7 @@ private:
         }
         
         // Обработка /api/v1/maps
-        if (target == "/api/v1/maps") {
+        if (target == "/api/v1/maps" || target == "api/v1/maps") {
             std::string body = SerializeMaps();
             auto response = MakeResponse(std::move(req), 
                                         http::status::ok, 
@@ -49,37 +58,23 @@ private:
         }
         
         // Обработка /api/v1/maps/{id}
-        if (target.substr(0, 14) == "/api/v1/maps/") {
-            std::string map_id_str(target.substr(14));
-            
-            // Удаляем возможный trailing slash
-            if (!map_id_str.empty() && map_id_str.back() == '/') {
-                map_id_str.pop_back();
-            }
-            
-            model::Map::Id map_id{std::move(map_id_str)};
-            const model::Map* map = game_.FindMap(map_id);
-            
-            if (!map) {
-                auto response = MakeErrorResponse(std::move(req),
-                                                 http::status::not_found,
-                                                 "mapNotFound", 
-                                                 "Map not found");
-                send(std::move(response));
-                return;
-            }
-            
-            std::string body = SerializeMap(*map);
-            auto response = MakeResponse(std::move(req),
-                                        http::status::ok,
-                                        "application/json",
-                                        body);
-            send(std::move(response));
+        // Проверяем разные варианты путей
+        std::string prefix1 = "/api/v1/maps/";
+        std::string prefix2 = "api/v1/maps/";
+        
+        if (target.find(prefix1) == 0) {
+            std::string map_id_str = target.substr(prefix1.length());
+            ProcessMapRequest(std::move(req), std::move(map_id_str), std::forward<Send>(send));
+            return;
+        }
+        else if (target.find(prefix2) == 0) {
+            std::string map_id_str = target.substr(prefix2.length());
+            ProcessMapRequest(std::move(req), std::move(map_id_str), std::forward<Send>(send));
             return;
         }
         
         // Обработка других /api/ запросов
-        if (target.substr(0, 5) == "/api/") {
+        if (target.find("/api/") == 0 || target.find("api/") == 0) {
             auto response = MakeErrorResponse(std::move(req),
                                              http::status::bad_request,
                                              "badRequest",
@@ -93,6 +88,43 @@ private:
                                          http::status::not_found,
                                          "badRequest",
                                          "Not found");
+        send(std::move(response));
+    }
+    
+    template <typename Body, typename Allocator, typename Send>
+    void ProcessMapRequest(http::request<Body, http::basic_fields<Allocator>>&& req,
+                          std::string map_id_str,
+                          Send&& send) {
+        // Удаляем возможный trailing slash
+        while (!map_id_str.empty() && map_id_str.back() == '/') {
+            map_id_str.pop_back();
+        }
+        
+        // Удаляем возможные query параметры
+        auto query_pos = map_id_str.find('?');
+        if (query_pos != std::string::npos) {
+            map_id_str = map_id_str.substr(0, query_pos);
+        }
+        
+        std::cout << "Looking for map id: '" << map_id_str << "'" << std::endl;
+        
+        model::Map::Id map_id{std::move(map_id_str)};
+        const model::Map* map = game_.FindMap(map_id);
+        
+        if (!map) {
+            auto response = MakeErrorResponse(std::move(req),
+                                             http::status::not_found,
+                                             "mapNotFound", 
+                                             "Map not found");
+            send(std::move(response));
+            return;
+        }
+        
+        std::string body = SerializeMap(*map);
+        auto response = MakeResponse(std::move(req),
+                                    http::status::ok,
+                                    "application/json",
+                                    body);
         send(std::move(response));
     }
     

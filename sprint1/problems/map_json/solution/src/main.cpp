@@ -35,11 +35,23 @@ int main(int argc, const char* argv[]) {
         return EXIT_FAILURE;
     }
     try {
+        std::cout << "Loading config from: " << argv[1] << std::endl;
+        
         // 1. Загружаем карту из файла и построить модель игры
         model::Game game = json_loader::LoadGame(argv[1]);
 
+        // Отладочный вывод: показываем загруженные карты
+        std::cout << "Loaded " << game.GetMaps().size() << " map(s)" << std::endl;
+        for (const auto& map : game.GetMaps()) {
+            std::cout << "  Map id: '" << *map.GetId() << "', name: '" << map.GetName() << "'" << std::endl;
+            std::cout << "    Roads: " << map.GetRoads().size() << std::endl;
+            std::cout << "    Buildings: " << map.GetBuildings().size() << std::endl;
+            std::cout << "    Offices: " << map.GetOffices().size() << std::endl;
+        }
+
         // 2. Инициализируем io_context
         const unsigned num_threads = std::thread::hardware_concurrency();
+        std::cout << "Number of threads: " << num_threads << std::endl;
         net::io_context ioc(num_threads);
 
         // 3. Добавляем асинхронный обработчик сигналов SIGINT и SIGTERM
@@ -56,6 +68,8 @@ int main(int argc, const char* argv[]) {
         const auto address = net::ip::make_address("0.0.0.0");
         const unsigned short port = 8080;
         
+        std::cout << "Starting HTTP server on " << address << ":" << port << std::endl;
+        
         http_server::ServeHttp(ioc, {address, port}, [&handler](auto&& req, auto&& send) {
             handler(std::forward<decltype(req)>(req), std::forward<decltype(send)>(send));
         });
@@ -68,7 +82,9 @@ int main(int argc, const char* argv[]) {
             ioc.run();
         });
     } catch (const std::exception& ex) {
-        std::cerr << ex.what() << std::endl;
+        std::cerr << "Exception: " << ex.what() << std::endl;
         return EXIT_FAILURE;
     }
+    
+    return EXIT_SUCCESS;
 }
