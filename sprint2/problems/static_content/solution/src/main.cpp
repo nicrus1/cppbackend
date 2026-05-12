@@ -278,7 +278,8 @@ bool handleApiRequest(const std::string& method, const std::string& uri,
     }
     
     if (uri.find("/api/v1/maps/") == 0) {
-        std::string map_id = uri.substr(14);
+        const std::string prefix = "/api/v1/maps/";
+        std::string map_id = uri.substr(prefix.size());
         
         if (map_id.empty()) {
             std::string err = errorJson("badRequest", "Map ID is empty");
