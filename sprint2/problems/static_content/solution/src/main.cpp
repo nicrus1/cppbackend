@@ -64,37 +64,62 @@ std::string readFile(const fs::path& path) {
     return buffer.str();
 }
 
-// Прямой поиск карты в JSON - самый простой способ
-std::string findMapDirect(const std::string& config, const std::string& map_id) {
-    // Ищем "id": "map1"
-    std::string search_pattern = "\"id\":\"" + map_id + "\"";
-    size_t id_pos = config.find(search_pattern);
-    if (id_pos == std::string::npos) {
+// Простой поиск объекта карты по ID
+std::string getMapById(const std::string& config, const std::string& map_id) {
+    // Ищем "id":"map1" или "id": "map1"
+    std::string search1 = "\"id\":\"" + map_id + "\"";
+    std::string search2 = "\"id\": \"" + map_id + "\"";
+    
+    size_t pos = config.find(search1);
+    if (pos == std::string::npos) {
+        pos = config.find(search2);
+    }
+    if (pos == std::string::npos) {
         return "";
     }
     
-    // Ищем начало объекта {
-    size_t obj_start = id_pos;
-    while (obj_start > 0 && config[obj_start] != '{') {
-        obj_start--;
+    // Находим начало объекта
+    size_t start = pos;
+    while (start > 0 && config[start] != '{') {
+        start--;
     }
-    if (config[obj_start] != '{') {
+    if (config[start] != '{') {
         return "";
     }
     
-    // Ищем конец объекта }
+    // Находим конец объекта
     int brace_count = 0;
-    size_t obj_end = obj_start;
-    bool in_string = false;
-    
-    for (size_t i = obj_start; i < config.length(); ++i) {
-        char c = config[i];
-        if (c == '"' && (i == 0 || config[i-1] != '\\')) {
-            in_string = !in_string;
+    size_t end = start;
+    for (size_t i = start; i < config.length(); ++i) {
+        if (config[i] == '{') brace_count++;
+        else if (config[i] == '}') {
+            brace_count--;
+            if (brace_count == 0) {
+                end = i;
+                break;
+            }
         }
-        if (!in_string) {
-            if (c == '{') brace_count++;
-            else if (c == '}') {
+    }
+    
+    return config.substr(start, end - start + 1);
+}
+
+// Получение списка карт
+std::string getMapsList(const std::string& config) {
+    std::string result = "[";
+    bool first = true;
+    
+    size_t pos = 0;
+    while (true) {
+        // Ищем начало объекта
+        size_t obj_start = config.find("{", pos);
+        if (obj_start == std::string::npos) break;
+        
+        int brace_count = 0;
+        size_t obj_end = obj_start;
+        for (size_t i = obj_start; i < config.length(); ++i) {
+            if (config[i] == '{') brace_count++;
+            else if (config[i] == '}') {
                 brace_count--;
                 if (brace_count == 0) {
                     obj_end = i;
@@ -102,82 +127,36 @@ std::string findMapDirect(const std::string& config, const std::string& map_id) 
                 }
             }
         }
-    }
-    
-    return config.substr(obj_start, obj_end - obj_start + 1);
-}
-
-// Получение списка карт
-std::string getMapsList(const std::string& config) {
-    // Находим массив maps
-    size_t maps_pos = config.find("\"maps\"");
-    if (maps_pos == std::string::npos) return "[]";
-    
-    size_t array_start = config.find("[", maps_pos);
-    if (array_start == std::string::npos) return "[]";
-    
-    std::string result = "[";
-    bool first = true;
-    
-    size_t pos = array_start;
-    while (true) {
-        size_t obj_start = config.find("{", pos);
-        if (obj_start == std::string::npos) break;
-        
-        // Проверяем не вышли ли за пределы массива
-        size_t next_bracket = config.find("]", pos);
-        if (next_bracket != std::string::npos && obj_start > next_bracket) break;
-        
-        // Находим конец объекта
-        int brace_count = 0;
-        size_t obj_end = obj_start;
-        bool in_string = false;
-        
-        for (size_t i = obj_start; i < config.length(); ++i) {
-            char c = config[i];
-            if (c == '"' && (i == 0 || config[i-1] != '\\')) {
-                in_string = !in_string;
-            }
-            if (!in_string) {
-                if (c == '{') brace_count++;
-                else if (c == '}') {
-                    brace_count--;
-                    if (brace_count == 0) {
-                        obj_end = i;
-                        break;
-                    }
-                }
-            }
-        }
         
         std::string obj = config.substr(obj_start, obj_end - obj_start + 1);
         
-        // Извлекаем id и name
-        std::string id, name;
-        
-        size_t id_start = obj.find("\"id\"");
-        if (id_start != std::string::npos) {
-            size_t colon = obj.find(":", id_start);
+        // Извлекаем id
+        std::string id;
+        size_t id_pos = obj.find("\"id\"");
+        if (id_pos != std::string::npos) {
+            size_t colon = obj.find(":", id_pos);
             if (colon != std::string::npos) {
-                size_t quote1 = obj.find("\"", colon);
-                if (quote1 != std::string::npos) {
-                    size_t quote2 = obj.find("\"", quote1 + 1);
-                    if (quote2 != std::string::npos) {
-                        id = obj.substr(quote1 + 1, quote2 - quote1 - 1);
+                size_t q1 = obj.find("\"", colon);
+                if (q1 != std::string::npos) {
+                    size_t q2 = obj.find("\"", q1 + 1);
+                    if (q2 != std::string::npos) {
+                        id = obj.substr(q1 + 1, q2 - q1 - 1);
                     }
                 }
             }
         }
         
-        size_t name_start = obj.find("\"name\"");
-        if (name_start != std::string::npos) {
-            size_t colon = obj.find(":", name_start);
+        // Извлекаем name
+        std::string name;
+        size_t name_pos = obj.find("\"name\"");
+        if (name_pos != std::string::npos) {
+            size_t colon = obj.find(":", name_pos);
             if (colon != std::string::npos) {
-                size_t quote1 = obj.find("\"", colon);
-                if (quote1 != std::string::npos) {
-                    size_t quote2 = obj.find("\"", quote1 + 1);
-                    if (quote2 != std::string::npos) {
-                        name = obj.substr(quote1 + 1, quote2 - quote1 - 1);
+                size_t q1 = obj.find("\"", colon);
+                if (q1 != std::string::npos) {
+                    size_t q2 = obj.find("\"", q1 + 1);
+                    if (q2 != std::string::npos) {
+                        name = obj.substr(q1 + 1, q2 - q1 - 1);
                     }
                 }
             }
@@ -270,6 +249,7 @@ bool handleStaticFile(const std::string& method, const std::string& uri,
 bool handleApiRequest(const std::string& method, const std::string& uri,
                       const fs::path& config_path, std::string& response) {
     
+    // Проверяем что URI начинается с /api/v1/
     if (uri.find("/api/v1/") != 0) {
         std::string err = errorJson("badRequest", "Invalid API path");
         response = "HTTP/1.1 400 Bad Request\r\n"
@@ -288,6 +268,7 @@ bool handleApiRequest(const std::string& method, const std::string& uri,
         return true;
     }
     
+    // Загружаем конфиг
     std::string config = readFile(config_path);
     if (config.empty()) {
         std::string err = errorJson("internalError", "Failed to load config");
@@ -298,6 +279,7 @@ bool handleApiRequest(const std::string& method, const std::string& uri,
         return true;
     }
     
+    // GET /api/v1/maps
     if (uri == "/api/v1/maps") {
         std::string maps_list = getMapsList(config);
         response = "HTTP/1.1 200 OK\r\n"
@@ -307,6 +289,7 @@ bool handleApiRequest(const std::string& method, const std::string& uri,
         return true;
     }
     
+    // GET /api/v1/maps/{id}
     if (uri.find("/api/v1/maps/") == 0) {
         std::string map_id = uri.substr(14);
         
@@ -319,8 +302,7 @@ bool handleApiRequest(const std::string& method, const std::string& uri,
             return true;
         }
         
-        // Используем прямой поиск
-        std::string map_content = findMapDirect(config, map_id);
+        std::string map_content = getMapById(config, map_id);
         
         if (map_content.empty()) {
             std::string err = errorJson("mapNotFound", "Map not found");
@@ -354,11 +336,13 @@ int main(int argc, char* argv[]) {
     fs::path config_path = argv[1];
     fs::path static_dir = argv[2];
     
+    // Проверяем существование статической директории
     if (!fs::exists(static_dir)) {
         std::cerr << "Static directory not found: " << static_dir << std::endl;
         return 1;
     }
     
+    // Создаём сокет
     int server_fd = socket(AF_INET, SOCK_STREAM, 0);
     if (server_fd < 0) {
         std::cerr << "Failed to create socket" << std::endl;
