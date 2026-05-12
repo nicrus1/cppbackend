@@ -1,0 +1,9 @@
+[requires]
+# No external requirements needed
+
+[generators]
+cmake_paths
+
+[options]
+
+[imports]

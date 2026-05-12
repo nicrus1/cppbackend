@@ -1,12 +1,15 @@
 cmake_minimum_required(VERSION 3.14)
-project(game_server CXX)
+project(game_server)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# Опционально: подключаем conan paths если файл существует
-if(EXISTS ${CMAKE_BINARY_DIR}/conan_paths.cmake)
-    include(${CMAKE_BINARY_DIR}/conan_paths.cmake)
+# Указываем компилятор для GitHub Actions
+if(NOT CMAKE_C_COMPILER)
+    set(CMAKE_C_COMPILER gcc)
+endif()
+if(NOT CMAKE_CXX_COMPILER)
+    set(CMAKE_CXX_COMPILER g++)
 endif()
 
 # Добавляем исполняемый файл
@@ -19,7 +22,5 @@ set_target_properties(game_server PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
 )
 
-# Для работы с JSON
-target_compile_definitions(game_server PRIVATE 
-    USE_JSON=0
-)
+# Добавляем опции компиляции
+target_compile_options(game_server PRIVATE -Wall -Wextra -O2)
