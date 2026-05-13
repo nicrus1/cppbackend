@@ -3,10 +3,22 @@
 #include "model.h"
 #include <boost/json.hpp>
 #include <boost/json/serialize.hpp>
+#include <iostream>
 
 namespace http_handler {
+
 namespace beast = boost::beast;
 namespace http = beast::http;
+
+// Константы для эндпоинтов API
+namespace endpoints {
+    constexpr std::string_view MAPS = "/api/v1/maps";
+    constexpr std::string_view MAPS_WITH_SLASH = "api/v1/maps";
+    constexpr std::string_view MAPS_PREFIX = "/api/v1/maps/";
+    constexpr std::string_view MAPS_PREFIX_NO_LEADING_SLASH = "api/v1/maps/";
+    constexpr std::string_view API_PREFIX = "/api/";
+    constexpr std::string_view API_PREFIX_NO_LEADING_SLASH = "api/";
+}  // namespace endpoints
 
 class RequestHandler {
 public:
@@ -47,7 +59,7 @@ private:
         }
         
         // Обработка /api/v1/maps
-        if (target == "/api/v1/maps" || target == "api/v1/maps") {
+        if (target == endpoints::MAPS || target == endpoints::MAPS_WITH_SLASH) {
             std::string body = SerializeMaps();
             auto response = MakeResponse(std::move(req), 
                                         http::status::ok, 
@@ -58,23 +70,19 @@ private:
         }
         
         // Обработка /api/v1/maps/{id}
-        // Проверяем разные варианты путей
-        std::string prefix1 = "/api/v1/maps/";
-        std::string prefix2 = "api/v1/maps/";
-        
-        if (target.find(prefix1) == 0) {
-            std::string map_id_str = target.substr(prefix1.length());
+        if (target.find(endpoints::MAPS_PREFIX) == 0) {
+            std::string map_id_str = target.substr(endpoints::MAPS_PREFIX.length());
             ProcessMapRequest(std::move(req), std::move(map_id_str), std::forward<Send>(send));
             return;
         }
-        else if (target.find(prefix2) == 0) {
-            std::string map_id_str = target.substr(prefix2.length());
+        else if (target.find(endpoints::MAPS_PREFIX_NO_LEADING_SLASH) == 0) {
+            std::string map_id_str = target.substr(endpoints::MAPS_PREFIX_NO_LEADING_SLASH.length());
             ProcessMapRequest(std::move(req), std::move(map_id_str), std::forward<Send>(send));
             return;
         }
         
         // Обработка других /api/ запросов
-        if (target.find("/api/") == 0 || target.find("api/") == 0) {
+        if (target.find(endpoints::API_PREFIX) == 0 || target.find(endpoints::API_PREFIX_NO_LEADING_SLASH) == 0) {
             auto response = MakeErrorResponse(std::move(req),
                                              http::status::bad_request,
                                              "badRequest",
@@ -158,70 +166,11 @@ private:
         return MakeResponse(std::move(req), status, "application/json", body);
     }
     
-    std::string SerializeMaps() const {
-        boost::json::array maps_array;
-        for (const auto& map : game_.GetMaps()) {
-            maps_array.push_back(boost::json::object{
-                {"id", *map.GetId()},
-                {"name", map.GetName()}
-            });
-        }
-        return boost::json::serialize(maps_array);
-    }
-    
-    std::string SerializeMap(const model::Map& map) const {
-        boost::json::object map_obj;
-        map_obj["id"] = *map.GetId();
-        map_obj["name"] = map.GetName();
-        
-        // Сериализуем дороги
-        boost::json::array roads_array;
-        for (const auto& road : map.GetRoads()) {
-            boost::json::object road_obj;
-            auto start = road.GetStart();
-            auto end = road.GetEnd();
-            
-            if (road.IsHorizontal()) {
-                road_obj["x0"] = start.x;
-                road_obj["y0"] = start.y;
-                road_obj["x1"] = end.x;
-            } else {
-                road_obj["x0"] = start.x;
-                road_obj["y0"] = start.y;
-                road_obj["y1"] = end.y;
-            }
-            roads_array.push_back(road_obj);
-        }
-        map_obj["roads"] = roads_array;
-        
-        // Сериализуем здания
-        boost::json::array buildings_array;
-        for (const auto& building : map.GetBuildings()) {
-            const auto& bounds = building.GetBounds();
-            buildings_array.push_back(boost::json::object{
-                {"x", bounds.position.x},
-                {"y", bounds.position.y},
-                {"w", bounds.size.width},
-                {"h", bounds.size.height}
-            });
-        }
-        map_obj["buildings"] = buildings_array;
-        
-        // Сериализуем офисы
-        boost::json::array offices_array;
-        for (const auto& office : map.GetOffices()) {
-            offices_array.push_back(boost::json::object{
-                {"id", *office.GetId()},
-                {"x", office.GetPosition().x},
-                {"y", office.GetPosition().y},
-                {"offsetX", office.GetOffset().dx},
-                {"offsetY", office.GetOffset().dy}
-            });
-        }
-        map_obj["offices"] = offices_array;
-        
-        return boost::json::serialize(map_obj);
-    }
+    std::string SerializeMaps() const;
+    std::string SerializeMap(const model::Map& map) const;
+    boost::json::array SerializeRoads(const model::Map& map) const;
+    boost::json::array SerializeBuildings(const model::Map& map) const;
+    boost::json::array SerializeOffices(const model::Map& map) const;
 
     model::Game& game_;
 };

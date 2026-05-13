@@ -1,6 +1,5 @@
 #pragma once
 #include "sdk.h"
-// boost.beast будет использовать std::string_view вместо boost::string_view
 #define BOOST_BEAST_USE_STD_STRING_VIEW
 
 #include <boost/asio/ip/tcp.hpp>
@@ -23,18 +22,11 @@ inline void ReportError(beast::error_code ec, std::string_view what) {
 
 class SessionBase : public std::enable_shared_from_this<SessionBase> {
 public:
-    SessionBase(tcp::socket&& socket)
-        : stream_(std::move(socket)) {
-    }
-
+    explicit SessionBase(tcp::socket&& socket);
     virtual ~SessionBase() = default;
 
-    void Run() {
-        net::dispatch(stream_.get_executor(),
-                      beast::bind_front_handler(&SessionBase::Read, shared_from_this()));
-    }
+    void Run();
 
-    // Write метод - должен быть public чтобы лямбда в Session могла его вызвать
     template <typename Body, typename Fields>
     void Write(http::response<Body, Fields>&& response) {
         auto safe_response = std::make_shared<http::response<Body, Fields>>(std::move(response));
@@ -47,42 +39,10 @@ public:
     }
 
 private:
-    void Read() {
-        using namespace std::literals;
-        req_ = {};
-        stream_.expires_after(30s);
-        http::async_read(stream_, buffer_, req_,
-                         beast::bind_front_handler(&SessionBase::OnRead, shared_from_this()));
-    }
-
-    void OnRead(beast::error_code ec, [[maybe_unused]] std::size_t bytes_read) {
-        using namespace std::literals;
-        if (ec == http::error::end_of_stream) {
-            return Close();
-        }
-        if (ec) {
-            return ReportError(ec, "read"sv);
-        }
-        HandleRequest(std::move(req_));
-    }
-
-    void Close() {
-        beast::error_code ec;
-        stream_.socket().shutdown(tcp::socket::shutdown_send, ec);
-    }
-
-    void OnWrite(bool close, beast::error_code ec, [[maybe_unused]] std::size_t bytes_written) {
-        using namespace std::literals;
-        if (ec) {
-            return ReportError(ec, "write"sv);
-        }
-
-        if (close) {
-            return Close();
-        }
-
-        Read();
-    }
+    void Read();
+    void OnRead(beast::error_code ec, std::size_t bytes_read);
+    void Close();
+    void OnWrite(bool close, beast::error_code ec, std::size_t bytes_written);
 
 protected:
     virtual void HandleRequest(http::request<http::string_body>&& req) = 0;
