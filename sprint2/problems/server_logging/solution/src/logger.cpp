@@ -3,11 +3,12 @@
 #include <chrono>
 #include <iomanip>
 #include <ctime>
+#include <sstream>
 
 namespace logger {
 
 void InitLogging() {
-    // Простая инициализация - ничего сложного
+    std::ios::sync_with_stdio(false);
 }
 
 static std::string GetTimestamp() {
@@ -74,7 +75,7 @@ void LogError(int code, const std::string& text, const std::string& where) {
     data["text"] = text;
     data["where"] = where;
     boost::json::value json_data(data);
-    std::cerr << boost::json::serialize(boost::json::object{
+    std::cout << boost::json::serialize(boost::json::object{
         {"timestamp", GetTimestamp()},
         {"data", json_data},
         {"message", "error"}

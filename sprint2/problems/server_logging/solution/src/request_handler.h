@@ -3,6 +3,8 @@
 #include "model.h"
 #include <boost/json.hpp>
 #include <boost/json/serialize.hpp>
+#include <iostream>
+#include <fstream>
 
 namespace http_handler {
 
@@ -87,11 +89,24 @@ private:
             return;
         }
         
+        // Обработка статических файлов
+        if (target == "/" || target == "/index.html") {
+            ServeStaticFile(std::move(req), "index.html", std::forward<Send>(send));
+            return;
+        }
+        if (target.find("/images/") == 0) {
+            std::string filename = target.substr(1); // убираем ведущий /
+            ServeStaticFile(std::move(req), filename, std::forward<Send>(send));
+            return;
+        }
+        
         // Для всех остальных запросов возвращаем 404
         auto response = MakeErrorResponse(std::move(req),
                                          http::status::not_found,
                                          "badRequest",
                                          "Not found");
+        // Для 404 используем content-type text/plain как ожидают тесты
+        response.set(http::field::content_type, "text/plain");
         send(std::move(response));
     }
     
@@ -127,6 +142,44 @@ private:
                                     http::status::ok,
                                     "application/json",
                                     body);
+        send(std::move(response));
+    }
+    
+    template <typename Body, typename Allocator, typename Send>
+    void ServeStaticFile(http::request<Body, http::basic_fields<Allocator>>&& req,
+                         const std::string& filename,
+                         Send&& send) {
+        std::string filepath = "static/" + filename;
+        std::ifstream file(filepath, std::ios::binary);
+        
+        if (!file.is_open()) {
+            auto response = MakeErrorResponse(std::move(req),
+                                             http::status::not_found,
+                                             "fileNotFound",
+                                             "File not found");
+            response.set(http::field::content_type, "text/plain");
+            send(std::move(response));
+            return;
+        }
+        
+        std::string content((std::istreambuf_iterator<char>(file)),
+                            std::istreambuf_iterator<char>());
+        
+        std::string content_type = "text/plain";
+        if (filename.ends_with(".html")) {
+            content_type = "text/html";
+        } else if (filename.ends_with(".svg")) {
+            content_type = "image/svg+xml";
+        } else if (filename.ends_with(".css")) {
+            content_type = "text/css";
+        } else if (filename.ends_with(".js")) {
+            content_type = "application/javascript";
+        }
+        
+        auto response = MakeResponse(std::move(req),
+                                    http::status::ok,
+                                    content_type,
+                                    content);
         send(std::move(response));
     }
     

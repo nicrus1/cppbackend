@@ -25,7 +25,6 @@ void SessionBase::OnRead(beast::error_code ec, [[maybe_unused]] std::size_t byte
         return ReportError(ec, "read"sv);
     }
     
-    // Логируем получение запроса
     std::string target = std::string(req_.target());
     std::string method = std::string(req_.method_string());
     boost::json::object data;
