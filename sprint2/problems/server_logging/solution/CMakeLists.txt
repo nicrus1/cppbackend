@@ -32,6 +32,3 @@ add_executable(game_server
 )
 
 target_link_libraries(game_server PRIVATE Threads::Threads ${Boost_LIBRARIES})
-
-# Копируем статические файлы
-file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/static DESTINATION ${CMAKE_BINARY_DIR})
