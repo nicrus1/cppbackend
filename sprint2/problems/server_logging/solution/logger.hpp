@@ -8,7 +8,6 @@
 #include <boost/log/support/date_time.hpp>
 #include <boost/log/utility/formatting_ostream.hpp>
 #include <boost/log/utility/value_ref.hpp>
-#include <boost/log/keywords/add_value.hpp> // ⚠️ больше НЕ используется, можно удалить позже
 #include <boost/log/utility/manipulators/add_value.hpp>
 #include <boost/date_time/posix_time/posix_time.hpp>
 #include <boost/json.hpp>
