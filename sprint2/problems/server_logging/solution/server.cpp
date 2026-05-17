@@ -1,7 +1,7 @@
 #include "logging_handler.hpp"
 #include "logger.hpp"
 
-#include <boost/asio.hpp>
+#include <boost/asio/io_context.hpp>
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/beast/core.hpp>
 #include <boost/beast/http.hpp>
@@ -10,8 +10,9 @@
 #include <thread>
 #include <chrono>
 
-namespace net = boost::asio;
-namespace tcp = net::ip::tcp;
+namespace asio = boost::asio;
+using tcp = asio::ip::tcp;
+
 namespace http = boost::beast::http;
 namespace beast = boost::beast;
 
@@ -40,12 +41,11 @@ public:
 
 void DoSession(tcp::socket socket) {
     try {
-        // Получаем IP клиента
         std::string client_ip = socket.remote_endpoint().address().to_string();
-        
+
         beast::flat_buffer buffer;
         boost::system::error_code ec;
-        
+
         RequestHandler handler;
         LoggingRequestHandler<RequestHandler> logging_handler(handler);
 
@@ -76,9 +76,9 @@ void DoSession(tcp::socket socket) {
 int main() {
     try {
         InitLogger();
-        
-        net::io_context ioc{1};
-        tcp::acceptor acceptor(ioc, tcp::endpoint(boost::asio::ip::make_address("0.0.0.0"), 8080));
+
+        asio::io_context ioc{1};
+        tcp::acceptor acceptor(ioc, tcp::endpoint(asio::ip::make_address("0.0.0.0"), 8080));
 
         detail::LogServerStarted(8080, "0.0.0.0");
 
