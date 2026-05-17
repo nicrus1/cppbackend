@@ -24,7 +24,7 @@ inline void LogServerStarted(uint16_t port, std::string_view address) {
     data["address"] = std::string(address);
 
     BOOST_LOG_TRIVIAL(info)
-        << logging::add_value(message_attr, "server started")
+        << logging::add_value(message_attr, std::string("server started"))
         << logging::add_value(data_attr, data);
 }
 
@@ -35,7 +35,7 @@ inline void LogServerExited(int code, const std::string& exception = "") {
         data["exception"] = exception;
 
     BOOST_LOG_TRIVIAL(info)
-        << logging::add_value(message_attr, "server exited")
+        << logging::add_value(message_attr, std::string("server exited"))
         << logging::add_value(data_attr, data);
 }
 
@@ -46,7 +46,7 @@ inline void LogRequest(const RequestData& req) {
     data["method"] = req.method;
 
     BOOST_LOG_TRIVIAL(info)
-        << logging::add_value(message_attr, "request received")
+        << logging::add_value(message_attr, std::string("request received"))
         << logging::add_value(data_attr, data);
 }
 
@@ -62,7 +62,7 @@ inline void LogResponse(const RequestData& req, const ResponseData& resp) {
         data["content_type"] = nullptr;
 
     BOOST_LOG_TRIVIAL(info)
-        << logging::add_value(message_attr, "response sent")
+        << logging::add_value(message_attr, std::string("response sent"))
         << logging::add_value(data_attr, data);
 }
 
@@ -73,6 +73,6 @@ inline void LogError(int code, const std::string& text, const std::string& where
     data["where"] = where;
 
     BOOST_LOG_TRIVIAL(error)
-        << logging::add_value(message_attr, "error")
+        << logging::add_value(message_attr, std::string("error"))
         << logging::add_value(data_attr, data);
 }

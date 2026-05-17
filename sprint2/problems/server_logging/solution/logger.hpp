@@ -7,6 +7,7 @@
 #include <boost/log/expressions.hpp>
 #include <boost/log/support/date_time.hpp>
 #include <boost/log/utility/formatting_ostream.hpp>
+#include <boost/log/utility/value_ref.hpp>   // ⭐ FIX HERE
 #include <boost/date_time/posix_time/posix_time.hpp>
 #include <boost/json.hpp>
 
