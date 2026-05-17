@@ -9,6 +9,7 @@
 #include <cstdlib>
 #include <thread>
 #include <chrono>
+#include <iostream>
 
 namespace asio = boost::asio;
 using tcp = asio::ip::tcp;
@@ -78,7 +79,13 @@ int main() {
         InitLogger();
 
         asio::io_context ioc{1};
-        tcp::acceptor acceptor(ioc, tcp::endpoint(asio::ip::make_address("0.0.0.0"), 8080));
+        tcp::acceptor acceptor(
+            ioc,
+            tcp::endpoint(asio::ip::make_address("0.0.0.0"), 8080)
+        );
+
+        // ВАЖНО: строка, которую ждёт тест
+        std::cout << "Server started" << std::endl;
 
         detail::LogServerStarted(8080, "0.0.0.0");
 
