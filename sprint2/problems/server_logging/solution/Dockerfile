@@ -8,6 +8,9 @@ RUN apt-get update && apt-get install -y \
     && pip3 install conan \
     && rm -rf /var/lib/apt/lists/*
 
+# Создаём профиль Conan по умолчанию
+RUN conan profile detect --force
+
 WORKDIR /app
 
 COPY . .
@@ -19,4 +22,4 @@ RUN mkdir -p build && cd build && \
 
 EXPOSE 8080
 
-CMD ["./build/hello_log"]
+CMD ["./build/server"]
