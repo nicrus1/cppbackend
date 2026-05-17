@@ -1,35 +1,20 @@
 #include "logger.h"
 #include <iostream>
-#include <iomanip>
 #include <chrono>
-#include <boost/log/attributes/constant.hpp>
-#include <boost/log/attributes/scoped_attribute.hpp>
-#include <boost/log/expressions/formatters/date_time.hpp>
-#include <boost/log/utility/manipulators/add_value.hpp>
-#include <boost/log/utility/setup/console.hpp>
-#include <boost/log/utility/setup/file.hpp>
 
 namespace logger {
 
 namespace logging = boost::log;
-namespace sinks = boost::log::sinks;
 namespace expr = boost::log::expressions;
-namespace keywords = boost::log::keywords;
-namespace attrs = boost::log::attributes;
+
+BOOST_LOG_ATTRIBUTE_KEYWORD(additional_data, "AdditionalData", boost::json::value)
 
 void InitLogging() {
-    // Добавляем общие атрибуты
     logging::add_common_attributes();
-    
-    // Настраиваем консольный вывод
-    auto console_sink = logging::add_console_log(std::cout);
-    
-    // Задаём формат для консольного логгера
-    console_sink->set_formatter(
+    auto sink = logging::add_console_log(std::cout);
+    sink->set_formatter(
         expr::stream << expr::smessage
     );
-    
-    // Устанавливаем уровень логирования
     logging::core::get()->set_filter(
         logging::trivial::severity >= logging::trivial::info
     );

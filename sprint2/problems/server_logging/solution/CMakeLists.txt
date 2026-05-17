@@ -29,5 +29,5 @@ add_executable(game_server
     src/request_handler.h
     src/logger.cpp
     src/logger.h
-)
+
 target_link_libraries(game_server PRIVATE Threads::Threads ${Boost_LIBRARIES})
