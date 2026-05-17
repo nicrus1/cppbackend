@@ -10,7 +10,6 @@
 #include "json_loader.h"
 #include "request_handler.h"
 #include "logger.h"
-#include "logging_session_handler.h"
 
 using namespace std::literals;
 namespace net = boost::asio;
