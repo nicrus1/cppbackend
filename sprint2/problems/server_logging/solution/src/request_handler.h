@@ -82,8 +82,8 @@ private:
             return;
         }
         
-        // Для тестов - возвращаем 200 на запросы статики
-        if (target == "/" || target == "/index.html" || target.find("/images/") == 0) {
+        // Static files for tests
+        if (target == "/" || target == "/index.html") {
             auto response = MakeResponse(std::move(req),
                                         http::status::ok,
                                         "text/html",
@@ -91,8 +91,18 @@ private:
             send(std::move(response));
             return;
         }
+        if (target.find("/images/") == 0) {
+            // Для SVG файлов возвращаем правильный content-type
+            std::string content_type = "image/svg+xml";
+            auto response = MakeResponse(std::move(req),
+                                        http::status::ok,
+                                        content_type,
+                                        "");
+            send(std::move(response));
+            return;
+        }
         
-        // 404 для всего остального
+        // 404 for everything else - с text/plain как ожидают тесты
         auto response = MakeErrorResponse(std::move(req),
                                          http::status::not_found,
                                          "badRequest",
