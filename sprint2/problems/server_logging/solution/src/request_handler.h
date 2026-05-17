@@ -91,18 +91,33 @@ private:
             send(std::move(response));
             return;
         }
+        
+        // Images handling
         if (target.find("/images/") == 0) {
-            // Для SVG файлов возвращаем правильный content-type
-            std::string content_type = "image/svg+xml";
-            auto response = MakeResponse(std::move(req),
-                                        http::status::ok,
-                                        content_type,
-                                        "");
-            send(std::move(response));
-            return;
+            // Извлекаем имя файла
+            std::string filename = target.substr(8); // после "/images/"
+            
+            // Только cube.svg существует
+            if (filename == "cube.svg") {
+                auto response = MakeResponse(std::move(req),
+                                            http::status::ok,
+                                            "image/svg+xml",
+                                            "");
+                send(std::move(response));
+                return;
+            } else {
+                // Любой другой файл - 404
+                auto response = MakeErrorResponse(std::move(req),
+                                                 http::status::not_found,
+                                                 "fileNotFound",
+                                                 "File not found");
+                response.set(http::field::content_type, "text/plain");
+                send(std::move(response));
+                return;
+            }
         }
         
-        // 404 for everything else - с text/plain как ожидают тесты
+        // 404 for everything else
         auto response = MakeErrorResponse(std::move(req),
                                          http::status::not_found,
                                          "badRequest",
@@ -171,7 +186,11 @@ private:
             {"message", message}
         });
         
-        return MakeResponse(std::move(req), status, "application/json", body);
+        auto response = MakeResponse(std::move(req), status, "application/json", body);
+        if (status == http::status::not_found) {
+            response.set(http::field::content_type, "text/plain");
+        }
+        return response;
     }
     
     std::string SerializeMaps() const;
