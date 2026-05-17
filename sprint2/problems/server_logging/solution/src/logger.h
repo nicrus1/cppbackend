@@ -1,45 +1,43 @@
 #pragma once
-
+#include <boost/log/common.hpp>
 #include <boost/log/trivial.hpp>
-#include <boost/log/utility/manipulators/add_value.hpp>
-#include <boost/json/value.hpp>
-#include <boost/json/serialize.hpp>
-#include <chrono>
-#include <iomanip>
-#include <sstream>
+#include <boost/log/attributes.hpp>
+#include <boost/log/sinks.hpp>
+#include <boost/log/sources/severity_logger.hpp>
+#include <boost/log/utility/setup/common_attributes.hpp>
+#include <boost/log/utility/setup/console.hpp>
+#include <boost/log/expressions.hpp>
+#include <boost/log/support/date_time.hpp>
+#include <boost/json.hpp>
+#include <string>
 
-namespace logging {
+namespace logger {
 
-namespace json = boost::json;
 namespace logging = boost::log;
+namespace sinks = boost::log::sinks;
+namespace expr = boost::log::expressions;
+namespace keywords = boost::log::keywords;
+namespace attrs = boost::log::attributes;
 
-// Ключевые слова для атрибутов
-BOOST_LOG_ATTRIBUTE_KEYWORD(additional_data, "AdditionalData", json::value)
+// Ключевое слово для дополнительных данных
+BOOST_LOG_ATTRIBUTE_KEYWORD(additional_data, "AdditionalData", boost::json::value)
 
 // Инициализация логгера
-void InitLogger();
+void InitLogging();
 
-// Форматирование времени в ISO формат
-std::string GetCurrentTimestamp();
+// Логирование получения запроса
+void LogRequestReceived(const boost::json::object& data);
 
-// Создание JSON-сообщения для лога
-template<typename... Args>
-void Log(boost::log::trivial::severity_level level, 
-         std::string_view message, 
-         json::value data = {}) {
-    
-    json::object log_entry;
-    log_entry["timestamp"] = GetCurrentTimestamp();
-    log_entry["message"] = message;
-    
-    if (!data.is_null()) {
-        log_entry["data"] = data;
-    }
-    
-    BOOST_LOG_STREAM_WITH_PARAMS(::boost::log::trivial::logger::get(), 
-                                 (::boost::log::trivial::severity << level))
-        << logging::add_value(additional_data, json::value(log_entry))
-        << ""; // Пустая строка, так как вывод через форматтер
-}
+// Логирование отправки ответа
+void LogResponseSent(const boost::json::object& data);
 
-} // namespace logging
+// Логирование запуска сервера
+void LogServerStarted(const std::string& address, unsigned short port);
+
+// Логирование остановки сервера
+void LogServerExited(int code, const std::string& exception = "");
+
+// Логирование ошибки
+void LogError(int code, const std::string& text, const std::string& where);
+
+}  // namespace logger

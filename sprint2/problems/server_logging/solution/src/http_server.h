@@ -1,6 +1,5 @@
 #pragma once
 #include "sdk.h"
-// boost.beast будет использовать std::string_view вместо boost::string_view
 #define BOOST_BEAST_USE_STD_STRING_VIEW
 
 #include <boost/asio/ip/tcp.hpp>
@@ -9,6 +8,8 @@
 #include <boost/beast/http.hpp>
 #include <iostream>
 #include <memory>
+#include <chrono>
+#include "logger.h"
 
 namespace http_server {
 
@@ -19,22 +20,19 @@ namespace http = beast::http;
 
 inline void ReportError(beast::error_code ec, std::string_view what) {
     std::cerr << what << ": " << ec.message() << std::endl;
+    logger::LogError(ec.value(), ec.message(), std::string(what));
 }
 
 class SessionBase : public std::enable_shared_from_this<SessionBase> {
 public:
-    SessionBase(tcp::socket&& socket)
-        : stream_(std::move(socket)) {
+    explicit SessionBase(tcp::socket&& socket)
+        : stream_(std::move(socket))
+        , client_ip_(stream_.socket().remote_endpoint().address().to_string()) {
     }
-
     virtual ~SessionBase() = default;
 
-    void Run() {
-        net::dispatch(stream_.get_executor(),
-                      beast::bind_front_handler(&SessionBase::Read, shared_from_this()));
-    }
+    void Run();
 
-    // Write метод - должен быть public чтобы лямбда в Session могла его вызвать
     template <typename Body, typename Fields>
     void Write(http::response<Body, Fields>&& response) {
         auto safe_response = std::make_shared<http::response<Body, Fields>>(std::move(response));
@@ -45,44 +43,16 @@ public:
                               self->OnWrite(safe_response->need_eof(), ec, bytes_written);
                           });
     }
+    
+    const std::string& GetClientIp() const {
+        return client_ip_;
+    }
 
 private:
-    void Read() {
-        using namespace std::literals;
-        req_ = {};
-        stream_.expires_after(30s);
-        http::async_read(stream_, buffer_, req_,
-                         beast::bind_front_handler(&SessionBase::OnRead, shared_from_this()));
-    }
-
-    void OnRead(beast::error_code ec, [[maybe_unused]] std::size_t bytes_read) {
-        using namespace std::literals;
-        if (ec == http::error::end_of_stream) {
-            return Close();
-        }
-        if (ec) {
-            return ReportError(ec, "read"sv);
-        }
-        HandleRequest(std::move(req_));
-    }
-
-    void Close() {
-        beast::error_code ec;
-        stream_.socket().shutdown(tcp::socket::shutdown_send, ec);
-    }
-
-    void OnWrite(bool close, beast::error_code ec, [[maybe_unused]] std::size_t bytes_written) {
-        using namespace std::literals;
-        if (ec) {
-            return ReportError(ec, "write"sv);
-        }
-
-        if (close) {
-            return Close();
-        }
-
-        Read();
-    }
+    void Read();
+    void OnRead(beast::error_code ec, std::size_t bytes_read);
+    void Close();
+    void OnWrite(bool close, beast::error_code ec, std::size_t bytes_written);
 
 protected:
     virtual void HandleRequest(http::request<http::string_body>&& req) = 0;
@@ -90,6 +60,7 @@ protected:
     beast::tcp_stream stream_;
     beast::flat_buffer buffer_;
     http::request<http::string_body> req_;
+    std::string client_ip_;
 };
 
 template <typename RequestHandler>
@@ -103,9 +74,38 @@ public:
 
 private:
     void HandleRequest(http::request<http::string_body>&& request) override {
-        request_handler_(std::move(request), [self = this->shared_from_this()](auto&& response) {
-            self->Write(std::move(response));
-        });
+        // Передаём IP клиента через дополнительный параметр
+        // Для этого используем замыкание
+        auto start_time = std::chrono::steady_clock::now();
+        std::string client_ip = GetClientIp();
+        
+        request_handler_(
+            std::move(request), 
+            [self = this->shared_from_this(), client_ip, start_time](auto&& response) {
+                auto end_time = std::chrono::steady_clock::now();
+                auto response_time = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count();
+                
+                // Логируем отправку ответа
+                std::string content_type = "null";
+                auto it = response.find(http::field::content_type);
+                if (it != response.end()) {
+                    content_type = std::string(it->value());
+                }
+                
+                boost::json::object data;
+                data["ip"] = client_ip;
+                data["response_time"] = response_time;
+                data["code"] = response.result_int();
+                if (content_type == "null") {
+                    data["content_type"] = nullptr;
+                } else {
+                    data["content_type"] = content_type;
+                }
+                logger::LogResponseSent(data);
+                
+                self->Write(std::move(response));
+            }
+        );
     }
 
     RequestHandler request_handler_;
@@ -121,22 +121,22 @@ public:
         beast::error_code ec;
         acceptor_.open(endpoint.protocol(), ec);
         if (ec) {
-            std::cerr << "Open error: " << ec.message() << std::endl;
+            logger::LogError(ec.value(), ec.message(), "open");
             return;
         }
         acceptor_.set_option(net::socket_base::reuse_address(true), ec);
         if (ec) {
-            std::cerr << "Set option error: " << ec.message() << std::endl;
+            logger::LogError(ec.value(), ec.message(), "set_option");
             return;
         }
         acceptor_.bind(endpoint, ec);
         if (ec) {
-            std::cerr << "Bind error: " << ec.message() << std::endl;
+            logger::LogError(ec.value(), ec.message(), "bind");
             return;
         }
         acceptor_.listen(net::socket_base::max_listen_connections, ec);
         if (ec) {
-            std::cerr << "Listen error: " << ec.message() << std::endl;
+            logger::LogError(ec.value(), ec.message(), "listen");
             return;
         }
     }
@@ -150,10 +150,14 @@ private:
         acceptor_.async_accept(
             [self = this->shared_from_this()](beast::error_code ec, tcp::socket socket) {
                 if (ec) {
-                    std::cerr << "Accept error: " << ec.message() << std::endl;
+                    logger::LogError(ec.value(), ec.message(), "accept");
+                    self->DoAccept();
                     return;
                 }
-                std::make_shared<Session<RequestHandler>>(std::move(socket), self->handler_)->Run();
+                auto session = std::make_shared<Session<RequestHandler>>(std::move(socket), self->handler_);
+                
+                // Логируем получение запроса (фактическое логирование будет при обработке запроса)
+                session->Run();
                 self->DoAccept();
             });
     }
