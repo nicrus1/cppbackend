@@ -31,7 +31,6 @@ inline void LogServerStarted(uint16_t port, std::string_view address) {
 inline void LogServerExited(int code, const std::string& exception = "") {
     json::object data;
     data["code"] = code;
-
     if (!exception.empty())
         data["exception"] = exception;
 

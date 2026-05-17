@@ -1,7 +1,9 @@
 #include "logging_handler.hpp"
 
-#include <boost/beast.hpp>
 #include <boost/asio.hpp>
+#include <boost/beast.hpp>
+#include <boost/beast/http.hpp>
+
 #include <thread>
 
 namespace net = boost::asio;
@@ -11,7 +13,9 @@ namespace beast = boost::beast;
 
 using Clock = std::chrono::steady_clock;
 
-http::response<http::string_body> HandleRequest(const http::request<http::string_body>& req) {
+http::response<http::string_body>
+HandleRequest(const http::request<http::string_body>& req) {
+
     RequestData request_data{
         "127.0.0.1",
         std::string(req.target()),
@@ -57,13 +61,11 @@ http::response<http::string_body> HandleRequest(const http::request<http::string
 
 void DoSession(tcp::socket socket) {
     try {
-        bool close = false;
-        beast::error_code ec;
         beast::flat_buffer buffer;
+        beast::error_code ec;
 
-        while (!close) {
+        while (true) {
             http::request<http::string_body> req;
-
             http::read(socket, buffer, req, ec);
 
             if (ec == http::error::end_of_stream)
@@ -73,7 +75,6 @@ void DoSession(tcp::socket socket) {
                 throw beast::system_error(ec);
 
             auto res = HandleRequest(req);
-            close = res.need_eof();
 
             http::write(socket, res, ec);
 
@@ -92,13 +93,10 @@ int main() {
     try {
         InitLogger();
 
-        const auto address = net::ip::make_address("0.0.0.0");
-        const unsigned short port = 8080;
-
-        LogServerStarted(port, "0.0.0.0");
-
         net::io_context ioc{1};
-        tcp::acceptor acceptor{ioc, {address, port}};
+        tcp::acceptor acceptor{ioc, {net::ip::make_address("0.0.0.0"), 8080}};
+
+        LogServerStarted(8080, "0.0.0.0");
 
         for (;;) {
             tcp::socket socket{ioc};
@@ -114,7 +112,4 @@ int main() {
         LogServerExited(EXIT_FAILURE, e.what());
         return EXIT_FAILURE;
     }
-
-    LogServerExited(0);
-    return EXIT_SUCCESS;
 }
