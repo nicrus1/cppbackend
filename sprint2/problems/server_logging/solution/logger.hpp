@@ -7,7 +7,7 @@
 #include <boost/log/expressions.hpp>
 #include <boost/log/support/date_time.hpp>
 #include <boost/log/utility/formatting_ostream.hpp>
-#include <boost/log/utility/value_ref.hpp>   // ⭐ FIX HERE
+#include <boost/log/utility/value_ref.hpp>
 #include <boost/date_time/posix_time/posix_time.hpp>
 #include <boost/json.hpp>
 
@@ -25,7 +25,6 @@ inline void InitLogger() {
         std::cout,
         logging::keywords::format = [](logging::record_view const& rec,
                                        logging::formatting_ostream& stream) {
-
             json::object obj;
 
             auto ts = rec[timestamp_attr];
