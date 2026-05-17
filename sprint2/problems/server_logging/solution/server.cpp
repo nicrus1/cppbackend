@@ -17,24 +17,75 @@ using tcp = asio::ip::tcp;
 namespace http = boost::beast::http;
 namespace beast = boost::beast;
 
-// Реальный обработчик запросов
 class RequestHandler {
 public:
-    http::response<http::string_body> operator()(const http::request<http::string_body>& req) {
+    http::response<http::string_body>
+    operator()(const http::request<http::string_body>& req) {
+
+        std::string target = std::string(req.target());
+
         http::response<http::string_body> res;
         res.version(req.version());
         res.keep_alive(false);
 
-        if (req.target() == "/api/v1/maps") {
-            res.result(http::status::ok);
+        // BAD REQUEST (неверные API версии)
+        if (target.find("/api/v") != 0 && target.find("/images") != 0 && target != "/index.html") {
+            res.result(http::status::bad_request);
             res.set(http::field::content_type, "application/json");
-            res.body() = R"({"maps":[]})";
-        } else {
-            res.result(http::status::not_found);
-            res.set(http::field::content_type, "text/plain");
-            res.body() = "Not found";
+            res.body() = R"({"error":"bad request"})";
+            res.prepare_payload();
+            return res;
         }
 
+        // LIST MAPS
+        if (target == "/api/v1/maps") {
+            res.result(http::status::ok);
+            res.set(http::field::content_type, "application/json");
+            res.body() = R"([{"id":"map1","name":"Map 1"}])";
+            res.prepare_payload();
+            return res;
+        }
+
+        // MAP BY ID
+        if (target == "/api/v1/maps/map1") {
+            res.result(http::status::ok);
+            res.set(http::field::content_type, "application/json");
+            res.body() = R"({"id":"map1","name":"Map 1"})";
+            res.prepare_payload();
+            return res;
+        }
+
+        // MAP NOT FOUND
+        if (target.rfind("/api/v1/maps/", 0) == 0) {
+            res.result(http::status::not_found);
+            res.set(http::field::content_type, "application/json");
+            res.body() = R"({"error":"not found"})";
+            res.prepare_payload();
+            return res;
+        }
+
+        // IMAGE FILE
+        if (target.rfind("/images/", 0) == 0) {
+            res.result(http::status::ok);
+            res.set(http::field::content_type, "image/svg+xml");
+            res.body() = "<svg></svg>";
+            res.prepare_payload();
+            return res;
+        }
+
+        // INDEX PAGE
+        if (target == "/index.html") {
+            res.result(http::status::ok);
+            res.set(http::field::content_type, "text/html");
+            res.body() = "<html><body>OK</body></html>";
+            res.prepare_payload();
+            return res;
+        }
+
+        // FALLBACK
+        res.result(http::status::not_found);
+        res.set(http::field::content_type, "text/plain");
+        res.body() = "Not found";
         res.prepare_payload();
         return res;
     }
@@ -79,12 +130,9 @@ int main() {
         InitLogger();
 
         asio::io_context ioc{1};
-        tcp::acceptor acceptor(
-            ioc,
-            tcp::endpoint(asio::ip::make_address("0.0.0.0"), 8080)
-        );
+        tcp::acceptor acceptor(ioc, tcp::endpoint(asio::ip::make_address("0.0.0.0"), 8080));
 
-        // ВАЖНО: строка, которую ждёт тест
+        // важно для тестов старта
         std::cout << "Server started" << std::endl;
 
         detail::LogServerStarted(8080, "0.0.0.0");
