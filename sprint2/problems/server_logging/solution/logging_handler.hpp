@@ -2,12 +2,10 @@
 
 #include "logger.hpp"
 
-#include <chrono>
 #include <optional>
 #include <string>
 #include <string_view>
 
-// Структуры данных для запроса и ответа
 struct RequestData {
     std::string ip;
     std::string uri;
@@ -15,75 +13,67 @@ struct RequestData {
 };
 
 struct ResponseData {
-    int code;
+    int code{};
     std::optional<std::string> content_type;
+    int response_time{};
 };
 
-// Логирование запуска сервера
 inline void LogServerStarted(uint16_t port, std::string_view address) {
     json::object data;
     data["port"] = port;
-    data["address"] = json::value(std::string(address));
-    LOG_INFO("server started", json::value(data));
+    data["address"] = std::string(address);
+
+    BOOST_LOG_TRIVIAL(info)
+        << logging::add_value(message_attr, "server started")
+        << logging::add_value(data_attr, data);
 }
 
-// Логирование остановки сервера
-inline void LogServerExited(int code, std::optional<std::string_view> exception = std::nullopt) {
+inline void LogServerExited(int code, const std::string& exception = "") {
     json::object data;
     data["code"] = code;
-    if (exception.has_value()) {
-        data["exception"] = json::value(std::string(exception.value()));
-    }
-    LOG_INFO("server exited", json::value(data));
+
+    if (!exception.empty())
+        data["exception"] = exception;
+
+    BOOST_LOG_TRIVIAL(info)
+        << logging::add_value(message_attr, "server exited")
+        << logging::add_value(data_attr, data);
 }
 
-// Логирование ошибки
-inline void LogError(int code, std::string_view text, std::string_view where) {
+inline void LogRequest(const RequestData& req) {
+    json::object data;
+    data["ip"] = req.ip;
+    data["URI"] = req.uri;
+    data["method"] = req.method;
+
+    BOOST_LOG_TRIVIAL(info)
+        << logging::add_value(message_attr, "request received")
+        << logging::add_value(data_attr, data);
+}
+
+inline void LogResponse(const RequestData& req, const ResponseData& resp) {
+    json::object data;
+    data["ip"] = req.ip;
+    data["code"] = resp.code;
+    data["response_time"] = resp.response_time;
+
+    if (resp.content_type)
+        data["content_type"] = *resp.content_type;
+    else
+        data["content_type"] = nullptr;
+
+    BOOST_LOG_TRIVIAL(info)
+        << logging::add_value(message_attr, "response sent")
+        << logging::add_value(data_attr, data);
+}
+
+inline void LogError(int code, const std::string& text, const std::string& where) {
     json::object data;
     data["code"] = code;
-    data["text"] = json::value(std::string(text));
-    data["where"] = json::value(std::string(where));
-    LOG_ERROR("error", json::value(data));
+    data["text"] = text;
+    data["where"] = where;
+
+    BOOST_LOG_TRIVIAL(error)
+        << logging::add_value(message_attr, "error")
+        << logging::add_value(data_attr, data);
 }
-
-// Декоратор для логирования запросов и ответов
-template<typename Handler>
-class LoggingRequestHandler {
-public:
-    explicit LoggingRequestHandler(Handler& handler) : decorated_(handler) {}
-
-    ResponseData operator()(const RequestData& req) {
-        // Логируем получение запроса
-        json::object req_data;
-        req_data["ip"] = json::value(req.ip);
-        req_data["URI"] = json::value(req.uri);
-        req_data["method"] = json::value(req.method);
-        LOG_INFO("request received", json::value(req_data));
-
-        // Измеряем время обработки
-        auto start = std::chrono::steady_clock::now();
-        ResponseData resp = decorated_(req);
-        auto end = std::chrono::steady_clock::now();
-        
-        auto response_time = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
-
-        // Логируем формирование ответа
-        json::object resp_data;
-        resp_data["ip"] = json::value(req.ip);
-        resp_data["response_time"] = static_cast<long long>(response_time);
-        resp_data["code"] = resp.code;
-        
-        if (resp.content_type.has_value()) {
-            resp_data["content_type"] = json::value(resp.content_type.value());
-        } else {
-            resp_data["content_type"] = json::value(nullptr);
-        }
-        
-        LOG_INFO("response sent", json::value(resp_data));
-
-        return resp;
-    }
-
-private:
-    Handler& decorated_;
-};

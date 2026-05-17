@@ -1,96 +1,41 @@
 #pragma once
 
-#include <boost/log/attributes.hpp>
-#include <boost/log/expressions.hpp>
-#include <boost/log/sinks.hpp>
-#include <boost/log/sources/severity_logger.hpp>
-#include <boost/log/sources/record_ostream.hpp>
-#include <boost/log/support/date_time.hpp>
 #include <boost/log/trivial.hpp>
-#include <boost/log/utility/manipulators/add_value.hpp>
 #include <boost/log/utility/setup/common_attributes.hpp>
 #include <boost/log/utility/setup/console.hpp>
+#include <boost/log/attributes.hpp>
+#include <boost/log/expressions.hpp>
+#include <boost/date_time/posix_time/posix_time.hpp>
 #include <boost/json.hpp>
-#include <boost/json/value.hpp>
-#include <boost/json/serialize.hpp>
-
-#include <chrono>
-#include <iomanip>
-#include <iostream>
-#include <optional>
-#include <sstream>
-#include <string>
-#include <string_view>
 
 namespace logging = boost::log;
-namespace sinks = logging::sinks;
-namespace src = logging::sources;
-namespace expr = logging::expressions;
-namespace keywords = logging::keywords;
 namespace json = boost::json;
+namespace expr = boost::log::expressions;
 
-using namespace std::literals;
+BOOST_LOG_ATTRIBUTE_KEYWORD(message_attr, "Message", std::string)
+BOOST_LOG_ATTRIBUTE_KEYWORD(data_attr, "Data", json::value)
 
-// Ключевые слова для атрибутов
-BOOST_LOG_ATTRIBUTE_KEYWORD(timestamp, "TimeStamp", std::chrono::system_clock::time_point)
-BOOST_LOG_ATTRIBUTE_KEYWORD(additional_data, "AdditionalData", json::value)
-
-// Инициализация логгера с JSON-форматом
 inline void InitLogger() {
     logging::add_common_attributes();
 
-    // Создаём sink для вывода в stdout
-    typedef sinks::synchronous_sink<sinks::text_ostream_backend> sink_t;
-    auto sink = boost::make_shared<sink_t>();
-    sink->locked_backend()->add_stream(boost::shared_ptr<std::ostream>(&std::cout, [](void*) {}));
+    logging::add_console_log(
+        std::cout,
+        logging::keywords::format = [](logging::record_view const& rec,
+                                       logging::formatting_ostream& stream) {
 
-    sink->set_formatter([](const logging::record_view& rec, logging::formatting_ostream& strm) {
-        json::object obj;
+            json::object obj;
 
-        // timestamp в ISO формате
-        auto ts = rec[timestamp];
-        if (ts) {
-            auto time_point = ts.get();
-            auto time_t = std::chrono::system_clock::to_time_t(time_point);
-            auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                time_point.time_since_epoch()) % 1000;
-            
-            std::tm tm;
-#ifdef _WIN32
-            gmtime_s(&tm, &time_t);
-#else
-            gmtime_r(&time_t, &tm);
-#endif
-            
-            std::stringstream ss;
-            ss << std::put_time(&tm, "%Y-%m-%dT%H:%M:%S") 
-               << '.' << std::setfill('0') << std::setw(3) << ms.count();
-            obj["timestamp"] = json::value(ss.str());
+            auto ts = rec[timestamp_attr];
+            obj["timestamp"] = boost::posix_time::to_iso_extended_string(*ts);
+
+            obj["message"] = rec[message_attr] ? rec[message_attr].get() : "";
+
+            if (rec[data_attr])
+                obj["data"] = rec[data_attr].get();
+            else
+                obj["data"] = json::object{};
+
+            stream << json::serialize(obj);
         }
-
-        // message
-        auto msg = rec[logging::expressions::smessage];
-        if (msg) {
-            obj["message"] = json::value(std::string(msg.get().c_str()));
-        }
-
-        // data
-        auto data = rec[additional_data];
-        if (data) {
-            obj["data"] = data.get();
-        } else {
-            obj["data"] = json::object();
-        }
-
-        strm << json::serialize(json::value(obj));
-    });
-
-    logging::core::get()->add_sink(sink);
+    );
 }
-
-// Макросы для логирования
-#define LOG_INFO(message, data) \
-    BOOST_LOG_TRIVIAL(info) << logging::add_value(additional_data, data) << message
-
-#define LOG_ERROR(message, data) \
-    BOOST_LOG_TRIVIAL(error) << logging::add_value(additional_data, data) << message
