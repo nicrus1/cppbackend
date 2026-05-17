@@ -1,20 +1,22 @@
 cmake_minimum_required(VERSION 3.9)
-project(LoggingServer CXX)
+project(server CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-find_package(Boost REQUIRED COMPONENTS log log_setup json system thread)
+# Подключаем Conan toolchain если есть
+if(EXISTS ${CMAKE_BINARY_DIR}/conan_toolchain.cmake)
+    include(${CMAKE_BINARY_DIR}/conan_toolchain.cmake)
+endif()
 
-add_executable(logging_server 
-    server.cpp
-)
+find_package(Boost REQUIRED COMPONENTS log log_setup system thread json)
 
-target_include_directories(logging_server PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(logging_server 
+add_executable(server server.cpp)
+
+target_link_libraries(server 
     Boost::log 
     Boost::log_setup 
-    Boost::json 
     Boost::system 
-    Boost::thread
+    Boost::thread 
+    Boost::json
 )

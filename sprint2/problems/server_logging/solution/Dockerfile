@@ -8,16 +8,17 @@ RUN apt-get update && apt-get install -y \
     && pip3 install conan \
     && rm -rf /var/lib/apt/lists/*
 
-# Создаём профиль Conan по умолчанию
+# Создаём профиль Conan
 RUN conan profile detect --force
 
 WORKDIR /app
 
 COPY . .
 
+# Конфигурируем Conan для использования CMakeToolchain
 RUN mkdir -p build && cd build && \
     conan install .. --build=missing && \
-    cmake -DCMAKE_CXX_STANDARD=20 .. && \
+    cmake .. -DCMAKE_TOOLCHAIN_FILE=conan_toolchain.cmake -DCMAKE_CXX_STANDARD=20 && \
     cmake --build .
 
 EXPOSE 8080
