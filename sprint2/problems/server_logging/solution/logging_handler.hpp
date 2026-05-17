@@ -8,12 +8,11 @@
 #include <chrono>
 
 #include <boost/beast/http.hpp>
-#include <boost/log/keywords/add_value.hpp>
 #include <boost/json.hpp>
+#include <boost/log/utility/manipulators/add_value.hpp>
 
 namespace logging = boost::log;
 namespace json = boost::json;
-namespace keywords = boost::log::keywords;
 namespace http = boost::beast::http;
 
 struct RequestData {
@@ -28,6 +27,7 @@ struct ResponseData {
     int response_time{};
 };
 
+// Вспомогательные функции логирования (внутренние)
 namespace detail {
 
 inline void LogServerStarted(uint16_t port, std::string_view address) {
