@@ -6,6 +6,10 @@
 #include <string>
 #include <string_view>
 
+namespace logging = boost::log;
+namespace keywords = boost::log::keywords;
+namespace json = boost::json;
+
 struct RequestData {
     std::string ip;
     std::string uri;
@@ -24,8 +28,8 @@ inline void LogServerStarted(uint16_t port, std::string_view address) {
     data["address"] = std::string(address);
 
     BOOST_LOG_TRIVIAL(info)
-        << logging::add_value(message_attr, std::string("server started"))
-        << logging::add_value(data_attr, data);
+        << keywords::add_value(message_attr, std::string("server started"))
+        << keywords::add_value(data_attr, data);
 }
 
 inline void LogServerExited(int code, const std::string& exception = "") {
@@ -35,8 +39,8 @@ inline void LogServerExited(int code, const std::string& exception = "") {
         data["exception"] = exception;
 
     BOOST_LOG_TRIVIAL(info)
-        << logging::add_value(message_attr, std::string("server exited"))
-        << logging::add_value(data_attr, data);
+        << keywords::add_value(message_attr, std::string("server exited"))
+        << keywords::add_value(data_attr, data);
 }
 
 inline void LogRequest(const RequestData& req) {
@@ -46,8 +50,8 @@ inline void LogRequest(const RequestData& req) {
     data["method"] = req.method;
 
     BOOST_LOG_TRIVIAL(info)
-        << logging::add_value(message_attr, std::string("request received"))
-        << logging::add_value(data_attr, data);
+        << keywords::add_value(message_attr, std::string("request received"))
+        << keywords::add_value(data_attr, data);
 }
 
 inline void LogResponse(const RequestData& req, const ResponseData& resp) {
@@ -62,8 +66,8 @@ inline void LogResponse(const RequestData& req, const ResponseData& resp) {
         data["content_type"] = nullptr;
 
     BOOST_LOG_TRIVIAL(info)
-        << logging::add_value(message_attr, std::string("response sent"))
-        << logging::add_value(data_attr, data);
+        << keywords::add_value(message_attr, std::string("response sent"))
+        << keywords::add_value(data_attr, data);
 }
 
 inline void LogError(int code, const std::string& text, const std::string& where) {
@@ -73,6 +77,6 @@ inline void LogError(int code, const std::string& text, const std::string& where
     data["where"] = where;
 
     BOOST_LOG_TRIVIAL(error)
-        << logging::add_value(message_attr, std::string("error"))
-        << logging::add_value(data_attr, data);
+        << keywords::add_value(message_attr, std::string("error"))
+        << keywords::add_value(data_attr, data);
 }

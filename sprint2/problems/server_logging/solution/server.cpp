@@ -1,9 +1,10 @@
 #include "logging_handler.hpp"
 
-#include <boost/asio.hpp>
+#include <boost/asio/ip/tcp.hpp>
 #include <boost/beast.hpp>
 #include <boost/beast/http.hpp>
 
+#include <cstdlib>
 #include <thread>
 
 namespace net = boost::asio;
