@@ -39,7 +39,10 @@ BOOST_LOG_ATTRIBUTE_KEYWORD(additional_data, "AdditionalData", json::value)
 inline void InitLogger() {
     logging::add_common_attributes();
 
-    auto sink = logging::add_console_log<std::ostream>(std::cout);
+    // Создаём sink для вывода в stdout
+    typedef sinks::synchronous_sink<sinks::text_ostream_backend> sink_t;
+    auto sink = boost::make_shared<sink_t>();
+    sink->locked_backend()->add_stream(boost::shared_ptr<std::ostream>(&std::cout, [](void*) {}));
 
     sink->set_formatter([](const logging::record_view& rec, logging::formatting_ostream& strm) {
         json::object obj;
@@ -68,7 +71,7 @@ inline void InitLogger() {
         // message
         auto msg = rec[logging::expressions::smessage];
         if (msg) {
-            obj["message"] = json::value(msg.get().c_str());
+            obj["message"] = json::value(std::string(msg.get().c_str()));
         }
 
         // data
@@ -81,6 +84,8 @@ inline void InitLogger() {
 
         strm << json::serialize(json::value(obj));
     });
+
+    logging::core::get()->add_sink(sink);
 }
 
 // Макросы для логирования

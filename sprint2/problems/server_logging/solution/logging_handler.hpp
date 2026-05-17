@@ -23,7 +23,7 @@ struct ResponseData {
 inline void LogServerStarted(uint16_t port, std::string_view address) {
     json::object data;
     data["port"] = port;
-    data["address"] = address;
+    data["address"] = json::value(std::string(address));
     LOG_INFO("server started", json::value(data));
 }
 
@@ -32,7 +32,7 @@ inline void LogServerExited(int code, std::optional<std::string_view> exception 
     json::object data;
     data["code"] = code;
     if (exception.has_value()) {
-        data["exception"] = json::value(exception.value().data());
+        data["exception"] = json::value(std::string(exception.value()));
     }
     LOG_INFO("server exited", json::value(data));
 }
@@ -41,8 +41,8 @@ inline void LogServerExited(int code, std::optional<std::string_view> exception 
 inline void LogError(int code, std::string_view text, std::string_view where) {
     json::object data;
     data["code"] = code;
-    data["text"] = text;
-    data["where"] = where;
+    data["text"] = json::value(std::string(text));
+    data["where"] = json::value(std::string(where));
     LOG_ERROR("error", json::value(data));
 }
 
@@ -70,7 +70,7 @@ public:
         // Логируем формирование ответа
         json::object resp_data;
         resp_data["ip"] = json::value(req.ip);
-        resp_data["response_time"] = response_time;
+        resp_data["response_time"] = static_cast<long long>(response_time);
         resp_data["code"] = resp.code;
         
         if (resp.content_type.has_value()) {
