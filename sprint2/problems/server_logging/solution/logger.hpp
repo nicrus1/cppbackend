@@ -8,12 +8,16 @@
 #include <boost/log/support/date_time.hpp>
 #include <boost/log/utility/formatting_ostream.hpp>
 #include <boost/log/utility/value_ref.hpp>
+#include <boost/log/keywords/add_value.hpp> // ⚠️ больше НЕ используется, можно удалить позже
 #include <boost/log/utility/manipulators/add_value.hpp>
 #include <boost/date_time/posix_time/posix_time.hpp>
 #include <boost/json.hpp>
 
+#include <iostream>
+
 namespace logging = boost::log;
 namespace json = boost::json;
+namespace keywords = boost::log::keywords;
 
 BOOST_LOG_ATTRIBUTE_KEYWORD(message_attr, "Message", std::string)
 BOOST_LOG_ATTRIBUTE_KEYWORD(data_attr, "Data", json::value)
@@ -24,8 +28,8 @@ inline void InitLogger() {
 
     logging::add_console_log(
         std::cout,
-        logging::keywords::format = [](logging::record_view const& rec,
-                                       logging::formatting_ostream& stream) {
+        keywords::format = [](logging::record_view const& rec,
+                              logging::formatting_ostream& stream) {
             json::object obj;
 
             auto ts = rec[timestamp_attr];
