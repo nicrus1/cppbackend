@@ -22,13 +22,14 @@ void InitLogging() {
 
 void LogRequestReceived(const boost::json::object& data) {
     boost::json::value json_data(data);
-    BOOST_LOG_TRIVIAL(info) << logging::add_value(additional_data, json_data)
+    // Используем boost::log::add_value вместо logging::add_value
+    BOOST_LOG_TRIVIAL(info) << boost::log::add_value(additional_data, json_data)
                             << "request received";
 }
 
 void LogResponseSent(const boost::json::object& data) {
     boost::json::value json_data(data);
-    BOOST_LOG_TRIVIAL(info) << logging::add_value(additional_data, json_data)
+    BOOST_LOG_TRIVIAL(info) << boost::log::add_value(additional_data, json_data)
                             << "response sent";
 }
 
@@ -37,7 +38,7 @@ void LogServerStarted(const std::string& address, unsigned short port) {
     data["address"] = address;
     data["port"] = port;
     boost::json::value json_data(data);
-    BOOST_LOG_TRIVIAL(info) << logging::add_value(additional_data, json_data)
+    BOOST_LOG_TRIVIAL(info) << boost::log::add_value(additional_data, json_data)
                             << "server started";
 }
 
@@ -48,7 +49,7 @@ void LogServerExited(int code, const std::string& exception) {
         data["exception"] = exception;
     }
     boost::json::value json_data(data);
-    BOOST_LOG_TRIVIAL(info) << logging::add_value(additional_data, json_data)
+    BOOST_LOG_TRIVIAL(info) << boost::log::add_value(additional_data, json_data)
                             << "server exited";
 }
 
@@ -58,7 +59,7 @@ void LogError(int code, const std::string& text, const std::string& where) {
     data["text"] = text;
     data["where"] = where;
     boost::json::value json_data(data);
-    BOOST_LOG_TRIVIAL(error) << logging::add_value(additional_data, json_data)
+    BOOST_LOG_TRIVIAL(error) << boost::log::add_value(additional_data, json_data)
                              << "error";
 }
 
