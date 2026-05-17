@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD 20)
 include(${CMAKE_BINARY_DIR}/conanbuildinfo.cmake)
 conan_basic_setup()
 
-find_package(Boost 1.78.0 REQUIRED)
+find_package(Boost 1.78.0 REQUIRED COMPONENTS log log_setup system thread date_time)
 if(Boost_FOUND)
   include_directories(${Boost_INCLUDE_DIRS})
 endif()
@@ -31,4 +31,12 @@ add_executable(game_server
     src/logger.h
 )
 
-target_link_libraries(game_server PRIVATE Threads::Threads ${Boost_LIBRARIES})
+target_link_libraries(game_server PRIVATE 
+    Threads::Threads 
+    ${Boost_LIBRARIES}
+    boost_log
+    boost_log_setup
+    boost_system
+    boost_thread
+    boost_date_time
+)

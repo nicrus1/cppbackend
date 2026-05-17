@@ -1,36 +1,45 @@
 #include "logger.h"
 #include <iostream>
 #include <chrono>
-#include <boost/log/utility/manipulators/add_value.hpp>
+#include <iomanip>
+#include <ctime>
 
 namespace logger {
 
-namespace logging = boost::log;
-namespace expr = boost::log::expressions;
-
-BOOST_LOG_ATTRIBUTE_KEYWORD(additional_data, "AdditionalData", boost::json::value)
-
 void InitLogging() {
-    logging::add_common_attributes();
-    auto sink = logging::add_console_log(std::cout);
-    sink->set_formatter(
-        expr::stream << expr::smessage
-    );
-    logging::core::get()->set_filter(
-        logging::trivial::severity >= logging::trivial::info
-    );
+    // Простая инициализация - ничего сложного
+}
+
+static std::string GetTimestamp() {
+    auto now = std::chrono::system_clock::now();
+    auto time_t = std::chrono::system_clock::to_time_t(now);
+    auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
+    
+    std::tm tm;
+    gmtime_r(&time_t, &tm);
+    
+    std::ostringstream oss;
+    oss << std::put_time(&tm, "%Y-%m-%dT%H:%M:%S") << "." 
+        << std::setfill('0') << std::setw(3) << ms.count();
+    return oss.str();
 }
 
 void LogRequestReceived(const boost::json::object& data) {
     boost::json::value json_data(data);
-    BOOST_LOG_TRIVIAL(info) << boost::log::add_value(additional_data, json_data)
-                            << "request received";
+    std::cout << boost::json::serialize(boost::json::object{
+        {"timestamp", GetTimestamp()},
+        {"data", json_data},
+        {"message", "request received"}
+    }) << std::endl;
 }
 
 void LogResponseSent(const boost::json::object& data) {
     boost::json::value json_data(data);
-    BOOST_LOG_TRIVIAL(info) << boost::log::add_value(additional_data, json_data)
-                            << "response sent";
+    std::cout << boost::json::serialize(boost::json::object{
+        {"timestamp", GetTimestamp()},
+        {"data", json_data},
+        {"message", "response sent"}
+    }) << std::endl;
 }
 
 void LogServerStarted(const std::string& address, unsigned short port) {
@@ -38,8 +47,11 @@ void LogServerStarted(const std::string& address, unsigned short port) {
     data["address"] = address;
     data["port"] = port;
     boost::json::value json_data(data);
-    BOOST_LOG_TRIVIAL(info) << boost::log::add_value(additional_data, json_data)
-                            << "server started";
+    std::cout << boost::json::serialize(boost::json::object{
+        {"timestamp", GetTimestamp()},
+        {"data", json_data},
+        {"message", "server started"}
+    }) << std::endl;
 }
 
 void LogServerExited(int code, const std::string& exception) {
@@ -49,8 +61,11 @@ void LogServerExited(int code, const std::string& exception) {
         data["exception"] = exception;
     }
     boost::json::value json_data(data);
-    BOOST_LOG_TRIVIAL(info) << boost::log::add_value(additional_data, json_data)
-                            << "server exited";
+    std::cout << boost::json::serialize(boost::json::object{
+        {"timestamp", GetTimestamp()},
+        {"data", json_data},
+        {"message", "server exited"}
+    }) << std::endl;
 }
 
 void LogError(int code, const std::string& text, const std::string& where) {
@@ -59,8 +74,11 @@ void LogError(int code, const std::string& text, const std::string& where) {
     data["text"] = text;
     data["where"] = where;
     boost::json::value json_data(data);
-    BOOST_LOG_TRIVIAL(error) << boost::log::add_value(additional_data, json_data)
-                             << "error";
+    std::cerr << boost::json::serialize(boost::json::object{
+        {"timestamp", GetTimestamp()},
+        {"data", json_data},
+        {"message", "error"}
+    }) << std::endl;
 }
 
 }  // namespace logger
