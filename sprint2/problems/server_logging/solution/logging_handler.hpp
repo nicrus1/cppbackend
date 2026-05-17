@@ -9,7 +9,6 @@
 
 namespace logging = boost::log;
 namespace json = boost::json;
-namespace keywords = boost::log::keywords;
 namespace http = boost::beast::http;
 
 struct RequestData {
@@ -32,8 +31,8 @@ namespace detail {
         data["address"] = std::string(address);
 
         BOOST_LOG_TRIVIAL(info)
-            << keywords::add_value(message_attr, std::string("server started"))
-            << keywords::add_value(data_attr, data);
+            << logging::add_value(message_attr, std::string("server started"))
+            << logging::add_value(data_attr, data);
     }
 
     inline void LogServerExited(int code, const std::string& exception = "") {
@@ -43,8 +42,8 @@ namespace detail {
             data["exception"] = exception;
 
         BOOST_LOG_TRIVIAL(info)
-            << keywords::add_value(message_attr, std::string("server exited"))
-            << keywords::add_value(data_attr, data);
+            << logging::add_value(message_attr, std::string("server exited"))
+            << logging::add_value(data_attr, data);
     }
 
     inline void LogError(int code, const std::string& text, const std::string& where) {
@@ -54,8 +53,8 @@ namespace detail {
         data["where"] = where;
 
         BOOST_LOG_TRIVIAL(error)
-            << keywords::add_value(message_attr, std::string("error"))
-            << keywords::add_value(data_attr, data);
+            << logging::add_value(message_attr, std::string("error"))
+            << logging::add_value(data_attr, data);
     }
 }
 
@@ -92,8 +91,8 @@ private:
         data["method"] = std::string(req.method_string());
 
         BOOST_LOG_TRIVIAL(info)
-            << keywords::add_value(message_attr, std::string("request received"))
-            << keywords::add_value(data_attr, data);
+            << logging::add_value(message_attr, std::string("request received"))
+            << logging::add_value(data_attr, data);
     }
 
     void LogResponse(const http::response<http::string_body>& res, 
@@ -112,8 +111,8 @@ private:
         }
 
         BOOST_LOG_TRIVIAL(info)
-            << keywords::add_value(message_attr, std::string("response sent"))
-            << keywords::add_value(data_attr, data);
+            << logging::add_value(message_attr, std::string("response sent"))
+            << logging::add_value(data_attr, data);
     }
 
     Handler& decorated_;
