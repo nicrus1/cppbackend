@@ -17,7 +17,6 @@ using namespace std::literals;
 
 class Logger {
     std::chrono::system_clock::time_point GetTime() const {
-        std::lock_guard<std::mutex> lock(m_);
         if (manual_ts_) {
             return *manual_ts_;
         }
@@ -73,10 +72,8 @@ public:
         return instance;
     }
 
-    // Базовый случай рекурсии
     void LogImpl(std::ostream& os) const {}
 
-    // Рекурсивный вывод аргументов
     template<typename T, typename... Ts>
     void LogImpl(std::ostream& os, const T& arg, const Ts&... args) const {
         os << arg;
