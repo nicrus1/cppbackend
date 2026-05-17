@@ -18,8 +18,9 @@ namespace logging = boost::log;
 namespace json = boost::json;
 namespace keywords = boost::log::keywords;
 
-BOOST_LOG_ATTRIBUTE_KEYWORD(message_attr, "Message", std::string)
-BOOST_LOG_ATTRIBUTE_KEYWORD(data_attr, "Data", json::value)
+// ❗ переименовано, чтобы не конфликтовать с logging_handler.hpp
+BOOST_LOG_ATTRIBUTE_KEYWORD(message_kw, "Message", std::string)
+BOOST_LOG_ATTRIBUTE_KEYWORD(data_kw, "Data", json::value)
 BOOST_LOG_ATTRIBUTE_KEYWORD(timestamp_attr, "TimeStamp", boost::posix_time::ptime)
 
 inline void InitLogger() {
@@ -31,16 +32,21 @@ inline void InitLogger() {
                               logging::formatting_ostream& stream) {
             json::object obj;
 
-            auto ts = rec[timestamp_attr];
+            // timestamp
+            auto ts = logging::extract<boost::posix_time::ptime>(timestamp_attr.name(), rec);
             if (ts)
                 obj["timestamp"] = boost::posix_time::to_iso_extended_string(ts.get());
             else
                 obj["timestamp"] = "";
 
-            obj["message"] = rec[message_attr] ? rec[message_attr].get() : "";
+            // message
+            auto msg = logging::extract<std::string>(message_kw.name(), rec);
+            obj["message"] = msg ? msg.get() : "";
 
-            if (rec[data_attr])
-                obj["data"] = rec[data_attr].get();
+            // data
+            auto data = logging::extract<json::value>(data_kw.name(), rec);
+            if (data)
+                obj["data"] = data.get();
             else
                 obj["data"] = json::object{};
 
