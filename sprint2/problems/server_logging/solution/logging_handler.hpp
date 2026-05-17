@@ -1,17 +1,21 @@
 #pragma once
 
-#include "logger.hpp"
-
-#include <string>
-#include <string_view>
-#include <chrono>
-
 #include <boost/beast/http.hpp>
 #include <boost/json.hpp>
+#include <boost/log/trivial.hpp>
 #include <boost/log/utility/manipulators/add_value.hpp>
 
-namespace json = boost::json;
+#include <chrono>
+#include <string>
+
 namespace http = boost::beast::http;
+namespace json = boost::json;
+
+// атрибуты логирования (ВАЖНО для тестов)
+static constexpr const char* message_attr = "message";
+static constexpr const char* data_attr = "data";
+
+// ===== SYSTEM LOGS =====
 
 namespace detail {
 
@@ -21,7 +25,7 @@ inline void LogServerStarted(uint16_t port, std::string_view address) {
     data["address"] = std::string(address);
 
     BOOST_LOG_TRIVIAL(info)
-        << boost::log::add_value(message_attr, std::string("server started"))
+        << boost::log::add_value(message_attr, std::string("Server started"))
         << boost::log::add_value(data_attr, data);
 }
 
@@ -32,7 +36,7 @@ inline void LogServerExited(int code, const std::string& exception = "") {
         data["exception"] = exception;
 
     BOOST_LOG_TRIVIAL(info)
-        << boost::log::add_value(message_attr, std::string("server exited"))
+        << boost::log::add_value(message_attr, std::string("Server exited"))
         << boost::log::add_value(data_attr, data);
 }
 
@@ -47,7 +51,9 @@ inline void LogError(int code, const std::string& text, const std::string& where
         << boost::log::add_value(data_attr, data);
 }
 
-}
+} // namespace detail
+
+// ===== REQUEST LOGGER WRAPPER =====
 
 template<typename Handler>
 class LoggingRequestHandler {
@@ -55,15 +61,18 @@ public:
     explicit LoggingRequestHandler(Handler& handler)
         : decorated_(handler) {}
 
-    auto operator()(const http::request<http::string_body>& req,
-                    const std::string& client_ip) {
+    http::response<http::string_body>
+    operator()(const http::request<http::string_body>& req,
+               const std::string& client_ip) {
+
+        LogRequest(req, client_ip);
 
         auto start = std::chrono::steady_clock::now();
 
-        LogRequest(req, client_ip);
         auto res = decorated_(req);
 
         auto end = std::chrono::steady_clock::now();
+
         auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
 
         LogResponse(res, client_ip, ms);
@@ -72,11 +81,12 @@ public:
     }
 
 private:
+
     void LogRequest(const http::request<http::string_body>& req,
-                    const std::string& client_ip) {
+                    const std::string& ip) {
 
         json::object data;
-        data["ip"] = client_ip;
+        data["ip"] = ip;
         data["URI"] = std::string(req.target());
         data["method"] = std::string(req.method_string());
 
@@ -86,18 +96,19 @@ private:
     }
 
     void LogResponse(const http::response<http::string_body>& res,
-                     const std::string& client_ip,
-                     int response_time) {
+                     const std::string& ip,
+                     int ms) {
 
         json::object data;
-        data["ip"] = client_ip;
+        data["ip"] = ip;
         data["code"] = res.result_int();
-        data["response_time"] = response_time;
+        data["response_time"] = ms;
 
         auto ct = res.find(http::field::content_type);
-        if (ct != res.end()) {
+        if (ct != res.end())
             data["content_type"] = std::string(ct->value());
-        }
+        else
+            data["content_type"] = nullptr;
 
         BOOST_LOG_TRIVIAL(info)
             << boost::log::add_value(message_attr, std::string("response sent"))
