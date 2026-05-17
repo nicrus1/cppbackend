@@ -73,11 +73,12 @@ private:
             return;
         }
         
+        // API 404 - должен быть JSON
         if (target.find(endpoints::API_PREFIX) == 0 || target.find(endpoints::API_PREFIX_NO_LEADING_SLASH) == 0) {
             auto response = MakeErrorResponse(std::move(req),
-                                             http::status::bad_request,
+                                             http::status::not_found,
                                              "badRequest",
-                                             "Bad request");
+                                             "Not found");
             send(std::move(response));
             return;
         }
@@ -94,10 +95,8 @@ private:
         
         // Images handling
         if (target.find("/images/") == 0) {
-            // Извлекаем имя файла
-            std::string filename = target.substr(8); // после "/images/"
+            std::string filename = target.substr(8);
             
-            // Только cube.svg существует
             if (filename == "cube.svg") {
                 auto response = MakeResponse(std::move(req),
                                             http::status::ok,
@@ -106,7 +105,7 @@ private:
                 send(std::move(response));
                 return;
             } else {
-                // Любой другой файл - 404
+                // Статический файл не найден - text/plain
                 auto response = MakeErrorResponse(std::move(req),
                                                  http::status::not_found,
                                                  "fileNotFound",
@@ -117,7 +116,7 @@ private:
             }
         }
         
-        // 404 for everything else
+        // Non-API 404 - text/plain
         auto response = MakeErrorResponse(std::move(req),
                                          http::status::not_found,
                                          "badRequest",
@@ -143,6 +142,7 @@ private:
         const model::Map* map = game_.FindMap(map_id);
         
         if (!map) {
+            // API 404 - JSON ответ
             auto response = MakeErrorResponse(std::move(req),
                                              http::status::not_found,
                                              "mapNotFound", 
@@ -186,11 +186,7 @@ private:
             {"message", message}
         });
         
-        auto response = MakeResponse(std::move(req), status, "application/json", body);
-        if (status == http::status::not_found) {
-            response.set(http::field::content_type, "text/plain");
-        }
-        return response;
+        return MakeResponse(std::move(req), status, "application/json", body);
     }
     
     std::string SerializeMaps() const;
