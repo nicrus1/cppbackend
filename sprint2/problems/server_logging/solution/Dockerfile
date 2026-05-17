@@ -15,10 +15,10 @@ WORKDIR /app
 
 COPY . .
 
-# Конфигурируем Conan для использования CMakeToolchain
+# Сборка
 RUN mkdir -p build && cd build && \
     conan install .. --build=missing && \
-    cmake .. -DCMAKE_TOOLCHAIN_FILE=conan_toolchain.cmake -DCMAKE_CXX_STANDARD=20 && \
+    cmake .. -DCMAKE_TOOLCHAIN_FILE=conan_toolchain.cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_STANDARD=20 && \
     cmake --build .
 
 EXPOSE 8080
