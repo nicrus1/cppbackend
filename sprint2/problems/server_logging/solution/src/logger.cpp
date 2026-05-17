@@ -1,6 +1,7 @@
 #include "logger.h"
 #include <iostream>
 #include <chrono>
+#include <boost/log/utility/manipulators/add_value.hpp>
 
 namespace logger {
 
@@ -22,7 +23,6 @@ void InitLogging() {
 
 void LogRequestReceived(const boost::json::object& data) {
     boost::json::value json_data(data);
-    // Используем boost::log::add_value вместо logging::add_value
     BOOST_LOG_TRIVIAL(info) << boost::log::add_value(additional_data, json_data)
                             << "request received";
 }
