@@ -1,25 +1,43 @@
-FROM ubuntu:22.04
+# Не просто создаём образ, но даём ему имя build
+FROM gcc:11.3 as build
 
-RUN apt-get update && apt-get install -y \
-    g++ \
-    cmake \
-    python3-pip \
-    && pip3 install conan \
-    && rm -rf /var/lib/apt/lists/*
+RUN apt update && \
+    apt install -y \
+      python3-pip \
+      cmake \
+    && \
+    pip3 install conan==1.*
 
-RUN conan profile detect --force
+# Запуск conan как раньше
+COPY conanfile.txt /app/
+RUN mkdir /app/build && cd /app/build && \
+    conan install .. --build=missing
 
-WORKDIR /app
+# Копируем исходники
+COPY ./src /app/src
+COPY CMakeLists.txt /app/
 
-COPY . .
+RUN cd /app/build && \
+    cmake -DCMAKE_BUILD_TYPE=Release .. && \
+    cmake --build .
 
-RUN mkdir build && cd build && \
-    conan install .. --build=missing -s build_type=Release && \
-    cmake .. \
-        -DCMAKE_TOOLCHAIN_FILE=conan_toolchain.cmake \
-        -DCMAKE_BUILD_TYPE=Release && \
-    cmake --build . --config Release
+# Второй контейнер в том же докерфайле
+FROM ubuntu:22.04 as run
 
-EXPOSE 8080
+# Устанавливаем необходимые runtime библиотеки
+RUN apt update && \
+    apt install -y \
+      libstdc++6 \
+    && \
+    rm -rf /var/lib/apt/lists/*
 
-CMD ["./build/server"]
+# Создадим пользователя www
+RUN groupadd -r www && useradd -r -g www www
+USER www
+
+# Скопируем приложение со сборочного контейнера
+COPY --from=build /app/build/bin/game_server /app/game_server
+COPY ./data /app/data
+
+# Запускаем игровой сервер
+ENTRYPOINT ["/app/game_server", "/app/data/config.json"]
