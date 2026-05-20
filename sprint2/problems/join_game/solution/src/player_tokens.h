@@ -1,8 +1,11 @@
+// player_tokens.h - исправленная версия
 #pragma once
 #include "player.h"
 #include <random>
 #include <unordered_map>
 #include <string>
+#include <sstream>
+#include <iomanip>
 
 namespace model {
 
@@ -21,7 +24,6 @@ public:
         generator2_ = std::mt19937_64(dist(rd));
     }
     
-    // Генерация токена для игрока
     Token GenerateToken(const Player& player) {
         uint64_t part1 = generator1_();
         uint64_t part2 = generator2_();
@@ -32,13 +34,14 @@ public:
         ss << std::setw(16) << part2;
         
         Token token(ss.str());
-        token_to_player_[token] = player.GetId();
-        player_to_token_[player.GetId()] = token;
+        
+        // Используем emplace вместо operator[]
+        token_to_player_.emplace(token, player.GetId());
+        player_to_token_.emplace(player.GetId(), token);
         
         return token;
     }
     
-    // Поиск игрока по токену
     PlayerId FindPlayerByToken(const Token& token) const {
         auto it = token_to_player_.find(token);
         if (it != token_to_player_.end()) {
@@ -47,7 +50,6 @@ public:
         return PlayerId{0};
     }
     
-    // Проверка валидности токена
     bool IsValidToken(const Token& token) const {
         return token_to_player_.find(token) != token_to_player_.end();
     }

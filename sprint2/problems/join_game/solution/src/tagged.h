@@ -31,6 +31,9 @@ public:
     using ValueType = Value;
     using TagType = Tag;
 
+    // Добавляем конструктор по умолчанию
+    Tagged() = default;
+    
     explicit Tagged(Value&& v)
         : value_(std::move(v)) {
     }
@@ -45,13 +48,24 @@ public:
     Value& operator*() {
         return value_;
     }
+    
+    // Оператор присваивания для удобства
+    Tagged& operator=(const Value& v) {
+        value_ = v;
+        return *this;
+    }
+    
+    Tagged& operator=(Value&& v) {
+        value_ = std::move(v);
+        return *this;
+    }
 
     // Так в C++20 можно объявить оператор сравнения Tagged-типов
     // Будет просто вызван соответствующий оператор для поля value_
     auto operator<=>(const Tagged<Value, Tag>&) const = default;
 
 private:
-    Value value_;
+    Value value_{};  // Инициализируем значением по умолчанию
 };
 
 // Хешер для Tagged-типа, чтобы Tagged-объекты можно было хранить в unordered-контейнерах
