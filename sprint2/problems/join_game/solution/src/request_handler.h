@@ -327,9 +327,13 @@ private:
 
         boost::json::object response_body;
 
-        for (const auto& [id, name] : players) {
-            response_body[id] = boost::json::object{
-                { "name", name }
+        // players — это std::vector<const Player*>, итерируемся корректно
+        for (const Player* player : players) {
+            if (!player) continue;
+            // PlayerId — это Tagged<uint64_t, PlayerTag>, разыменовываем для получения uint64_t
+            std::string id_str = std::to_string(*player->GetId());
+            response_body[id_str] = boost::json::object{
+                { "name", player->GetName() }
             };
         }
 
