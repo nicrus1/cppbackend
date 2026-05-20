@@ -42,7 +42,6 @@ public:
     }
 
 private:
-    // Вспомогательная функция для регистронезависимого поиска заголовка
     template <typename Body, typename Allocator>
     std::optional<std::string> GetHeaderValue(const http::request<Body, http::basic_fields<Allocator>>& req, 
                                                 std::string_view header_name) {
