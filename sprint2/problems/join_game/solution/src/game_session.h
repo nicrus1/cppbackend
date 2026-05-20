@@ -13,6 +13,10 @@ public:
     explicit GameSession(model::Game& game)
         : game_(game) {}
     
+    explicit GameSession(model::Game& game, model::Players& players)
+        : game_(game)
+        , players_(players) {}
+    
     struct JoinResult {
         model::Token token;
         model::PlayerId player_id;
@@ -25,7 +29,7 @@ public:
         }
         
         model::Player& player = players_.AddPlayer(user_name, map_id);
-        model::Token token = player_tokens_.GenerateToken(player);
+        model::Token token = players_.GenerateToken(player);
         
         JoinResult result;
         result.token = std::move(token);
@@ -34,14 +38,9 @@ public:
     }
     
     std::unordered_map<std::string, std::string> GetPlayersOnMap(const model::Token& token) {
-        model::PlayerId player_id = player_tokens_.FindPlayerByToken(token);
-        if (player_id == model::PlayerId{0}) {
-            throw std::runtime_error("Invalid token");
-        }
-        
-        model::Player* player = players_.FindPlayer(player_id);
+        model::Player* player = players_.FindPlayerByToken(token);
         if (!player) {
-            throw std::runtime_error("Player not found");
+            throw std::runtime_error("Invalid token");
         }
         
         auto players_on_map = players_.GetPlayersOnMap(player->GetMapId());
@@ -53,13 +52,12 @@ public:
     }
     
     bool ValidateToken(const model::Token& token) const {
-        return player_tokens_.IsValidToken(token);
+        return players_.ValidateToken(token);
     }
 
 private:
     model::Game& game_;
     model::Players players_;
-    model::PlayerTokens player_tokens_;
 };
 
 }  // namespace game

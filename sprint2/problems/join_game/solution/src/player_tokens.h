@@ -57,6 +57,18 @@ public:
     bool IsValidToken(const Token& token) const {
         return token_to_player_.find(token) != token_to_player_.end();
     }
+    
+    const Player* FindPlayerByToken(const Token& token, const std::unordered_map<PlayerId, std::unique_ptr<Player>, util::TaggedHasher<PlayerId>>& players) const {
+        PlayerId player_id = FindPlayerByToken(token);
+        if (player_id == PlayerId{0}) {
+            return nullptr;
+        }
+        auto it = players.find(player_id);
+        if (it != players.end()) {
+            return it->second.get();
+        }
+        return nullptr;
+    }
 
 private:
     std::mt19937_64 generator1_;
