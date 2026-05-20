@@ -79,6 +79,9 @@ private:
             target = target.substr(0, query_pos);
         }
 
+        // Отладка: выводим target
+        // std::cerr << "DEBUG: target = '" << target << "'" << std::endl;
+
         // Обработка JOIN
         if (target == endpoints::GAME_JOIN ||
             target == endpoints::GAME_JOIN_WITHOUT_SLASH) {
@@ -116,13 +119,14 @@ private:
             return;
         }
 
-        if (target.find(endpoints::MAPS_PREFIX) == 0) {
-            std::string map_id_str = target.substr(endpoints::MAPS_PREFIX.length());
-            ProcessMapRequest(std::move(req), std::move(map_id_str), std::forward<Send>(send));
-            return;
-        }
-        else if (target.find(endpoints::MAPS_PREFIX_WITHOUT_SLASH) == 0) {
-            std::string map_id_str = target.substr(endpoints::MAPS_PREFIX_WITHOUT_SLASH.length());
+        if (target.find(endpoints::MAPS_PREFIX) == 0 ||
+            target.find(endpoints::MAPS_PREFIX_WITHOUT_SLASH) == 0) {
+            std::string map_id_str;
+            if (target.find(endpoints::MAPS_PREFIX) == 0) {
+                map_id_str = target.substr(endpoints::MAPS_PREFIX.length());
+            } else {
+                map_id_str = target.substr(endpoints::MAPS_PREFIX_WITHOUT_SLASH.length());
+            }
             ProcessMapRequest(std::move(req), std::move(map_id_str), std::forward<Send>(send));
             return;
         }
@@ -380,6 +384,7 @@ private:
 
         std::string auth_value = *auth_value_opt;
         
+        // Trim whitespace from the whole auth_value
         size_t start = auth_value.find_first_not_of(" \t\n\r");
         if (start == std::string::npos) {
             return std::nullopt;
@@ -387,6 +392,7 @@ private:
         size_t end = auth_value.find_last_not_of(" \t\n\r");
         auth_value = auth_value.substr(start, end - start + 1);
         
+        // Check for Bearer prefix (case-insensitive)
         std::string auth_lower = auth_value;
         std::transform(auth_lower.begin(), auth_lower.end(), auth_lower.begin(),
                        [](unsigned char c) { return std::tolower(c); });
@@ -397,8 +403,10 @@ private:
             return std::nullopt;
         }
         
+        // Extract token after prefix
         std::string token_str = auth_value.substr(prefix.size());
         
+        // Trim whitespace from token
         start = token_str.find_first_not_of(" \t\n\r");
         if (start == std::string::npos) {
             return std::nullopt;
