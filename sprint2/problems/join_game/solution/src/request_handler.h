@@ -5,6 +5,7 @@
 #include <boost/json.hpp>
 #include <boost/json/serialize.hpp>
 #include <optional>
+#include <cctype>
 
 namespace http_handler {
 
@@ -38,6 +39,23 @@ public:
     }
 
 private:
+    // Вспомогательная функция для регистронезависимого поиска заголовка
+    template <typename Body, typename Allocator>
+    std::optional<std::string> GetHeaderValue(const http::request<Body, http::basic_fields<Allocator>>& req, 
+                                                std::string_view header_name) {
+        for (auto it = req.begin(); it != req.end(); ++it) {
+            std::string name = std::string(it->name_string());
+            // Приводим к нижнему регистру для сравнения
+            std::transform(name.begin(), name.end(), name.begin(), ::tolower);
+            std::string target(header_name);
+            std::transform(target.begin(), target.end(), target.begin(), ::tolower);
+            if (name == target) {
+                return std::string(it->value());
+            }
+        }
+        return std::nullopt;
+    }
+
     template <typename Body, typename Allocator, typename Send>
     void HandleRequest(http::request<Body, http::basic_fields<Allocator>>&& req, Send&& send) {
         std::string target = std::string(req.target());
@@ -336,7 +354,7 @@ private:
             return;
         }
         
-        // Извлечение токена из заголовка Authorization
+        // Извлечение токена из заголовка Authorization (регистронезависимо)
         auto token = ExtractToken(req);
         if (!token) {
             auto response = MakeErrorResponse(std::move(req),
@@ -397,15 +415,16 @@ private:
         }
     }
 
-    // Извлечение токена из заголовка Authorization
+    // Извлечение токена из заголовка Authorization (регистронезависимо)
     template <typename Body, typename Allocator>
     std::optional<model::Token> ExtractToken(const http::request<Body, http::basic_fields<Allocator>>& req) {
-        auto it = req.find(http::field::authorization);
-        if (it == req.end()) {
+        // Ищем заголовок Authorization (регистронезависимо)
+        auto auth_value_opt = GetHeaderValue(req, "authorization");
+        if (!auth_value_opt) {
             return std::nullopt;
         }
         
-        std::string auth_value = std::string(it->value());
+        std::string auth_value = *auth_value_opt;
         const std::string prefix = "Bearer ";
         
         // Проверка наличия префикса Bearer
