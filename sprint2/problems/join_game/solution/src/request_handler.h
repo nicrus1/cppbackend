@@ -45,28 +45,6 @@ public:
     }
 
 private:
-    template <typename Body, typename Allocator>
-    std::optional<std::string> GetHeaderValue(
-        const http::request<Body, http::basic_fields<Allocator>>& req,
-        std::string_view header_name) {
-
-        for (auto it = req.begin(); it != req.end(); ++it) {
-            std::string name = std::string(it->name_string());
-
-            std::transform(name.begin(), name.end(), name.begin(),
-                           [](unsigned char c) { return std::tolower(c); });
-
-            std::string target(header_name);
-            std::transform(target.begin(), target.end(), target.begin(),
-                           [](unsigned char c) { return std::tolower(c); });
-
-            if (name == target) {
-                return std::string(it->value());
-            }
-        }
-        return std::nullopt;
-    }
-
     template <typename Body, typename Allocator, typename Send>
     void HandleRequest(http::request<Body, http::basic_fields<Allocator>>&& req,
                        Send&& send) {
@@ -78,9 +56,6 @@ private:
         if (query_pos != std::string::npos) {
             target = target.substr(0, query_pos);
         }
-
-        // Отладка
-        std::cerr << "DEBUG: target = '" << target << "'" << std::endl;
 
         // Обработка JOIN
         if (target == endpoints::GAME_JOIN ||
@@ -128,17 +103,6 @@ private:
                 map_id_str = target.substr(endpoints::MAPS_PREFIX_WITHOUT_SLASH.length());
             }
             ProcessMapRequest(std::move(req), std::move(map_id_str), std::forward<Send>(send));
-            return;
-        }
-
-        // Статические файлы
-        if (target == "/" || target == "/index.html") {
-            auto response = MakeResponse(
-                std::move(req),
-                http::status::ok,
-                "text/html",
-                "");
-            send(std::move(response));
             return;
         }
 
@@ -242,6 +206,7 @@ private:
         }
 
         std::string user_name = std::string(obj.at("userName").as_string());
+
         if (user_name.empty()) {
             auto response = MakeErrorResponse(
                 std::move(req),
@@ -268,30 +233,33 @@ private:
 
         try {
             auto result = game_session_.JoinGame(user_name, map_id);
+
             boost::json::object response_body;
             response_body["authToken"] = *result.token;
             response_body["playerId"] = *result.player_id;
-            
-            std::cerr << "DEBUG: Created player " << *result.player_id 
-                      << " with token " << *result.token << std::endl;
-            
+
             auto response = MakeResponse(
                 std::move(req),
                 http::status::ok,
                 "application/json",
                 boost::json::serialize(response_body));
+
             response.set(http::field::cache_control, "no-cache");
+
             send(std::move(response));
         }
         catch (const std::runtime_error& e) {
             std::string error_msg = e.what();
+
             if (error_msg == "Map not found") {
                 auto response = MakeErrorResponse(
                     std::move(req),
                     http::status::not_found,
                     "mapNotFound",
                     "Map not found");
+
                 response.set(http::field::cache_control, "no-cache");
+
                 send(std::move(response));
             }
             else {
@@ -304,137 +272,110 @@ private:
     void HandleGetPlayers(http::request<Body, http::basic_fields<Allocator>>&& req,
                           Send&& send) {
 
-        if (req.method() != http::verb::get && req.method() != http::verb::head) {
+        if (req.method() != http::verb::get &&
+            req.method() != http::verb::head) {
+
             auto response = MakeErrorResponse(
                 std::move(req),
                 http::status::method_not_allowed,
                 "invalidMethod",
                 "Invalid method");
+
             response.set(http::field::allow, "GET, HEAD");
             response.set(http::field::cache_control, "no-cache");
+
             send(std::move(response));
             return;
         }
 
         auto token = ExtractToken(req);
+
         if (!token) {
-            std::cerr << "DEBUG: Failed to extract token" << std::endl;
             auto response = MakeErrorResponse(
                 std::move(req),
                 http::status::unauthorized,
                 "invalidToken",
                 "Authorization header is missing or invalid");
+
             response.set(http::field::cache_control, "no-cache");
+
             send(std::move(response));
             return;
         }
 
-        std::cerr << "DEBUG: Extracted token: " << **token << std::endl;
-        std::cerr << "DEBUG: Token valid? " << game_session_.ValidateToken(*token) << std::endl;
-
         if (!game_session_.ValidateToken(*token)) {
-            std::cerr << "DEBUG: Token validation failed" << std::endl;
             auto response = MakeErrorResponse(
                 std::move(req),
                 http::status::unauthorized,
                 "unknownToken",
                 "Player token has not been found");
+
             response.set(http::field::cache_control, "no-cache");
+
             send(std::move(response));
             return;
         }
 
-        try {
-            auto players = game_session_.GetPlayersOnMap(*token);
-            std::cerr << "DEBUG: Found " << players.size() << " players on map" << std::endl;
+        auto players = game_session_.GetPlayersOnMap(*token);
 
-            if (req.method() == http::verb::head) {
-                auto response = MakeResponse(
-                    std::move(req),
-                    http::status::ok,
-                    "application/json",
-                    "");
-                response.set(http::field::cache_control, "no-cache");
-                send(std::move(response));
-                return;
-            }
-
-            boost::json::object response_body;
-            for (const auto& [id, name] : players) {
-                response_body[id] = boost::json::object{{"name", name}};
-            }
-
+        if (req.method() == http::verb::head) {
             auto response = MakeResponse(
                 std::move(req),
                 http::status::ok,
                 "application/json",
-                boost::json::serialize(response_body));
+                "");
+
             response.set(http::field::cache_control, "no-cache");
+
             send(std::move(response));
+            return;
         }
-        catch (const std::exception& e) {
-            std::cerr << "DEBUG: Exception in GetPlayersOnMap: " << e.what() << std::endl;
-            auto response = MakeErrorResponse(
-                std::move(req),
-                http::status::unauthorized,
-                "unknownToken",
-                e.what());
-            response.set(http::field::cache_control, "no-cache");
-            send(std::move(response));
+
+        boost::json::object response_body;
+
+        for (const auto& [id, name] : players) {
+            response_body[id] = boost::json::object{
+                {"name", name}
+            };
         }
+
+        auto response = MakeResponse(
+            std::move(req),
+            http::status::ok,
+            "application/json",
+            boost::json::serialize(response_body));
+
+        response.set(http::field::cache_control, "no-cache");
+
+        send(std::move(response));
     }
 
     template <typename Body, typename Allocator>
     std::optional<model::Token> ExtractToken(
         const http::request<Body, http::basic_fields<Allocator>>& req) {
 
-        auto auth_value_opt = GetHeaderValue(req, "authorization");
-        if (!auth_value_opt) {
-            std::cerr << "DEBUG: No Authorization header found" << std::endl;
+        auto auth_it = req.find(http::field::authorization);
+
+        if (auth_it == req.end()) {
             return std::nullopt;
         }
 
-        std::string auth_value = *auth_value_opt;
-        std::cerr << "DEBUG: Raw Authorization: '" << auth_value << "'" << std::endl;
-        
-        // Trim whitespace from the whole auth_value
-        size_t start = auth_value.find_first_not_of(" \t\n\r");
-        if (start == std::string::npos) {
+        std::string auth = std::string(auth_it->value());
+
+        const std::string bearer = "Bearer ";
+
+        if (auth.size() < bearer.size() ||
+            auth.substr(0, bearer.size()) != bearer) {
             return std::nullopt;
         }
-        size_t end = auth_value.find_last_not_of(" \t\n\r");
-        auth_value = auth_value.substr(start, end - start + 1);
-        
-        // Check for Bearer prefix (case-insensitive)
-        std::string auth_lower = auth_value;
-        std::transform(auth_lower.begin(), auth_lower.end(), auth_lower.begin(),
-                       [](unsigned char c) { return std::tolower(c); });
-        
-        const std::string prefix = "bearer ";
-        if (auth_lower.size() < prefix.size() ||
-            auth_lower.substr(0, prefix.size()) != prefix) {
-            std::cerr << "DEBUG: No Bearer prefix found" << std::endl;
+
+        std::string token = auth.substr(bearer.size());
+
+        if (token.empty()) {
             return std::nullopt;
         }
-        
-        // Extract token after prefix
-        std::string token_str = auth_value.substr(prefix.size());
-        
-        // Trim whitespace from token
-        start = token_str.find_first_not_of(" \t\n\r");
-        if (start == std::string::npos) {
-            return std::nullopt;
-        }
-        end = token_str.find_last_not_of(" \t\n\r");
-        token_str = token_str.substr(start, end - start + 1);
-        
-        if (token_str.empty()) {
-            return std::nullopt;
-        }
-        
-        std::cerr << "DEBUG: Extracted token string: '" << token_str << "'" << std::endl;
-        
-        return model::Token{std::move(token_str)};
+
+        return model::Token{token};
     }
 
     template <typename Body, typename Allocator>
@@ -449,6 +390,7 @@ private:
         response.body() = body;
         response.prepare_payload();
         response.keep_alive(req.keep_alive());
+
         return response;
     }
 
@@ -465,8 +407,14 @@ private:
                 {"message", message}
             });
 
-        auto response = MakeResponse(std::move(req), status, "application/json", body);
+        auto response = MakeResponse(
+            std::move(req),
+            status,
+            "application/json",
+            body);
+
         response.set(http::field::cache_control, "no-cache");
+
         return response;
     }
 
