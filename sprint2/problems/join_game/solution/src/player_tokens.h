@@ -1,0 +1,62 @@
+#pragma once
+#include "player.h"
+#include <random>
+#include <unordered_map>
+#include <string>
+
+namespace model {
+
+namespace detail {
+struct TokenTag {};
+}  // namespace detail
+
+using Token = util::Tagged<std::string, detail::TokenTag>;
+
+class PlayerTokens {
+public:
+    PlayerTokens() {
+        std::random_device rd;
+        std::uniform_int_distribution<uint64_t> dist;
+        generator1_ = std::mt19937_64(dist(rd));
+        generator2_ = std::mt19937_64(dist(rd));
+    }
+    
+    // Генерация токена для игрока
+    Token GenerateToken(const Player& player) {
+        uint64_t part1 = generator1_();
+        uint64_t part2 = generator2_();
+        
+        std::stringstream ss;
+        ss << std::hex << std::setfill('0');
+        ss << std::setw(16) << part1;
+        ss << std::setw(16) << part2;
+        
+        Token token(ss.str());
+        token_to_player_[token] = player.GetId();
+        player_to_token_[player.GetId()] = token;
+        
+        return token;
+    }
+    
+    // Поиск игрока по токену
+    PlayerId FindPlayerByToken(const Token& token) const {
+        auto it = token_to_player_.find(token);
+        if (it != token_to_player_.end()) {
+            return it->second;
+        }
+        return PlayerId{0};
+    }
+    
+    // Проверка валидности токена
+    bool IsValidToken(const Token& token) const {
+        return token_to_player_.find(token) != token_to_player_.end();
+    }
+
+private:
+    std::mt19937_64 generator1_;
+    std::mt19937_64 generator2_;
+    std::unordered_map<Token, PlayerId, util::TaggedHasher<Token>> token_to_player_;
+    std::unordered_map<PlayerId, Token, util::TaggedHasher<PlayerId>> player_to_token_;
+};
+
+}  // namespace model

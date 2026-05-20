@@ -1,56 +1,38 @@
-cmake_minimum_required(VERSION 3.10)
-project(GameServer)
+cmake_minimum_required(VERSION 3.11)
 
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_EXTENSIONS OFF)
+project(game_server CXX)
+set(CMAKE_CXX_STANDARD 20)
 
-# Исходники
-set(SOURCES
-    main.cpp
-    api_handler.cpp
-    game_session.cpp
-    player_tokens.cpp
-    player.cpp
-)
+include(${CMAKE_BINARY_DIR}/conanbuildinfo.cmake)
+conan_basic_setup()
 
-# Заголовки
-set(HEADERS
-    api_handler.h
-    game_session.h
-    player_tokens.h
-    player.h
-)
+find_package(Boost 1.78.0 REQUIRED)
+if(Boost_FOUND)
+  include_directories(${Boost_INCLUDE_DIRS})
+endif()
 
-# Создаём исполняемый файл
-add_executable(game_server ${SOURCES} ${HEADERS})
-
-# Добавляем pthread
+set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
-target_link_libraries(game_server Threads::Threads)
 
-# Для Linux слинкуем дополнительные библиотеки
-if(UNIX AND NOT APPLE)
-    target_link_libraries(game_server pthread)
-endif()
+add_executable(game_server
+    src/main.cpp
+    src/http_server.cpp
+    src/http_server.h
+    src/sdk.h
+    src/model.h
+    src/model.cpp
+    src/tagged.h
+    src/boost_json.cpp
+    src/json_loader.h
+    src/json_loader.cpp
+    src/request_handler.cpp
+    src/request_handler.h
+    src/logger.cpp
+    src/logger.h
+    src/player.h
+    src/players.h
+    src/player_tokens.h
+    src/game_session.h
+)
 
-# Копируем статику и конфиги в build директорию (только если они существуют)
-if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/static)
-    add_custom_command(TARGET game_server POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_directory
-            ${CMAKE_CURRENT_SOURCE_DIR}/static
-            ${CMAKE_CURRENT_BINARY_DIR}/static
-    )
-endif()
-
-if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/data)
-    add_custom_command(TARGET game_server POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_directory
-            ${CMAKE_CURRENT_SOURCE_DIR}/data
-            ${CMAKE_CURRENT_BINARY_DIR}/data
-    )
-endif()
-
-# Выводим информацию
-message(STATUS "C++ Standard: ${CMAKE_CXX_STANDARD}")
-message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
+target_link_libraries(game_server PRIVATE Threads::Threads ${Boost_LIBRARIES})
