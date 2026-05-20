@@ -2,31 +2,29 @@
 #include "http_server.h"
 #include "model.h"
 #include "game_session.h"
-
 #include <boost/json.hpp>
 #include <boost/json/serialize.hpp>
-
 #include <optional>
 #include <cctype>
 #include <algorithm>
 #include <iostream>
+#include <string>
 
 namespace http_handler {
-
 namespace beast = boost::beast;
 namespace http = beast::http;
 
 namespace endpoints {
-    constexpr std::string_view MAPS = "/api/v1/maps";
-    constexpr std::string_view MAPS_WITHOUT_SLASH = "api/v1/maps";
-    constexpr std::string_view MAPS_PREFIX = "/api/v1/maps/";
-    constexpr std::string_view MAPS_PREFIX_WITHOUT_SLASH = "api/v1/maps/";
-    constexpr std::string_view API_PREFIX = "/api/";
-    constexpr std::string_view API_PREFIX_WITHOUT_SLASH = "api/";
-    constexpr std::string_view GAME_JOIN = "/api/v1/game/join";
-    constexpr std::string_view GAME_JOIN_WITHOUT_SLASH = "api/v1/game/join";
-    constexpr std::string_view GAME_PLAYERS = "/api/v1/game/players";
-    constexpr std::string_view GAME_PLAYERS_WITHOUT_SLASH = "api/v1/game/players";
+constexpr std::string_view MAPS = "/api/v1/maps";
+constexpr std::string_view MAPS_WITHOUT_SLASH = "api/v1/maps";
+constexpr std::string_view MAPS_PREFIX = "/api/v1/maps/";
+constexpr std::string_view MAPS_PREFIX_WITHOUT_SLASH = "api/v1/maps/";
+constexpr std::string_view API_PREFIX = "/api/";
+constexpr std::string_view API_PREFIX_WITHOUT_SLASH = "api/";
+constexpr std::string_view GAME_JOIN = "/api/v1/game/join";
+constexpr std::string_view GAME_JOIN_WITHOUT_SLASH = "api/v1/game/join";
+constexpr std::string_view GAME_PLAYERS = "/api/v1/game/players";
+constexpr std::string_view GAME_PLAYERS_WITHOUT_SLASH = "api/v1/game/players";
 }  // namespace endpoints
 
 class RequestHandler {
@@ -48,7 +46,6 @@ private:
     template <typename Body, typename Allocator, typename Send>
     void HandleRequest(http::request<Body, http::basic_fields<Allocator>>&& req,
                        Send&& send) {
-
         std::string target = std::string(req.target());
         std::string method = std::string(req.method_string());
 
@@ -323,7 +320,7 @@ private:
                 std::move(req),
                 http::status::ok,
                 "application/json",
-                "");
+                "");  // Пустое тело для HEAD
 
             response.set(http::field::cache_control, "no-cache");
 
@@ -334,8 +331,10 @@ private:
         boost::json::object response_body;
 
         for (const auto& [id, name] : players) {
-            response_body[id] = boost::json::object{
-                {"name", name}
+            // Преобразуем PlayerId к строке для использования как ключа JSON
+            std::string id_str = std::to_string(*id);
+            response_body[id_str] = boost::json::object{
+                { "name", name }
             };
         }
 
@@ -403,8 +402,8 @@ private:
 
         std::string body = boost::json::serialize(
             boost::json::object{
-                {"code", code},
-                {"message", message}
+                { "code", code },
+                { "message", message }
             });
 
         auto response = MakeResponse(
@@ -427,5 +426,4 @@ private:
     model::Game& game_;
     game::GameSession game_session_;
 };
-
 }  // namespace http_handler
