@@ -6,6 +6,7 @@
 #include <boost/json/serialize.hpp>
 #include <optional>
 #include <cctype>
+#include <iostream>
 
 namespace http_handler {
 
@@ -359,6 +360,7 @@ private:
         // Извлечение токена из заголовка Authorization (регистронезависимо)
         auto token = ExtractToken(req);
         if (!token) {
+            std::cerr << "DEBUG: Token extraction failed" << std::endl;
             auto response = MakeErrorResponse(std::move(req),
                                              http::status::unauthorized,
                                              "invalidToken",
@@ -368,8 +370,11 @@ private:
             return;
         }
         
+        std::cerr << "DEBUG: Extracted token: " << **token << std::endl;
+        
         // Валидация токена
         if (!game_session_.ValidateToken(*token)) {
+            std::cerr << "DEBUG: Token validation failed" << std::endl;
             auto response = MakeErrorResponse(std::move(req),
                                              http::status::unauthorized,
                                              "unknownToken",
@@ -379,9 +384,13 @@ private:
             return;
         }
         
+        std::cerr << "DEBUG: Token validated successfully" << std::endl;
+        
         // Получение списка игроков
         try {
             auto players = game_session_.GetPlayersOnMap(*token);
+            
+            std::cerr << "DEBUG: Got " << players.size() << " players" << std::endl;
             
             // Для HEAD запроса не нужно тело
             if (req.method() == http::verb::head) {
@@ -408,6 +417,7 @@ private:
             send(std::move(response));
             
         } catch (const std::runtime_error& e) {
+            std::cerr << "DEBUG: Exception in GetPlayersOnMap: " << e.what() << std::endl;
             auto response = MakeErrorResponse(std::move(req),
                                              http::status::unauthorized,
                                              "unknownToken",
@@ -423,15 +433,19 @@ private:
         // Ищем заголовок Authorization (регистронезависимо)
         auto auth_value_opt = GetHeaderValue(req, "authorization");
         if (!auth_value_opt) {
+            std::cerr << "DEBUG: No Authorization header found" << std::endl;
             return std::nullopt;
         }
         
         std::string auth_value = *auth_value_opt;
+        std::cerr << "DEBUG: Authorization header value: '" << auth_value << "'" << std::endl;
+        
         const std::string prefix = "Bearer ";
         
         // Проверка наличия префикса Bearer
         if (auth_value.length() <= prefix.length() || 
             auth_value.substr(0, prefix.length()) != prefix) {
+            std::cerr << "DEBUG: No Bearer prefix found" << std::endl;
             return std::nullopt;
         }
         
@@ -441,6 +455,7 @@ private:
         // Удаляем пробелы в начале и конце
         size_t start = token_str.find_first_not_of(" \t\n\r");
         if (start == std::string::npos) {
+            std::cerr << "DEBUG: Token is empty after trimming" << std::endl;
             return std::nullopt;
         }
         size_t end = token_str.find_last_not_of(" \t\n\r");
@@ -448,8 +463,11 @@ private:
         
         // Токен должен быть непустым
         if (token_str.empty()) {
+            std::cerr << "DEBUG: Token is empty" << std::endl;
             return std::nullopt;
         }
+        
+        std::cerr << "DEBUG: Extracted token string: '" << token_str << "'" << std::endl;
         
         return model::Token{std::move(token_str)};
     }
