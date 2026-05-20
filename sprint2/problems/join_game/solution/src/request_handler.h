@@ -14,13 +14,15 @@ namespace http = beast::http;
 
 namespace endpoints {
     constexpr std::string_view MAPS = "/api/v1/maps";
-    constexpr std::string_view MAPS_WITH_SLASH = "api/v1/maps";
+    constexpr std::string_view MAPS_WITHOUT_SLASH = "api/v1/maps";
     constexpr std::string_view MAPS_PREFIX = "/api/v1/maps/";
-    constexpr std::string_view MAPS_PREFIX_NO_LEADING_SLASH = "api/v1/maps/";
+    constexpr std::string_view MAPS_PREFIX_WITHOUT_SLASH = "api/v1/maps/";
     constexpr std::string_view API_PREFIX = "/api/";
-    constexpr std::string_view API_PREFIX_NO_LEADING_SLASH = "api/";
+    constexpr std::string_view API_PREFIX_WITHOUT_SLASH = "api/";
     constexpr std::string_view GAME_JOIN = "/api/v1/game/join";
+    constexpr std::string_view GAME_JOIN_WITHOUT_SLASH = "api/v1/game/join";
     constexpr std::string_view GAME_PLAYERS = "/api/v1/game/players";
+    constexpr std::string_view GAME_PLAYERS_WITHOUT_SLASH = "api/v1/game/players";
 }  // namespace endpoints
 
 class RequestHandler {
@@ -66,14 +68,14 @@ private:
             target = target.substr(0, query_pos);
         }
 
-        // Обработка JOIN запроса
-        if (target == endpoints::GAME_JOIN) {
+        // Обработка JOIN запроса (с ведущим слешем и без)
+        if (target == endpoints::GAME_JOIN || target == endpoints::GAME_JOIN_WITHOUT_SLASH) {
             HandleJoin(std::move(req), std::forward<Send>(send));
             return;
         }
 
-        // Обработка GET/HEAD /players запроса
-        if (target == endpoints::GAME_PLAYERS) {
+        // Обработка GET/HEAD /players запроса (с ведущим слешем и без)
+        if (target == endpoints::GAME_PLAYERS || target == endpoints::GAME_PLAYERS_WITHOUT_SLASH) {
             HandleGetPlayers(std::move(req), std::forward<Send>(send));
             return;
         }
@@ -89,7 +91,7 @@ private:
         }
 
         // API endpoints для карт
-        if (target == endpoints::MAPS || target == endpoints::MAPS_WITH_SLASH) {
+        if (target == endpoints::MAPS || target == endpoints::MAPS_WITHOUT_SLASH) {
             std::string body = SerializeMaps();
 
             auto response = MakeResponse(std::move(req),
@@ -109,8 +111,8 @@ private:
                               std::forward<Send>(send));
             return;
         }
-        else if (target.find(endpoints::MAPS_PREFIX_NO_LEADING_SLASH) == 0) {
-            std::string map_id_str = target.substr(endpoints::MAPS_PREFIX_NO_LEADING_SLASH.length());
+        else if (target.find(endpoints::MAPS_PREFIX_WITHOUT_SLASH) == 0) {
+            std::string map_id_str = target.substr(endpoints::MAPS_PREFIX_WITHOUT_SLASH.length());
 
             ProcessMapRequest(std::move(req),
                               std::move(map_id_str),
