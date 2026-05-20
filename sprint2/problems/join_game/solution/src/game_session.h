@@ -3,6 +3,8 @@
 #include "players.h"
 #include "player_tokens.h"
 #include <memory>
+#include <unordered_map>
+#include <string>
 
 namespace game {
 
@@ -11,7 +13,6 @@ public:
     explicit GameSession(model::Game& game)
         : game_(game) {}
     
-    // Вход в игру
     struct JoinResult {
         model::Token token;
         model::PlayerId player_id;
@@ -19,7 +20,8 @@ public:
     
     JoinResult JoinGame(const std::string& user_name, const model::Map::Id& map_id) {
         // Проверка существования карты
-        if (!game_.FindMap(map_id)) {
+        const model::Map* map = game_.FindMap(map_id);
+        if (!map) {
             throw std::runtime_error("Map not found");
         }
         
@@ -32,7 +34,6 @@ public:
         return {std::move(token), player.GetId()};
     }
     
-    // Получение списка игроков на карте игрока
     std::unordered_map<std::string, std::string> GetPlayersOnMap(const model::Token& token) {
         model::PlayerId player_id = player_tokens_.FindPlayerByToken(token);
         if (player_id == model::PlayerId{0}) {
@@ -52,7 +53,6 @@ public:
         return result;
     }
     
-    // Валидация токена
     bool ValidateToken(const model::Token& token) const {
         return player_tokens_.IsValidToken(token);
     }

@@ -36,3 +36,6 @@ add_executable(game_server
 )
 
 target_link_libraries(game_server PRIVATE Threads::Threads ${Boost_LIBRARIES})
+
+# Устанавливаем директории для include
+target_include_directories(game_server PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)

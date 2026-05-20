@@ -54,7 +54,7 @@ private:
             return;
         }
 
-        // Обработка GET /players запроса
+        // Обработка GET/HEAD /players запроса
         if (target == endpoints::GAME_PLAYERS) {
             HandleGetPlayers(std::move(req), std::forward<Send>(send));
             return;
@@ -154,7 +154,6 @@ private:
                 return;
             }
             else {
-                // Статический файл не найден - text/plain
                 auto response = MakeErrorResponse(std::move(req),
                                                  http::status::not_found,
                                                  "fileNotFound",
@@ -225,19 +224,6 @@ private:
                                              "invalidMethod",
                                              "Only POST method is expected");
             response.set(http::field::allow, "POST");
-            response.set(http::field::cache_control, "no-cache");
-            send(std::move(response));
-            return;
-        }
-        
-        // Проверка Content-Type
-        auto content_type = req.find(http::field::content_type);
-        if (content_type == req.end() || 
-            std::string(content_type->value()) != "application/json") {
-            auto response = MakeErrorResponse(std::move(req),
-                                             http::status::bad_request,
-                                             "invalidArgument",
-                                             "Join game request parse error");
             response.set(http::field::cache_control, "no-cache");
             send(std::move(response));
             return;
@@ -335,7 +321,7 @@ private:
         }
     }
 
-    // Обработка GET /players запроса
+    // Обработка GET/HEAD /players запроса
     template <typename Body, typename Allocator, typename Send>
     void HandleGetPlayers(http::request<Body, http::basic_fields<Allocator>>&& req, Send&& send) {
         // Проверка метода (GET или HEAD)
@@ -377,6 +363,18 @@ private:
         try {
             auto players = game_session_.GetPlayersOnMap(*token);
             
+            // Для HEAD запроса не нужно тело
+            if (req.method() == http::verb::head) {
+                auto response = MakeResponse(std::move(req),
+                                             http::status::ok,
+                                             "application/json",
+                                             "");
+                response.set(http::field::cache_control, "no-cache");
+                send(std::move(response));
+                return;
+            }
+            
+            // Для GET запроса возвращаем тело
             boost::json::object response_body;
             for (const auto& [id, name] : players) {
                 response_body[id] = boost::json::object{{"name", name}};
@@ -410,28 +408,26 @@ private:
         std::string auth_value = std::string(it->value());
         const std::string prefix = "Bearer ";
         
-        if (auth_value.size() <= prefix.size() || 
-            auth_value.substr(0, prefix.size()) != prefix) {
+        // Проверка наличия префикса Bearer
+        if (auth_value.length() <= prefix.length() || 
+            auth_value.substr(0, prefix.length()) != prefix) {
             return std::nullopt;
         }
         
-        std::string token_str = auth_value.substr(prefix.size());
-        // Удаляем возможные пробелы в начале и конце
-        size_t start = token_str.find_first_not_of(" \t");
+        // Извлекаем токен после "Bearer "
+        std::string token_str = auth_value.substr(prefix.length());
+        
+        // Удаляем пробелы в начале и конце
+        size_t start = token_str.find_first_not_of(" \t\n\r");
         if (start == std::string::npos) {
             return std::nullopt;
         }
-        size_t end = token_str.find_last_not_of(" \t");
+        size_t end = token_str.find_last_not_of(" \t\n\r");
         token_str = token_str.substr(start, end - start + 1);
         
-        // Проверка, что токен состоит из 32 hex-цифр
-        if (token_str.length() != 32) {
+        // Токен должен быть непустым
+        if (token_str.empty()) {
             return std::nullopt;
-        }
-        for (char c : token_str) {
-            if (!std::isxdigit(c)) {
-                return std::nullopt;
-            }
         }
         
         return model::Token{std::move(token_str)};
@@ -447,6 +443,7 @@ private:
         http::response<http::string_body> response(status, req.version());
 
         response.set(http::field::content_type, content_type);
+        response.set(http::field::content_length, std::to_string(body.size()));
 
         response.body() = body;
 
@@ -468,10 +465,12 @@ private:
             {"message", message}
         });
 
-        return MakeResponse(std::move(req),
+        auto response = MakeResponse(std::move(req),
                             status,
                             "application/json",
                             body);
+        response.set(http::field::cache_control, "no-cache");
+        return response;
     }
 
     std::string SerializeMaps() const;

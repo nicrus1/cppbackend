@@ -2,14 +2,12 @@
 #include "player.h"
 #include <unordered_map>
 #include <memory>
+#include <vector>
 
 namespace model {
 
 class Players {
 public:
-    using Id = PlayerId;
-    
-    // Создание нового игрока
     Player& AddPlayer(std::string name, const Map::Id& map_id) {
         PlayerId new_id{next_id_++};
         auto player = std::make_unique<Player>(new_id, std::move(name), map_id);
@@ -19,13 +17,16 @@ public:
         return ref;
     }
     
-    // Поиск игрока по ID
     Player* FindPlayer(PlayerId id) {
         auto it = players_.find(id);
         return it != players_.end() ? it->second.get() : nullptr;
     }
     
-    // Получение всех игроков на карте
+    const Player* FindPlayer(PlayerId id) const {
+        auto it = players_.find(id);
+        return it != players_.end() ? it->second.get() : nullptr;
+    }
+    
     std::vector<Player*> GetPlayersOnMap(const Map::Id& map_id) {
         std::vector<Player*> result;
         auto it = map_players_.find(map_id);

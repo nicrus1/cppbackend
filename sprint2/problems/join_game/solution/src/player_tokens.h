@@ -1,4 +1,3 @@
-// player_tokens.h - исправленная версия
 #pragma once
 #include "player.h"
 #include <random>
@@ -6,6 +5,7 @@
 #include <string>
 #include <sstream>
 #include <iomanip>
+#include <cctype>
 
 namespace model {
 
@@ -19,9 +19,10 @@ class PlayerTokens {
 public:
     PlayerTokens() {
         std::random_device rd;
+        std::mt19937_64 gen(rd());
         std::uniform_int_distribution<uint64_t> dist;
-        generator1_ = std::mt19937_64(dist(rd));
-        generator2_ = std::mt19937_64(dist(rd));
+        generator1_ = std::mt19937_64(dist(gen));
+        generator2_ = std::mt19937_64(dist(gen));
     }
     
     Token GenerateToken(const Player& player) {
@@ -35,9 +36,8 @@ public:
         
         Token token(ss.str());
         
-        // Используем emplace вместо operator[]
-        token_to_player_.emplace(token, player.GetId());
-        player_to_token_.emplace(player.GetId(), token);
+        token_to_player_[token] = player.GetId();
+        player_to_token_[player.GetId()] = token;
         
         return token;
     }
