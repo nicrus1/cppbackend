@@ -79,8 +79,8 @@ private:
             target = target.substr(0, query_pos);
         }
 
-        // Отладка: выводим target
-        // std::cerr << "DEBUG: target = '" << target << "'" << std::endl;
+        // Отладка
+        std::cerr << "DEBUG: target = '" << target << "'" << std::endl;
 
         // Обработка JOIN
         if (target == endpoints::GAME_JOIN ||
@@ -271,6 +271,10 @@ private:
             boost::json::object response_body;
             response_body["authToken"] = *result.token;
             response_body["playerId"] = *result.player_id;
+            
+            std::cerr << "DEBUG: Created player " << *result.player_id 
+                      << " with token " << *result.token << std::endl;
+            
             auto response = MakeResponse(
                 std::move(req),
                 http::status::ok,
@@ -314,6 +318,7 @@ private:
 
         auto token = ExtractToken(req);
         if (!token) {
+            std::cerr << "DEBUG: Failed to extract token" << std::endl;
             auto response = MakeErrorResponse(
                 std::move(req),
                 http::status::unauthorized,
@@ -324,7 +329,11 @@ private:
             return;
         }
 
+        std::cerr << "DEBUG: Extracted token: " << **token << std::endl;
+        std::cerr << "DEBUG: Token valid? " << game_session_.ValidateToken(*token) << std::endl;
+
         if (!game_session_.ValidateToken(*token)) {
+            std::cerr << "DEBUG: Token validation failed" << std::endl;
             auto response = MakeErrorResponse(
                 std::move(req),
                 http::status::unauthorized,
@@ -337,6 +346,7 @@ private:
 
         try {
             auto players = game_session_.GetPlayersOnMap(*token);
+            std::cerr << "DEBUG: Found " << players.size() << " players on map" << std::endl;
 
             if (req.method() == http::verb::head) {
                 auto response = MakeResponse(
@@ -363,6 +373,7 @@ private:
             send(std::move(response));
         }
         catch (const std::exception& e) {
+            std::cerr << "DEBUG: Exception in GetPlayersOnMap: " << e.what() << std::endl;
             auto response = MakeErrorResponse(
                 std::move(req),
                 http::status::unauthorized,
@@ -379,10 +390,12 @@ private:
 
         auto auth_value_opt = GetHeaderValue(req, "authorization");
         if (!auth_value_opt) {
+            std::cerr << "DEBUG: No Authorization header found" << std::endl;
             return std::nullopt;
         }
 
         std::string auth_value = *auth_value_opt;
+        std::cerr << "DEBUG: Raw Authorization: '" << auth_value << "'" << std::endl;
         
         // Trim whitespace from the whole auth_value
         size_t start = auth_value.find_first_not_of(" \t\n\r");
@@ -400,6 +413,7 @@ private:
         const std::string prefix = "bearer ";
         if (auth_lower.size() < prefix.size() ||
             auth_lower.substr(0, prefix.size()) != prefix) {
+            std::cerr << "DEBUG: No Bearer prefix found" << std::endl;
             return std::nullopt;
         }
         
@@ -417,6 +431,8 @@ private:
         if (token_str.empty()) {
             return std::nullopt;
         }
+        
+        std::cerr << "DEBUG: Extracted token string: '" << token_str << "'" << std::endl;
         
         return model::Token{std::move(token_str)};
     }
