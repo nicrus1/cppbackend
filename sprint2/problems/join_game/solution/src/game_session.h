@@ -27,7 +27,10 @@ public:
         model::Player& player = players_.AddPlayer(user_name, map_id);
         model::Token token = player_tokens_.GenerateToken(player);
         
-        return {std::move(token), player.GetId()};
+        JoinResult result;
+        result.token = std::move(token);
+        result.player_id = player.GetId();
+        return result;
     }
     
     std::unordered_map<std::string, std::string> GetPlayersOnMap(const model::Token& token) {

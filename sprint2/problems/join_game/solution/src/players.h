@@ -39,6 +39,10 @@ public:
         }
         return result;
     }
+    
+    bool HasPlayer(PlayerId id) const {
+        return players_.find(id) != players_.end();
+    }
 
 private:
     uint64_t next_id_{0};

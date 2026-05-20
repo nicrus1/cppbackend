@@ -305,31 +305,31 @@ private:
         model::Map::Id map_id{std::string(obj.at("mapId").as_string())};
 
         try {
-            auto result = game_session_.JoinGame(user_name, map_id);
-            boost::json::object response_body;
-            response_body["authToken"] = *result.token;
-            response_body["playerId"] = *result.player_id;
-            auto response = MakeResponse(
+        auto result = game_session_.JoinGame(user_name, map_id);
+        boost::json::object response_body;
+        response_body["authToken"] = *result.token;
+        response_body["playerId"] = *result.player_id;  // <-- ЭТО ЗДЕСЬ
+        auto response = MakeResponse(
+            std::move(req),
+            http::status::ok,
+            "application/json",
+            boost::json::serialize(response_body));
+        response.set(http::field::cache_control, "no-cache");
+        send(std::move(response));
+    }
+    catch (const std::runtime_error& e) {
+        std::string error_msg = e.what();
+        if (error_msg == "Map not found") {
+            auto response = MakeErrorResponse(
                 std::move(req),
-                http::status::ok,
-                "application/json",
-                boost::json::serialize(response_body));
+                http::status::not_found,
+                "mapNotFound",
+                "Map not found");
             response.set(http::field::cache_control, "no-cache");
             send(std::move(response));
         }
-        catch (const std::runtime_error& e) {
-            std::string error_msg = e.what();
-            if (error_msg == "Map not found") {
-                auto response = MakeErrorResponse(
-                    std::move(req),
-                    http::status::not_found,
-                    "mapNotFound",
-                    "Map not found");
-                response.set(http::field::cache_control, "no-cache");
-                send(std::move(response));
-            }
-            else {
-                throw;
+        else {
+            throw;
             }
         }
     }

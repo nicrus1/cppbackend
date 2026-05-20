@@ -1,53 +1,35 @@
 #pragma once
-#include "player.h"
-#include <unordered_map>
-#include <memory>
-#include <vector>
+#include "tagged.h"
+#include "model.h"
+#include <string>
+#include <cstdint>
 
 namespace model {
 
-class Players {
+struct PlayerTag {};
+using PlayerId = util::Tagged<uint64_t, PlayerTag>;
+
+class Player {
 public:
-    Player& AddPlayer(std::string name, const Map::Id& map_id) {
-        PlayerId new_id{next_id_++};
-        auto player = std::make_unique<Player>(new_id, std::move(name), map_id);
-        Player& ref = *player;
-        players_[new_id] = std::move(player);
-        map_players_[map_id].push_back(new_id);
-        return ref;
-    }
+    Player() = default;
     
-    Player* FindPlayer(PlayerId id) {
-        auto it = players_.find(id);
-        return it != players_.end() ? it->second.get() : nullptr;
-    }
+    Player(PlayerId id, std::string name, const Map::Id& map_id)
+        : id_(std::move(id))
+        , name_(std::move(name))
+        , map_id_(map_id) {}
     
-    const Player* FindPlayer(PlayerId id) const {
-        auto it = players_.find(id);
-        return it != players_.end() ? it->second.get() : nullptr;
-    }
+    PlayerId GetId() const { return id_; }
+    const std::string& GetName() const { return name_; }
+    const Map::Id& GetMapId() const { return map_id_; }
     
-    std::vector<Player*> GetPlayersOnMap(const Map::Id& map_id) {
-        std::vector<Player*> result;
-        auto it = map_players_.find(map_id);
-        if (it != map_players_.end()) {
-            for (auto player_id : it->second) {
-                if (auto* player = FindPlayer(player_id)) {
-                    result.push_back(player);
-                }
-            }
-        }
-        return result;
-    }
-    
-    bool HasPlayer(PlayerId id) const {
-        return players_.find(id) != players_.end();
-    }
+    void SetDogId(uint64_t dog_id) { dog_id_ = dog_id; }
+    uint64_t GetDogId() const { return dog_id_; }
 
 private:
-    uint64_t next_id_{0};
-    std::unordered_map<PlayerId, std::unique_ptr<Player>, util::TaggedHasher<PlayerId>> players_;
-    std::unordered_map<Map::Id, std::vector<PlayerId>, util::TaggedHasher<Map::Id>> map_players_;
+    PlayerId id_{0};
+    std::string name_;
+    Map::Id map_id_{""};
+    uint64_t dog_id_{0};
 };
 
 }  // namespace model
