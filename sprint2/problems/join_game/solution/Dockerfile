@@ -13,15 +13,10 @@ COPY conanfile.txt /app/
 RUN mkdir /app/build && cd /app/build && \
     conan install .. --build=missing
 
-# Копируем исходники (все .cpp и .h файлы)
-COPY *.cpp /app/src/
-COPY *.h /app/src/
+# Копируем исходники из директории src
+COPY src/*.cpp /app/src/
+COPY src/*.h /app/src/
 COPY CMakeLists.txt /app/
-COPY conanfile.txt /app/
-
-# Также копируем статические файлы, если они есть
-COPY *.html /app/static/
-COPY *.svg /app/static/images/ 2>/dev/null || true
 
 # Создаём директорию для сборки и компилируем
 RUN cd /app/build && \
@@ -47,11 +42,9 @@ USER www
 COPY --from=build /app/build/bin/game_server /app/game_server
 
 # Копируем конфигурационные файлы и статику
-COPY --chown=www:www config.json /app/data/config.json
-COPY --chown=www:www *.html /app/static/
-COPY --chown=www:www *.svg /app/static/images/ 2>/dev/null || true
+COPY data/config.json /app/data/config.json
+COPY static/ /app/static/
 
-# Создаём рабочую директорию
 WORKDIR /app
 
 # Запускаем игровой сервер
