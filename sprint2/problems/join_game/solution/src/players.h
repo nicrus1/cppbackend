@@ -64,7 +64,8 @@ public:
         auto it = map_players_.find(map_id);
         if (it != map_players_.end()) {
             for (auto player_id : it->second) {
-                if (auto* player = FindPlayer(player_id)) {
+                Player* player = FindPlayer(player_id);
+                if (player) {
                     result.push_back(player);
                 }
             }
@@ -72,12 +73,13 @@ public:
         return result;
     }
     
-    const std::vector<Player*> GetPlayersOnMap(const Map::Id& map_id) const {
-        std::vector<Player*> result;
+    std::vector<const Player*> GetPlayersOnMap(const Map::Id& map_id) const {
+        std::vector<const Player*> result;
         auto it = map_players_.find(map_id);
         if (it != map_players_.end()) {
             for (auto player_id : it->second) {
-                if (auto* player = FindPlayer(player_id)) {
+                const Player* player = FindPlayer(player_id);
+                if (player) {
                     result.push_back(player);
                 }
             }

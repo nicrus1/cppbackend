@@ -11,11 +11,8 @@ namespace game {
 class GameSession {
 public:
     explicit GameSession(model::Game& game)
-        : game_(game) {}
-    
-    explicit GameSession(model::Game& game, model::Players& players)
-        : game_(game)
-        , players_(players) {}
+        : game_(game) {
+    }
     
     struct JoinResult {
         model::Token token;
@@ -40,7 +37,7 @@ public:
     std::unordered_map<std::string, std::string> GetPlayersOnMap(const model::Token& token) {
         model::Player* player = players_.FindPlayerByToken(token);
         if (!player) {
-            throw std::runtime_error("Invalid token");
+            throw std::runtime_error("Invalid token or player not found");
         }
         
         auto players_on_map = players_.GetPlayersOnMap(player->GetMapId());
