@@ -2,6 +2,7 @@
 #include "http_server.h"
 #include "model.h"
 #include "game_session.h"
+#include "player.h"  // ← ДОБАВЛЕНО: необходимо для типа Player*
 #include <boost/json.hpp>
 #include <boost/json/serialize.hpp>
 #include <optional>
@@ -9,6 +10,7 @@
 #include <algorithm>
 #include <iostream>
 #include <string>
+#include <exception>  // ← для std::exception
 
 namespace http_handler {
 namespace beast = boost::beast;
@@ -265,87 +267,97 @@ private:
     template <typename Body, typename Allocator, typename Send>
     void HandleGetPlayers(http::request<Body, http::basic_fields<Allocator>>&& req,
                           Send&& send) {
+        try {
+            if (req.method() != http::verb::get &&
+                req.method() != http::verb::head) {
 
-        if (req.method() != http::verb::get &&
-            req.method() != http::verb::head) {
+                auto response = MakeErrorResponse(
+                    std::move(req),
+                    http::status::method_not_allowed,
+                    "invalidMethod",
+                    "Invalid method");
 
-            auto response = MakeErrorResponse(
-                std::move(req),
-                http::status::method_not_allowed,
-                "invalidMethod",
-                "Invalid method");
+                response.set(http::field::allow, "GET, HEAD");
+                response.set(http::field::cache_control, "no-cache");
 
-            response.set(http::field::allow, "GET, HEAD");
-            response.set(http::field::cache_control, "no-cache");
+                send(std::move(response));
+                return;
+            }
 
-            send(std::move(response));
-            return;
-        }
+            auto token = ExtractToken(req);
 
-        auto token = ExtractToken(req);
+            if (!token) {
+                auto response = MakeErrorResponse(
+                    std::move(req),
+                    http::status::unauthorized,
+                    "invalidToken",
+                    "Authorization header is missing or invalid");
 
-        if (!token) {
-            auto response = MakeErrorResponse(
-                std::move(req),
-                http::status::unauthorized,
-                "invalidToken",
-                "Authorization header is missing or invalid");
+                response.set(http::field::cache_control, "no-cache");
 
-            response.set(http::field::cache_control, "no-cache");
+                send(std::move(response));
+                return;
+            }
 
-            send(std::move(response));
-            return;
-        }
+            if (!game_session_.ValidateToken(*token)) {
+                auto response = MakeErrorResponse(
+                    std::move(req),
+                    http::status::unauthorized,
+                    "unknownToken",
+                    "Player token has not been found");
 
-        if (!game_session_.ValidateToken(*token)) {
-            auto response = MakeErrorResponse(
-                std::move(req),
-                http::status::unauthorized,
-                "unknownToken",
-                "Player token has not been found");
+                response.set(http::field::cache_control, "no-cache");
 
-            response.set(http::field::cache_control, "no-cache");
+                send(std::move(response));
+                return;
+            }
 
-            send(std::move(response));
-            return;
-        }
+            auto players = game_session_.GetPlayersOnMap(*token);
 
-        auto players = game_session_.GetPlayersOnMap(*token);
+            if (req.method() == http::verb::head) {
+                auto response = MakeResponse(
+                    std::move(req),
+                    http::status::ok,
+                    "application/json",
+                    "");
 
-        if (req.method() == http::verb::head) {
+                response.set(http::field::cache_control, "no-cache");
+
+                send(std::move(response));
+                return;
+            }
+
+            boost::json::object response_body;
+
+            for (const Player* player : players) {
+                if (!player) continue;
+                std::string id_str = std::to_string(*player->GetId());
+                response_body[id_str] = boost::json::object{
+                    { "name", player->GetName() }
+                };
+            }
+
             auto response = MakeResponse(
                 std::move(req),
                 http::status::ok,
                 "application/json",
-                "");
+                boost::json::serialize(response_body));
 
             response.set(http::field::cache_control, "no-cache");
 
             send(std::move(response));
-            return;
         }
-
-        boost::json::object response_body;
-
-        // players — это std::vector<const Player*>, итерируемся корректно
-        for (const Player* player : players) {
-            if (!player) continue;
-            // PlayerId — это Tagged<uint64_t, PlayerTag>, разыменовываем для получения uint64_t
-            std::string id_str = std::to_string(*player->GetId());
-            response_body[id_str] = boost::json::object{
-                { "name", player->GetName() }
-            };
+        catch (const std::exception& e) {
+            // Логирование для отладки: почему сервер падает
+            std::cerr << "Exception in HandleGetPlayers: " << e.what() << std::endl;
+            auto response = MakeErrorResponse(
+                std::move(req),
+                http::status::internal_server_error,
+                "internalError",
+                "Internal server error");
+            response.set(http::field::cache_control, "no-cache");
+            send(std::move(response));
         }
-
-        auto response = MakeResponse(
-            std::move(req),
-            http::status::ok,
-            "application/json",
-            boost::json::serialize(response_body));
-
-        response.set(http::field::cache_control, "no-cache");
-
-        send(std::move(response));
     }
 
     template <typename Body, typename Allocator>
