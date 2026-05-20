@@ -54,21 +54,18 @@ private:
             target = target.substr(0, query_pos);
         }
 
-        // Обработка JOIN
         if (target == endpoints::GAME_JOIN ||
             target == endpoints::GAME_JOIN_WITHOUT_SLASH) {
             HandleJoin(std::move(req), std::forward<Send>(send));
             return;
         }
 
-        // Обработка GET PLAYERS
         if (target == endpoints::GAME_PLAYERS ||
             target == endpoints::GAME_PLAYERS_WITHOUT_SLASH) {
             HandleGetPlayers(std::move(req), std::forward<Send>(send));
             return;
         }
 
-        // Обработка GET MAPS
         if (method != "GET") {
             auto response = MakeErrorResponse(
                 std::move(req),
@@ -320,7 +317,7 @@ private:
                 std::move(req),
                 http::status::ok,
                 "application/json",
-                "");  // Пустое тело для HEAD
+                "");
 
             response.set(http::field::cache_control, "no-cache");
 
@@ -331,9 +328,7 @@ private:
         boost::json::object response_body;
 
         for (const auto& [id, name] : players) {
-            // Преобразуем PlayerId к строке для использования как ключа JSON
-            std::string id_str = std::to_string(*id);
-            response_body[id_str] = boost::json::object{
+            response_body[id] = boost::json::object{
                 { "name", name }
             };
         }
