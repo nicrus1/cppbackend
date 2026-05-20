@@ -19,20 +19,14 @@ class PlayerTokens {
 public:
     PlayerTokens() {
         std::random_device rd;
-        std::mt19937_64 gen(rd());
-        std::uniform_int_distribution<uint64_t> dist;
-        generator1_ = std::mt19937_64(dist(gen));
-        generator2_ = std::mt19937_64(dist(gen));
+        generator_ = std::mt19937_64(rd());
     }
     
     Token GenerateToken(const Player& player) {
-        uint64_t part1 = generator1_();
-        uint64_t part2 = generator2_();
+        uint64_t value = generator_();
         
         std::stringstream ss;
-        ss << std::hex << std::setfill('0');
-        ss << std::setw(16) << part1;
-        ss << std::setw(16) << part2;
+        ss << std::hex << std::setfill('0') << std::setw(16) << value;
         
         Token token(ss.str());
         
@@ -55,8 +49,7 @@ public:
     }
 
 private:
-    std::mt19937_64 generator1_;
-    std::mt19937_64 generator2_;
+    std::mt19937_64 generator_;
     std::unordered_map<Token, PlayerId, util::TaggedHasher<Token>> token_to_player_;
     std::unordered_map<PlayerId, Token, util::TaggedHasher<PlayerId>> player_to_token_;
 };
