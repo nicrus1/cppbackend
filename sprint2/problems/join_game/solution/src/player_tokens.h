@@ -5,7 +5,6 @@
 #include <string>
 #include <sstream>
 #include <iomanip>
-#include <cctype>
 
 namespace model {
 
@@ -17,16 +16,27 @@ using Token = util::Tagged<std::string, detail::TokenTag>;
 
 class PlayerTokens {
 public:
-    PlayerTokens() {
-        std::random_device rd;
-        generator_ = std::mt19937_64(rd());
+    PlayerTokens() 
+        : generator1_{[] {
+            std::random_device rd;
+            std::uniform_int_distribution<std::mt19937_64::result_type> dist;
+            return dist(rd);
+        }()}
+        , generator2_{[] {
+            std::random_device rd;
+            std::uniform_int_distribution<std::mt19937_64::result_type> dist;
+            return dist(rd);
+        }()} {
     }
     
     Token GenerateToken(const Player& player) {
-        uint64_t value = generator_();
+        uint64_t part1 = generator1_();
+        uint64_t part2 = generator2_();
         
         std::stringstream ss;
-        ss << std::hex << std::setfill('0') << std::setw(16) << value;
+        ss << std::hex << std::setfill('0');
+        ss << std::setw(16) << part1;
+        ss << std::setw(16) << part2;
         
         Token token(ss.str());
         
@@ -49,7 +59,8 @@ public:
     }
 
 private:
-    std::mt19937_64 generator_;
+    std::mt19937_64 generator1_;
+    std::mt19937_64 generator2_;
     std::unordered_map<Token, PlayerId, util::TaggedHasher<Token>> token_to_player_;
     std::unordered_map<PlayerId, Token, util::TaggedHasher<PlayerId>> player_to_token_;
 };

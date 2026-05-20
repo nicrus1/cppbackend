@@ -19,16 +19,12 @@ public:
     };
     
     JoinResult JoinGame(const std::string& user_name, const model::Map::Id& map_id) {
-        // Проверка существования карты
         const model::Map* map = game_.FindMap(map_id);
         if (!map) {
             throw std::runtime_error("Map not found");
         }
         
-        // Создание игрока
         model::Player& player = players_.AddPlayer(user_name, map_id);
-        
-        // Генерация токена
         model::Token token = player_tokens_.GenerateToken(player);
         
         return {std::move(token), player.GetId()};

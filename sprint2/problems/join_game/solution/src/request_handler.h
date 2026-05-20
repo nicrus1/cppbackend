@@ -57,7 +57,6 @@ private:
                            [](unsigned char c) { return std::tolower(c); });
 
             std::string target(header_name);
-
             std::transform(target.begin(), target.end(), target.begin(),
                            [](unsigned char c) { return std::tolower(c); });
 
@@ -65,7 +64,6 @@ private:
                 return std::string(it->value());
             }
         }
-
         return std::nullopt;
     }
 
@@ -77,21 +75,18 @@ private:
         std::string method = std::string(req.method_string());
 
         auto query_pos = target.find('?');
-
         if (query_pos != std::string::npos) {
             target = target.substr(0, query_pos);
         }
 
         if (target == endpoints::GAME_JOIN ||
             target == endpoints::GAME_JOIN_WITHOUT_SLASH) {
-
             HandleJoin(std::move(req), std::forward<Send>(send));
             return;
         }
 
         if (target == endpoints::GAME_PLAYERS ||
             target == endpoints::GAME_PLAYERS_WITHOUT_SLASH) {
-
             HandleGetPlayers(std::move(req), std::forward<Send>(send));
             return;
         }
@@ -102,73 +97,51 @@ private:
                 http::status::method_not_allowed,
                 "badRequest",
                 "Method not allowed");
-
             send(std::move(response));
             return;
         }
 
         if (target == endpoints::MAPS ||
             target == endpoints::MAPS_WITHOUT_SLASH) {
-
             std::string body = SerializeMaps();
-
             auto response = MakeResponse(
                 std::move(req),
                 http::status::ok,
                 "application/json",
                 body);
-
             send(std::move(response));
             return;
         }
 
         if (target.find(endpoints::MAPS_PREFIX) == 0) {
-            std::string map_id_str =
-                target.substr(endpoints::MAPS_PREFIX.length());
-
-            ProcessMapRequest(
-                std::move(req),
-                std::move(map_id_str),
-                std::forward<Send>(send));
-
+            std::string map_id_str = target.substr(endpoints::MAPS_PREFIX.length());
+            ProcessMapRequest(std::move(req), std::move(map_id_str), std::forward<Send>(send));
             return;
         }
         else if (target.find(endpoints::MAPS_PREFIX_WITHOUT_SLASH) == 0) {
-            std::string map_id_str =
-                target.substr(endpoints::MAPS_PREFIX_WITHOUT_SLASH.length());
-
-            ProcessMapRequest(
-                std::move(req),
-                std::move(map_id_str),
-                std::forward<Send>(send));
-
+            std::string map_id_str = target.substr(endpoints::MAPS_PREFIX_WITHOUT_SLASH.length());
+            ProcessMapRequest(std::move(req), std::move(map_id_str), std::forward<Send>(send));
             return;
         }
 
-        if (target.find("/api/") == 0 ||
-            target.find("api/") == 0) {
-
+        if (target.find("/api/") == 0 || target.find("api/") == 0) {
             if (target.find("/api/v1/") != 0 &&
                 target.find("api/v1/") != 0 &&
                 target != "/api/v1/maps" &&
                 target != "api/v1/maps") {
-
                 auto response = MakeErrorResponse(
                     std::move(req),
                     http::status::bad_request,
                     "badRequest",
                     "Bad request");
-
                 send(std::move(response));
                 return;
             }
-
             auto response = MakeErrorResponse(
                 std::move(req),
                 http::status::not_found,
                 "badRequest",
                 "Not found");
-
             send(std::move(response));
             return;
         }
@@ -179,21 +152,18 @@ private:
                 http::status::ok,
                 "text/html",
                 "");
-
             send(std::move(response));
             return;
         }
 
         if (target.find("/images/") == 0) {
             std::string filename = target.substr(8);
-
             if (filename == "cube.svg") {
                 auto response = MakeResponse(
                     std::move(req),
                     http::status::ok,
                     "image/svg+xml",
                     "");
-
                 send(std::move(response));
                 return;
             }
@@ -203,9 +173,7 @@ private:
                     http::status::not_found,
                     "fileNotFound",
                     "File not found");
-
                 response.set(http::field::content_type, "text/plain");
-
                 send(std::move(response));
                 return;
             }
@@ -216,9 +184,7 @@ private:
             http::status::not_found,
             "badRequest",
             "Not found");
-
         response.set(http::field::content_type, "text/plain");
-
         send(std::move(response));
     }
 
@@ -232,7 +198,6 @@ private:
         }
 
         auto query_pos = map_id_str.find('?');
-
         if (query_pos != std::string::npos) {
             map_id_str = map_id_str.substr(0, query_pos);
         }
@@ -246,19 +211,16 @@ private:
                 http::status::not_found,
                 "mapNotFound",
                 "Map not found");
-
             send(std::move(response));
             return;
         }
 
         std::string body = SerializeMap(*map);
-
         auto response = MakeResponse(
             std::move(req),
             http::status::ok,
             "application/json",
             body);
-
         send(std::move(response));
     }
 
@@ -272,16 +234,13 @@ private:
                 http::status::method_not_allowed,
                 "invalidMethod",
                 "Only POST method is expected");
-
             response.set(http::field::allow, "POST");
             response.set(http::field::cache_control, "no-cache");
-
             send(std::move(response));
             return;
         }
 
         boost::json::value json;
-
         try {
             json = boost::json::parse(req.body());
         }
@@ -291,9 +250,7 @@ private:
                 http::status::bad_request,
                 "invalidArgument",
                 "Join game request parse error");
-
             response.set(http::field::cache_control, "no-cache");
-
             send(std::move(response));
             return;
         }
@@ -304,94 +261,71 @@ private:
                 http::status::bad_request,
                 "invalidArgument",
                 "Join game request parse error");
-
             response.set(http::field::cache_control, "no-cache");
-
             send(std::move(response));
             return;
         }
 
         auto& obj = json.as_object();
 
-        if (!obj.contains("userName") ||
-            !obj.at("userName").is_string()) {
-
+        if (!obj.contains("userName") || !obj.at("userName").is_string()) {
             auto response = MakeErrorResponse(
                 std::move(req),
                 http::status::bad_request,
                 "invalidArgument",
                 "Invalid name");
-
             response.set(http::field::cache_control, "no-cache");
-
             send(std::move(response));
             return;
         }
 
-        std::string user_name =
-            std::string(obj.at("userName").as_string());
-
+        std::string user_name = std::string(obj.at("userName").as_string());
         if (user_name.empty()) {
             auto response = MakeErrorResponse(
                 std::move(req),
                 http::status::bad_request,
                 "invalidArgument",
                 "Invalid name");
-
             response.set(http::field::cache_control, "no-cache");
-
             send(std::move(response));
             return;
         }
 
-        if (!obj.contains("mapId") ||
-            !obj.at("mapId").is_string()) {
-
+        if (!obj.contains("mapId") || !obj.at("mapId").is_string()) {
             auto response = MakeErrorResponse(
                 std::move(req),
                 http::status::bad_request,
                 "invalidArgument",
                 "Invalid map ID");
-
             response.set(http::field::cache_control, "no-cache");
-
             send(std::move(response));
             return;
         }
 
-        model::Map::Id map_id{
-            std::string(obj.at("mapId").as_string())
-        };
+        model::Map::Id map_id{std::string(obj.at("mapId").as_string())};
 
         try {
             auto result = game_session_.JoinGame(user_name, map_id);
-
             boost::json::object response_body;
             response_body["authToken"] = *result.token;
             response_body["playerId"] = *result.player_id;
-
             auto response = MakeResponse(
                 std::move(req),
                 http::status::ok,
                 "application/json",
                 boost::json::serialize(response_body));
-
             response.set(http::field::cache_control, "no-cache");
-
             send(std::move(response));
         }
         catch (const std::runtime_error& e) {
             std::string error_msg = e.what();
-
             if (error_msg == "Map not found") {
                 auto response = MakeErrorResponse(
                     std::move(req),
                     http::status::not_found,
                     "mapNotFound",
                     "Map not found");
-
                 response.set(http::field::cache_control, "no-cache");
-
                 send(std::move(response));
             }
             else {
@@ -404,33 +338,26 @@ private:
     void HandleGetPlayers(http::request<Body, http::basic_fields<Allocator>>&& req,
                           Send&& send) {
 
-        if (req.method() != http::verb::get &&
-            req.method() != http::verb::head) {
-
+        if (req.method() != http::verb::get && req.method() != http::verb::head) {
             auto response = MakeErrorResponse(
                 std::move(req),
                 http::status::method_not_allowed,
                 "invalidMethod",
                 "Invalid method");
-
             response.set(http::field::allow, "GET, HEAD");
             response.set(http::field::cache_control, "no-cache");
-
             send(std::move(response));
             return;
         }
 
         auto token = ExtractToken(req);
-
         if (!token) {
             auto response = MakeErrorResponse(
                 std::move(req),
                 http::status::unauthorized,
                 "invalidToken",
                 "Authorization header is missing or invalid");
-
             response.set(http::field::cache_control, "no-cache");
-
             send(std::move(response));
             return;
         }
@@ -441,9 +368,7 @@ private:
                 http::status::unauthorized,
                 "unknownToken",
                 "Player token has not been found");
-
             response.set(http::field::cache_control, "no-cache");
-
             send(std::move(response));
             return;
         }
@@ -457,18 +382,14 @@ private:
                     http::status::ok,
                     "application/json",
                     "");
-
                 response.set(http::field::cache_control, "no-cache");
-
                 send(std::move(response));
                 return;
             }
 
             boost::json::object response_body;
-
             for (const auto& [id, name] : players) {
-                response_body[id] =
-                    boost::json::object{{"name", name}};
+                response_body[id] = boost::json::object{{"name", name}};
             }
 
             auto response = MakeResponse(
@@ -476,20 +397,16 @@ private:
                 http::status::ok,
                 "application/json",
                 boost::json::serialize(response_body));
-
             response.set(http::field::cache_control, "no-cache");
-
             send(std::move(response));
         }
-        catch (...) {
+        catch (const std::exception& e) {
             auto response = MakeErrorResponse(
                 std::move(req),
                 http::status::unauthorized,
                 "unknownToken",
-                "Player not found");
-
+                e.what());
             response.set(http::field::cache_control, "no-cache");
-
             send(std::move(response));
         }
     }
@@ -499,7 +416,6 @@ private:
         const http::request<Body, http::basic_fields<Allocator>>& req) {
 
         auto auth_value_opt = GetHeaderValue(req, "authorization");
-
         if (!auth_value_opt) {
             return std::nullopt;
         }
@@ -507,25 +423,24 @@ private:
         std::string auth_value = *auth_value_opt;
         
         // Trim whitespace from the whole auth_value
-        auto start = auth_value.find_first_not_of(" \t\n\r");
+        size_t start = auth_value.find_first_not_of(" \t\n\r");
         if (start == std::string::npos) {
             return std::nullopt;
         }
-        auto end = auth_value.find_last_not_of(" \t\n\r");
+        size_t end = auth_value.find_last_not_of(" \t\n\r");
         auth_value = auth_value.substr(start, end - start + 1);
         
-        // Convert to lowercase for case-insensitive prefix check
+        // Check for Bearer prefix (case-insensitive)
         std::string auth_lower = auth_value;
         std::transform(auth_lower.begin(), auth_lower.end(), auth_lower.begin(),
                        [](unsigned char c) { return std::tolower(c); });
-
-        const std::string prefix = "bearer ";
         
+        const std::string prefix = "bearer ";
         if (auth_lower.size() < prefix.size() ||
             auth_lower.substr(0, prefix.size()) != prefix) {
             return std::nullopt;
         }
-
+        
         // Extract token after prefix
         std::string token_str = auth_value.substr(prefix.size());
         
@@ -536,11 +451,11 @@ private:
         }
         end = token_str.find_last_not_of(" \t\n\r");
         token_str = token_str.substr(start, end - start + 1);
-
+        
         if (token_str.empty()) {
             return std::nullopt;
         }
-
+        
         return model::Token{std::move(token_str)};
     }
 
@@ -552,14 +467,10 @@ private:
         std::string_view body) {
 
         http::response<http::string_body> response(status, req.version());
-
         response.set(http::field::content_type, content_type);
-
         response.body() = body;
-
         response.prepare_payload();
         response.keep_alive(req.keep_alive());
-
         return response;
     }
 
@@ -576,14 +487,8 @@ private:
                 {"message", message}
             });
 
-        auto response = MakeResponse(
-            std::move(req),
-            status,
-            "application/json",
-            body);
-
+        auto response = MakeResponse(std::move(req), status, "application/json", body);
         response.set(http::field::cache_control, "no-cache");
-
         return response;
     }
 
