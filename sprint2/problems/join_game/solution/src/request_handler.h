@@ -2,40 +2,29 @@
 
 #include "http_server.h"
 #include "model.h"
-#include "game_session.h"
+#include "json_loader.h"
 
+#include <boost/beast/http.hpp>
 #include <boost/json.hpp>
-#include <boost/json/serialize.hpp>
 
-#include <optional>
-#include <algorithm>
-#include <cctype>
+#include <string>
+#include <string_view>
+#include <unordered_map>
 
 namespace http_handler {
 
 namespace beast = boost::beast;
 namespace http = beast::http;
+namespace json = boost::json;
 
-namespace endpoints {
-    constexpr std::string_view MAPS = "/api/v1/maps";
-    constexpr std::string_view MAPS_WITHOUT_SLASH = "api/v1/maps";
-
-    constexpr std::string_view MAPS_PREFIX = "/api/v1/maps/";
-    constexpr std::string_view MAPS_PREFIX_WITHOUT_SLASH = "api/v1/maps/";
-
-    constexpr std::string_view GAME_JOIN = "/api/v1/game/join";
-    constexpr std::string_view GAME_JOIN_WITHOUT_SLASH = "api/v1/game/join";
-
-    constexpr std::string_view GAME_PLAYERS = "/api/v1/game/players";
-    constexpr std::string_view GAME_PLAYERS_WITHOUT_SLASH = "api/v1/game/players";
-}
+using StringResponse = http::response<http::string_body>;
 
 class RequestHandler {
 public:
     explicit RequestHandler(model::Game& game,
-                            game::GameSession& game_session)
+                            game::GameSession& session)
         : game_{game}
-        , game_session_{game_session} {
+        , session_{session} {
     }
 
     RequestHandler(const RequestHandler&) = delete;
@@ -48,155 +37,121 @@ public:
     }
 
 private:
-    template <typename Body, typename Allocator>
-    std::optional<std::string> GetHeaderValue(
-        const http::request<Body, http::basic_fields<Allocator>>& req,
-        std::string_view header_name) {
-
-        for (auto it = req.begin(); it != req.end(); ++it) {
-            std::string name = std::string(it->name_string());
-
-            std::transform(name.begin(),
-                           name.end(),
-                           name.begin(),
-                           [](unsigned char c) {
-                               return std::tolower(c);
-                           });
-
-            std::string target(header_name);
-
-            std::transform(target.begin(),
-                           target.end(),
-                           target.begin(),
-                           [](unsigned char c) {
-                               return std::tolower(c);
-                           });
-
-            if (name == target) {
-                return std::string(it->value());
-            }
-        }
-
-        return std::nullopt;
-    }
+    model::Game& game_;
+    game::GameSession& session_;
 
     template <typename Body, typename Allocator, typename Send>
-    void HandleRequest(http::request<Body, http::basic_fields<Allocator>>&& req,
-                       Send&& send) {
+    void HandleRequest(
+        http::request<Body, http::basic_fields<Allocator>>&& req,
+        Send&& send) {
 
-        std::string target = std::string(req.target());
+        const auto target = req.target();
 
-        auto query_pos = target.find('?');
-
-        if (query_pos != std::string::npos) {
-            target = target.substr(0, query_pos);
+        if (target == "/api/v1/maps") {
+            HandleMaps(std::move(req), std::forward<Send>(send));
+            return;
         }
 
-        if (target == endpoints::GAME_JOIN ||
-            target == endpoints::GAME_JOIN_WITHOUT_SLASH) {
+        if (target.starts_with("/api/v1/maps/")) {
+            HandleMap(std::move(req), std::forward<Send>(send));
+            return;
+        }
 
+        if (target == "/api/v1/game/join") {
             HandleJoin(std::move(req), std::forward<Send>(send));
             return;
         }
 
-        if (target == endpoints::GAME_PLAYERS ||
-            target == endpoints::GAME_PLAYERS_WITHOUT_SLASH) {
-
-            HandleGetPlayers(std::move(req), std::forward<Send>(send));
+        if (target == "/api/v1/game/players") {
+            HandlePlayers(std::move(req), std::forward<Send>(send));
             return;
         }
 
-        if (req.method() != http::verb::get) {
-            auto response = MakeErrorResponse(
+        send(MakeErrorResponse(
+            std::move(req),
+            http::status::bad_request,
+            "badRequest",
+            "Bad request"));
+    }
+
+    template <typename Body, typename Allocator, typename Send>
+    void HandleMaps(
+        http::request<Body, http::basic_fields<Allocator>>&& req,
+        Send&& send) {
+
+        if (req.method() != http::verb::get &&
+            req.method() != http::verb::head) {
+            send(MakeErrorResponse(
                 std::move(req),
                 http::status::method_not_allowed,
-                "badRequest",
-                "Method not allowed");
-
-            send(std::move(response));
+                "invalidMethod",
+                "Only GET method is expected"));
             return;
         }
 
-        if (target == endpoints::MAPS ||
-            target == endpoints::MAPS_WITHOUT_SLASH) {
+        json::array maps_json;
 
-            auto response = MakeResponse(
-                std::move(req),
-                http::status::ok,
-                "application/json",
-                SerializeMaps());
-
-            send(std::move(response));
-            return;
+        for (const auto& map : game_.GetMaps()) {
+            json::object obj;
+            obj["id"] = *map.GetId();
+            obj["name"] = map.GetName();
+            maps_json.push_back(obj);
         }
 
-        if (target.find(endpoints::MAPS_PREFIX) == 0) {
+        StringResponse response{http::status::ok, req.version()};
+        response.set(http::field::content_type, "application/json");
 
-            std::string map_id =
-                target.substr(endpoints::MAPS_PREFIX.length());
-
-            ProcessMapRequest(
-                std::move(req),
-                std::move(map_id),
-                std::forward<Send>(send));
-
-            return;
+        if (req.method() != http::verb::head) {
+            response.body() = json::serialize(maps_json);
         }
 
-        if (target.find(endpoints::MAPS_PREFIX_WITHOUT_SLASH) == 0) {
-
-            std::string map_id =
-                target.substr(endpoints::MAPS_PREFIX_WITHOUT_SLASH.length());
-
-            ProcessMapRequest(
-                std::move(req),
-                std::move(map_id),
-                std::forward<Send>(send));
-
-            return;
-        }
-
-        auto response = MakeErrorResponse(
-            std::move(req),
-            http::status::not_found,
-            "badRequest",
-            "Not found");
-
+        response.prepare_payload();
         send(std::move(response));
     }
 
     template <typename Body, typename Allocator, typename Send>
-    void ProcessMapRequest(
+    void HandleMap(
         http::request<Body, http::basic_fields<Allocator>>&& req,
-        std::string map_id_str,
         Send&& send) {
 
-        while (!map_id_str.empty() &&
-               map_id_str.back() == '/') {
-            map_id_str.pop_back();
-        }
-
-        model::Map::Id map_id{map_id_str};
-
-        const model::Map* map = game_.FindMap(map_id);
-
-        if (!map) {
-            auto response = MakeErrorResponse(
+        if (req.method() != http::verb::get &&
+            req.method() != http::verb::head) {
+            send(MakeErrorResponse(
                 std::move(req),
-                http::status::not_found,
-                "mapNotFound",
-                "Map not found");
-
-            send(std::move(response));
+                http::status::method_not_allowed,
+                "invalidMethod",
+                "Only GET method is expected"));
             return;
         }
 
-        auto response = MakeResponse(
-            std::move(req),
-            http::status::ok,
-            "application/json",
-            SerializeMap(*map));
+        std::string path(req.target());
 
+        const std::string prefix = "/api/v1/maps/";
+        std::string map_id = path.substr(prefix.size());
+
+        const auto* map = game_.FindMap(model::Map::Id(map_id));
+
+        if (!map) {
+            send(MakeErrorResponse(
+                std::move(req),
+                http::status::not_found,
+                "mapNotFound",
+                "Map not found"));
+            return;
+        }
+
+        json::object obj;
+        obj["id"] = *map->GetId();
+        obj["name"] = map->GetName();
+
+        StringResponse response{http::status::ok, req.version()};
+        response.set(http::field::content_type, "application/json");
+
+        if (req.method() != http::verb::head) {
+            response.body() = json::serialize(obj);
+        }
+
+        response.prepare_payload();
         send(std::move(response));
     }
 
@@ -206,307 +161,160 @@ private:
         Send&& send) {
 
         if (req.method() != http::verb::post) {
-
-            auto response = MakeErrorResponse(
+            send(MakeErrorResponse(
                 std::move(req),
                 http::status::method_not_allowed,
                 "invalidMethod",
-                "Only POST method is expected");
-
-            response.set(http::field::allow, "POST");
-
-            send(std::move(response));
+                "Only POST method is expected"));
             return;
         }
 
-        boost::json::value json;
+        json::value parsed;
 
         try {
-            json = boost::json::parse(req.body());
-        }
-        catch (...) {
-
-            auto response = MakeErrorResponse(
+            parsed = json::parse(req.body());
+        } catch (...) {
+            send(MakeErrorResponse(
                 std::move(req),
                 http::status::bad_request,
                 "invalidArgument",
-                "Join game request parse error");
-
-            send(std::move(response));
+                "Join game request parse error"));
             return;
         }
 
-        if (!json.is_object()) {
+        auto obj = parsed.as_object();
 
-            auto response = MakeErrorResponse(
+        if (!obj.contains("userName") || !obj.contains("mapId")) {
+            send(MakeErrorResponse(
                 std::move(req),
                 http::status::bad_request,
                 "invalidArgument",
-                "Join game request parse error");
-
-            send(std::move(response));
-            return;
-        }
-
-        auto& obj = json.as_object();
-
-        if (!obj.contains("userName") ||
-            !obj.at("userName").is_string()) {
-
-            auto response = MakeErrorResponse(
-                std::move(req),
-                http::status::bad_request,
-                "invalidArgument",
-                "Invalid name");
-
-            send(std::move(response));
-            return;
-        }
-
-        if (!obj.contains("mapId") ||
-            !obj.at("mapId").is_string()) {
-
-            auto response = MakeErrorResponse(
-                std::move(req),
-                http::status::bad_request,
-                "invalidArgument",
-                "Invalid map ID");
-
-            send(std::move(response));
+                "Invalid join game request"));
             return;
         }
 
         std::string user_name =
-            std::string(obj.at("userName").as_string());
+            json::value_to<std::string>(obj["userName"]);
+
+        std::string map_id =
+            json::value_to<std::string>(obj["mapId"]);
 
         if (user_name.empty()) {
-
-            auto response = MakeErrorResponse(
+            send(MakeErrorResponse(
                 std::move(req),
                 http::status::bad_request,
                 "invalidArgument",
-                "Invalid name");
-
-            send(std::move(response));
+                "Invalid name"));
             return;
         }
 
-        model::Map::Id map_id{
-            std::string(obj.at("mapId").as_string())
-        };
+        const auto* map = game_.FindMap(model::Map::Id(map_id));
 
-        try {
-
-            auto result =
-                game_session_.JoinGame(user_name, map_id);
-
-            boost::json::object body;
-
-            body["authToken"] = *result.token;
-            body["playerId"] = *result.player_id;
-
-            auto response = MakeResponse(
-                std::move(req),
-                http::status::ok,
-                "application/json",
-                boost::json::serialize(body));
-
-            response.set(http::field::cache_control,
-                         "no-cache");
-
-            send(std::move(response));
-        }
-        catch (const std::runtime_error&) {
-
-            auto response = MakeErrorResponse(
+        if (!map) {
+            send(MakeErrorResponse(
                 std::move(req),
                 http::status::not_found,
                 "mapNotFound",
-                "Map not found");
-
-            send(std::move(response));
+                "Map not found"));
+            return;
         }
+
+        auto token = session_.AddPlayer(user_name);
+
+        json::object response_json;
+        response_json["authToken"] = token;
+        response_json["playerId"] = 0;
+
+        StringResponse response{http::status::ok, req.version()};
+        response.set(http::field::content_type, "application/json");
+        response.body() = json::serialize(response_json);
+        response.prepare_payload();
+
+        send(std::move(response));
     }
 
     template <typename Body, typename Allocator, typename Send>
-    void HandleGetPlayers(
+    void HandlePlayers(
         http::request<Body, http::basic_fields<Allocator>>&& req,
         Send&& send) {
 
         if (req.method() != http::verb::get &&
             req.method() != http::verb::head) {
-
-            auto response = MakeErrorResponse(
+            send(MakeErrorResponse(
                 std::move(req),
                 http::status::method_not_allowed,
                 "invalidMethod",
-                "Invalid method");
-
-            response.set(http::field::allow,
-                         "GET, HEAD");
-
-            send(std::move(response));
+                "Invalid method"));
             return;
         }
 
-        auto token = ExtractToken(req);
-
-        if (!token) {
-
-            auto response = MakeErrorResponse(
+        if (!req.has_header(http::field::authorization)) {
+            send(MakeErrorResponse(
                 std::move(req),
                 http::status::unauthorized,
                 "invalidToken",
-                "Authorization header is missing or invalid");
-
-            send(std::move(response));
+                "Authorization header is missing"));
             return;
         }
 
-        if (!game_session_.ValidateToken(*token)) {
+        std::string auth =
+            std::string(req[http::field::authorization]);
 
-            auto response = MakeErrorResponse(
+        const std::string bearer = "Bearer ";
+
+        if (!auth.starts_with(bearer)) {
+            send(MakeErrorResponse(
+                std::move(req),
+                http::status::unauthorized,
+                "invalidToken",
+                "Authorization header is invalid"));
+            return;
+        }
+
+        std::string token = auth.substr(bearer.size());
+
+        if (!session_.HasPlayer(token)) {
+            send(MakeErrorResponse(
                 std::move(req),
                 http::status::unauthorized,
                 "unknownToken",
-                "Player token has not been found");
-
-            send(std::move(response));
+                "Player token has not been found"));
             return;
         }
 
-        auto players =
-            game_session_.GetPlayersOnMap(*token);
+        json::object players;
 
-        if (req.method() == http::verb::head) {
+        StringResponse response{http::status::ok, req.version()};
+        response.set(http::field::content_type, "application/json");
 
-            auto response = MakeResponse(
-                std::move(req),
-                http::status::ok,
-                "application/json",
-                "");
-
-            send(std::move(response));
-            return;
+        if (req.method() != http::verb::head) {
+            response.body() = json::serialize(players);
         }
 
-        boost::json::object body;
-
-        for (const auto& [id, name] : players) {
-            body[id] = {
-                {"name", name}
-            };
-        }
-
-        auto response = MakeResponse(
-            std::move(req),
-            http::status::ok,
-            "application/json",
-            boost::json::serialize(body));
+        response.prepare_payload();
 
         send(std::move(response));
     }
 
     template <typename Body, typename Allocator>
-    std::optional<model::Token> ExtractToken(
-        const http::request<Body,
-        http::basic_fields<Allocator>>& req) {
-
-        auto auth_opt =
-            GetHeaderValue(req, "authorization");
-
-        if (!auth_opt) {
-            return std::nullopt;
-        }
-
-        std::string auth = *auth_opt;
-
-        std::string auth_lower = auth;
-
-        std::transform(auth_lower.begin(),
-                       auth_lower.end(),
-                       auth_lower.begin(),
-                       [](unsigned char c) {
-                           return std::tolower(c);
-                       });
-
-        const std::string prefix = "bearer ";
-
-        if (auth_lower.size() < prefix.size() ||
-            auth_lower.substr(0, prefix.size()) != prefix) {
-
-            return std::nullopt;
-        }
-
-        std::string token =
-            auth.substr(prefix.size());
-
-        if (token.empty()) {
-            return std::nullopt;
-        }
-
-        return model::Token{token};
-    }
-
-    template <typename Body, typename Allocator>
-    static http::response<http::string_body> MakeResponse(
-        http::request<Body,
-        http::basic_fields<Allocator>>&& req,
-        http::status status,
-        std::string_view content_type,
-        std::string_view body) {
-
-        http::response<http::string_body> response(
-            status,
-            req.version());
-
-        response.set(http::field::content_type,
-                     content_type);
-
-        response.body() = body;
-
-        response.prepare_payload();
-
-        response.keep_alive(req.keep_alive());
-
-        return response;
-    }
-
-    template <typename Body, typename Allocator>
-    static http::response<http::string_body> MakeErrorResponse(
-        http::request<Body,
-        http::basic_fields<Allocator>>&& req,
+    static StringResponse MakeErrorResponse(
+        http::request<Body, http::basic_fields<Allocator>>&& req,
         http::status status,
         std::string_view code,
         std::string_view message) {
 
-        boost::json::object body;
+        json::object body;
+        body["code"] = std::string(code);
+        body["message"] = std::string(message);
 
-        body["code"] = code;
-        body["message"] = message;
+        StringResponse response{status, req.version()};
+        response.set(http::field::content_type, "application/json");
 
-        return MakeResponse(
-            std::move(req),
-            status,
-            "application/json",
-            boost::json::serialize(body));
+        response.body() = json::serialize(body);
+        response.prepare_payload();
+
+        return response;
     }
-
-    std::string SerializeMaps() const;
-    std::string SerializeMap(const model::Map& map) const;
-
-    boost::json::array SerializeRoads(
-        const model::Map& map) const;
-
-    boost::json::array SerializeBuildings(
-        const model::Map& map) const;
-
-    boost::json::array SerializeOffices(
-        const model::Map& map) const;
-
-private:
-    model::Game& game_;
-    game::GameSession& game_session_;
 };
 
 }  // namespace http_handler
