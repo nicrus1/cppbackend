@@ -20,14 +20,12 @@ public:
     // POST /api/v1/game/join
     template <typename Body, typename Allocator, typename Send>
     void HandleJoin(http::request<Body, http::basic_fields<Allocator>>&& req, Send&& send) {
-        // Проверка метода
         if (req.method() != http::verb::post) {
             SendErrorWithAllow(std::move(req), send, http::status::method_not_allowed,
                                "invalidMethod", "Only POST method is expected", "POST");
             return;
         }
 
-        // Парсинг JSON
         boost::json::value json;
         try {
             json = boost::json::parse(req.body());
@@ -46,7 +44,6 @@ public:
 
         auto& obj = json.as_object();
 
-        // Проверка userName
         if (!obj.contains("userName") || !obj.at("userName").is_string()) {
             SendError(std::move(req), send, http::status::bad_request,
                       "invalidArgument", "Invalid name");
@@ -60,7 +57,6 @@ public:
             return;
         }
 
-        // Проверка mapId
         if (!obj.contains("mapId") || !obj.at("mapId").is_string()) {
             SendError(std::move(req), send, http::status::bad_request,
                       "invalidArgument", "Invalid map ID");
@@ -69,7 +65,6 @@ public:
 
         model::Map::Id map_id{std::string(obj.at("mapId").as_string())};
 
-        // Присоединение к игре
         try {
             auto result = game_state_.JoinGame(user_name, map_id);
             
@@ -93,49 +88,42 @@ public:
     // GET/HEAD /api/v1/game/players
     template <typename Body, typename Allocator, typename Send>
     void HandleGetPlayers(http::request<Body, http::basic_fields<Allocator>>&& req, Send&& send) {
-        // Проверка метода
         if (req.method() != http::verb::get && req.method() != http::verb::head) {
             SendErrorWithAllow(std::move(req), send, http::status::method_not_allowed,
                                "invalidMethod", "Invalid method", "GET, HEAD");
             return;
         }
 
-        // Извлечение токена
         auto token = ExtractToken(req);
         
-        // Случай: отсутствует заголовок Authorization
         if (!token) {
             SendError(std::move(req), send, http::status::unauthorized,
                       "invalidToken", "Authorization header is missing");
             return;
         }
         
-        // Случай: пустой токен (например, "Bearer" без значения)
-        if (token->value().empty()) {
+        // Используем оператор * для получения строки из Tagged
+        if (token->empty()) {
             SendError(std::move(req), send, http::status::unauthorized,
                       "invalidToken", "Authorization header is invalid");
             return;
         }
         
-        // Случай: токен не найден в системе
         if (!game_state_.ValidateToken(*token)) {
             SendError(std::move(req), send, http::status::unauthorized,
                       "unknownToken", "Player token has not been found");
             return;
         }
 
-        // Успешный случай: возвращаем список игроков
         try {
             auto players = game_state_.GetPlayersOnMap(*token);
 
-            // HEAD запрос - только заголовки
             if (req.method() == http::verb::head) {
                 SendResponseWithCache(std::move(req), send, http::status::ok,
                                       "application/json", "");
                 return;
             }
 
-            // GET запрос - возвращаем тело
             boost::json::object response_body;
             for (const auto& [id, name] : players) {
                 boost::json::object player_obj;
@@ -157,7 +145,6 @@ private:
     std::optional<model::Token> ExtractToken(
         const http::request<Body, http::basic_fields<Allocator>>& req) {
 
-        // Ищем заголовок Authorization
         auto it = req.find(http::field::authorization);
         if (it == req.end()) {
             return std::nullopt;
@@ -166,16 +153,13 @@ private:
         std::string auth_value = std::string(it->value());
         const std::string bearer_prefix = "Bearer ";
         
-        // Проверяем минимальную длину
         if (auth_value.length() < bearer_prefix.length()) {
-            // Если значение "Bearer" без пробела и токена
             if (auth_value == "Bearer") {
                 return model::Token{""};
             }
             return std::nullopt;
         }
         
-        // Проверяем префикс Bearer (без учета регистра)
         std::string auth_prefix = auth_value.substr(0, bearer_prefix.length());
         std::transform(auth_prefix.begin(), auth_prefix.end(), auth_prefix.begin(),
                        [](unsigned char c) { return std::tolower(c); });
@@ -184,10 +168,8 @@ private:
             return std::nullopt;
         }
         
-        // Извлекаем токен
         std::string token_str = auth_value.substr(bearer_prefix.length());
         
-        // Удаляем пробелы в начале и конце
         size_t start = token_str.find_first_not_of(" \t\n\r");
         if (start == std::string::npos) {
             return model::Token{""};
