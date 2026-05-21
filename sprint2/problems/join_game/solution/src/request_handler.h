@@ -363,7 +363,9 @@ private:
 
             boost::json::object response_body;
             for (const auto& [id, name] : players) {
-                response_body[id] = boost::json::object{{"name", name}};
+                boost::json::object player_obj;
+               	player_obj["name"] = name;
+		response_body[id] = player_obj;
             }
 
             auto response = MakeResponse(

@@ -11,10 +11,8 @@ class Players {
 public:
     Players() = default;
     
-    explicit Players(PlayerTokens& tokens)
-        : player_tokens_(tokens)
-    {
-    }
+    Players(const PlayerTokens& tokens) = delete;
+    Players& operator=(const PlayerTokens& tokens) = delete;
     
     Player& AddPlayer(std::string name, const Map::Id& map_id) {
         PlayerId new_id{next_id_++};
