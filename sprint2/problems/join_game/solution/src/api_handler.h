@@ -102,8 +102,9 @@ public:
             return;
         }
         
-        // Используем оператор * для получения строки из Tagged
-        if (token->empty()) {
+        // Получаем строку токена через оператор *
+        const std::string& token_str = *(*token);
+        if (token_str.empty()) {
             SendError(std::move(req), send, http::status::unauthorized,
                       "invalidToken", "Authorization header is invalid");
             return;
