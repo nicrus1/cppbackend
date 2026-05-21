@@ -9,6 +9,9 @@
 
 namespace http_handler {
 
+namespace beast = boost::beast;
+namespace http = beast::http;
+
 class ApiHandler {
 public:
     explicit ApiHandler(model::Game& game) : game_state_(game) {}
@@ -20,12 +23,6 @@ public:
     // GET/HEAD /api/v1/game/players
     template <typename Body, typename Allocator, typename Send>
     void HandleGetPlayers(http::request<Body, http::basic_fields<Allocator>>&& req, Send&& send);
-
-    // GET /api/v1/maps
-    std::string HandleGetMaps(const model::Game& game) const;
-
-    // GET /api/v1/maps/{id}
-    std::optional<std::string> HandleGetMap(const model::Game& game, const std::string& map_id) const;
 
 private:
     template <typename Body, typename Allocator>

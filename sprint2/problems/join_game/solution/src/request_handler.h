@@ -8,6 +8,9 @@
 
 namespace http_handler {
 
+namespace beast = boost::beast;
+namespace http = beast::http;
+
 class RequestHandler {
 public:
     explicit RequestHandler(model::Game& game)
@@ -19,7 +22,9 @@ public:
     RequestHandler& operator=(const RequestHandler&) = delete;
 
     template <typename Body, typename Allocator, typename Send>
-    void operator()(http::request<Body, http::basic_fields<Allocator>>&& req, Send&& send);
+    void operator()(http::request<Body, http::basic_fields<Allocator>>&& req, Send&& send) {
+        HandleRequest(std::move(req), std::forward<Send>(send));
+    }
 
 private:
     template <typename Body, typename Allocator, typename Send>

@@ -3,11 +3,6 @@
 namespace http_handler {
 
 template <typename Body, typename Allocator, typename Send>
-void RequestHandler::operator()(http::request<Body, http::basic_fields<Allocator>>&& req, Send&& send) {
-    HandleRequest(std::move(req), std::forward<Send>(send));
-}
-
-template <typename Body, typename Allocator, typename Send>
 void RequestHandler::HandleRequest(http::request<Body, http::basic_fields<Allocator>>&& req, Send&& send) {
     std::string target = std::string(req.target());
     std::string method = std::string(req.method_string());
@@ -78,7 +73,6 @@ void RequestHandler::HandleRequest(http::request<Body, http::basic_fields<Alloca
     SendError(std::move(req), send, http::status::not_found, "badRequest", "Not found");
 }
 
-// Вспомогательные методы отправки ответов
 template <typename Body, typename Allocator, typename Send>
 void RequestHandler::SendResponse(http::request<Body, http::basic_fields<Allocator>>&& req,
                                    Send&& send,
@@ -105,11 +99,15 @@ void RequestHandler::SendError(http::request<Body, http::basic_fields<Allocator>
             {"message", message}
         });
     
-    auto response = SendResponse(std::move(req), send, status, "application/json", body);
+    http::response<http::string_body> response(status, req.version());
+    response.set(http::field::content_type, "application/json");
     response.set(http::field::cache_control, "no-cache");
+    response.body() = body;
+    response.prepare_payload();
+    response.keep_alive(req.keep_alive());
+    send(std::move(response));
 }
 
-// Методы сериализации остаются без изменений
 std::string RequestHandler::SerializeMaps() const {
     boost::json::array maps_array;
     for (const auto& map : game_.GetMaps()) {
@@ -179,5 +177,8 @@ boost::json::array RequestHandler::SerializeOffices(const model::Map& map) const
     }
     return offices_array;
 }
+
+// Явное инстанцирование шаблонов
+template void RequestHandler::operator()(http::request<http::string_body>&&, std::function<void(http::response<http::string_body>&&)>);
 
 } // namespace http_handler
