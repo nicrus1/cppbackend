@@ -1,6 +1,7 @@
 #pragma once
 #include <compare>
 #include <string>
+#include <functional>
 
 namespace util {
 
@@ -33,6 +34,14 @@ public:
         return value_;
     }
     
+    const Value* operator->() const {
+        return &value_;
+    }
+    
+    Value* operator->() {
+        return &value_;
+    }
+    
     // Операторы присваивания
     Tagged& operator=(const Value& v) {
         value_ = v;
@@ -44,7 +53,28 @@ public:
         return *this;
     }
 
-    // Оператор сравнения
+    // Операторы сравнения
+    bool operator==(const Tagged<Value, Tag>& other) const {
+        return value_ == other.value_;
+    }
+    
+    bool operator!=(const Tagged<Value, Tag>& other) const {
+        return value_ != other.value_;
+    }
+    
+    bool operator<(const Tagged<Value, Tag>& other) const {
+        return value_ < other.value_;
+    }
+    
+    bool operator==(const Value& other) const {
+        return value_ == other;
+    }
+    
+    bool operator!=(const Value& other) const {
+        return value_ != other;
+    }
+
+    // Оператор сравнения (C++20)
     auto operator<=>(const Tagged<Value, Tag>&) const = default;
 
 private:

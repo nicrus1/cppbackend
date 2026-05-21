@@ -40,22 +40,11 @@ public:
     }
     
     PlayerId FindPlayerByToken(const Token& token) const {
-        logger::LogRawData("Looking for token: '" + *token + "'");
-    logger::LogRawData("Token length: " + std::to_string((*token).length()));
-    
-    // Выводим все сохраненные токены
-    logger::LogRawData("Stored tokens (" + std::to_string(token_to_player_.size()) + "):");
-    for (const auto& [t, pid] : token_to_player_) {
-        logger::LogRawData("  Token: '" + *t + "', Player ID: " + std::to_string(*pid));
-    }
-    
-    auto it = token_to_player_.find(token);
-    if (it != token_to_player_.end()) {
-        logger::LogRawData("Token found!");
-        return it->second;
-    }
-    logger::LogRawData("Token NOT found!");
-    return PlayerId{0};
+        auto it = token_to_player_.find(token);
+        if (it != token_to_player_.end()) {
+            return it->second;
+        }
+        return PlayerId{0};
     }
     
     bool IsValidToken(const Token& token) const {

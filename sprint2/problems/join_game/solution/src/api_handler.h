@@ -7,6 +7,7 @@
 #include <optional>
 #include <string>
 #include <functional>
+#include <cctype>
 
 namespace http_handler {
 
@@ -23,6 +24,14 @@ public:
         if (req.method() != http::verb::post) {
             SendErrorWithAllow(std::move(req), send, http::status::method_not_allowed,
                                "invalidMethod", "Only POST method is expected", "POST");
+            return;
+        }
+
+        // Check Content-Type
+        auto content_type = req.find(http::field::content_type);
+        if (content_type == req.end() || content_type->value() != "application/json") {
+            SendError(std::move(req), send, http::status::bad_request,
+                      "invalidArgument", "Invalid Content-Type");
             return;
         }
 
@@ -102,9 +111,8 @@ public:
             return;
         }
         
-        // Получаем строку токена через оператор *
-        const std::string& token_str = *(*token);
-        if (token_str.empty()) {
+        // Check if token is empty
+        if ((*token)->empty()) {
             SendError(std::move(req), send, http::status::unauthorized,
                       "invalidToken", "Authorization header is invalid");
             return;
@@ -155,9 +163,6 @@ private:
         const std::string bearer_prefix = "Bearer ";
         
         if (auth_value.length() < bearer_prefix.length()) {
-            if (auth_value == "Bearer") {
-                return model::Token{""};
-            }
             return std::nullopt;
         }
         
@@ -171,16 +176,17 @@ private:
         
         std::string token_str = auth_value.substr(bearer_prefix.length());
         
+        // Trim whitespace
         size_t start = token_str.find_first_not_of(" \t\n\r");
         if (start == std::string::npos) {
-            return model::Token{""};
+            return std::nullopt;
         }
         
         size_t end = token_str.find_last_not_of(" \t\n\r");
         token_str = token_str.substr(start, end - start + 1);
 
         if (token_str.empty()) {
-            return model::Token{""};
+            return std::nullopt;
         }
 
         return model::Token{std::move(token_str)};
