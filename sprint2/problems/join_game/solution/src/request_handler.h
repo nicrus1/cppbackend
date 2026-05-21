@@ -274,7 +274,8 @@ private:
         try {
             auto result = game_session_.JoinGame(user_name, map_id);
             
-            logger::LogDebug("JoinGame: generated token: " + *result.token + " for player " + std::to_string(*result.player_id));
+            logger::LogDebug("JoinGame: generated token: '" + *result.token + "' for player " + std::to_string(*result.player_id));
+            logger::LogDebug("JoinGame: token length: " + std::to_string(result.token->size()));
             
             boost::json::object response_body;
             response_body["authToken"] = *result.token;
@@ -322,7 +323,10 @@ private:
 
         auto token = ExtractToken(req);
 
+        logger::LogDebug("HandleGetPlayers: extracted token: " + (token ? **token : "nullopt"));
+        
         if (!token) {
+            logger::LogDebug("HandleGetPlayers: no token found in Authorization header");
             auto response = MakeErrorResponse(
                 std::move(req),
                 http::status::unauthorized,
@@ -333,10 +337,11 @@ private:
             return;
         }
 
-        logger::LogDebug("HandleGetPlayers: received token: " + **token);
-        logger::LogDebug("ValidateToken result: " + std::to_string(game_session_.ValidateToken(*token)));
+        logger::LogDebug("HandleGetPlayers: checking token: '" + *token + "', length: " + std::to_string(token->size()));
+        bool is_valid = game_session_.ValidateToken(*token);
+        logger::LogDebug("HandleGetPlayers: ValidateToken result: " + std::to_string(is_valid));
 
-        if (!game_session_.ValidateToken(*token)) {
+        if (!is_valid) {
             auto response = MakeErrorResponse(
                 std::move(req),
                 http::status::unauthorized,
@@ -364,8 +369,8 @@ private:
             boost::json::object response_body;
             for (const auto& [id, name] : players) {
                 boost::json::object player_obj;
-               	player_obj["name"] = name;
-		response_body[id] = player_obj;
+                player_obj["name"] = name;
+                response_body[id] = player_obj;
             }
 
             auto response = MakeResponse(
@@ -394,14 +399,17 @@ private:
 
         auto auth_value_opt = GetHeaderValue(req, "authorization");
         if (!auth_value_opt) {
+            logger::LogDebug("ExtractToken: no Authorization header");
             return std::nullopt;
         }
 
         std::string auth_value = *auth_value_opt;
+        logger::LogDebug("ExtractToken: Authorization value: '" + auth_value + "'");
         
         const std::string bearer_prefix = "Bearer ";
         
         if (auth_value.length() < bearer_prefix.length()) {
+            logger::LogDebug("ExtractToken: auth value too short");
             return std::nullopt;
         }
         
@@ -410,6 +418,7 @@ private:
                        [](unsigned char c) { return std::tolower(c); });
         
         if (prefix != "bearer ") {
+            logger::LogDebug("ExtractToken: wrong prefix: '" + prefix + "'");
             return std::nullopt;
         }
         
@@ -417,6 +426,7 @@ private:
         
         size_t start = token_str.find_first_not_of(" \t\n\r");
         if (start == std::string::npos) {
+            logger::LogDebug("ExtractToken: token string empty after trimming");
             return std::nullopt;
         }
         
@@ -424,9 +434,11 @@ private:
         token_str = token_str.substr(start, end - start + 1);
 
         if (token_str.empty()) {
+            logger::LogDebug("ExtractToken: token empty");
             return std::nullopt;
         }
 
+        logger::LogDebug("ExtractToken: extracted token: '" + token_str + "'");
         return model::Token{std::move(token_str)};
     }
 
