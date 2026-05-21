@@ -1,4 +1,106 @@
 #pragma once
+
+#include <string>
+#include <vector>
+#include <unordered_map>
+#include <stdexcept>
+
+namespace model {
+
+using Dimension = int;
+using Coord = double;
+
+struct Point {
+    Coord x, y;
+};
+
+struct Size {
+    Dimension width, height;
+};
+
+struct Rectangle {
+    Point position;
+    Size size;
+};
+
+struct Offset {
+    Dimension dx, dy;
+};
+
+struct Speed {
+    double vx = 0.0;
+    double vy = 0.0;
+};
+
+struct Position {
+    double x = 0.0;
+    double y = 0.0;
+};
+
+enum class Direction {
+    NORTH,
+    SOUTH,
+    WEST,
+    EAST
+};
+
+class Road {
+    struct HorizontalTag {
+    };
+    struct VerticalTag {
+    };
+
+public:
+    static constexpr HorizontalTag HORIZONTAL{};
+    static constexpr VerticalTag VERTICAL{};
+
+    Road(HorizontalTag, Point start, Coord end_x) noexcept
+        : start_{start}
+        , end_{end_x, start.y} {
+    }
+
+    Road(VerticalTag, Point start, Coord end_y) noexcept
+        : start_{start}
+        , end_{start.x, end_y} {
+    }
+
+    bool IsHorizontal() const noexcept {
+        return start_.y == end_.y;
+    }
+
+    bool IsVertical() const noexcept {
+        return start_.x == end_.x;
+    }
+
+    Point GetStart() const noexcept {
+        return start_;
+    }
+
+    Point GetEnd() const noexcept {
+        return end_;
+    }
+
+private:
+    Point start_;
+    Point end_;
+};
+
+class Building {
+public:
+    explicit Building(Rectangle bounds) noexcept
+        : bounds_{bounds} {
+    }
+
+    const Rectangle& GetBounds() const noexcept {
+        return bounds_;
+    }
+
+private:
+    Rectangle bounds_;
+};
+
+class Office {
+public:
     using Id = std::string;
 
     Office(Id id, Point position, Offset offset) noexcept
@@ -72,6 +174,7 @@ public:
 private:
     Id id_;
     std::string name_;
+
     Roads roads_;
     Buildings buildings_;
     Offices offices_;
@@ -82,7 +185,14 @@ public:
     using Maps = std::vector<Map>;
 
     void AddMap(Map map) {
-        maps_.emplace_back(std::move(map));
+        const size_t index = maps_.size();
+
+        if (auto [it, inserted] = map_id_to_index_.emplace(map.GetId(), index);
+            inserted) {
+            maps_.emplace_back(std::move(map));
+        } else {
+            throw std::invalid_argument("Map with id " + *it->first + " already exists");
+        }
     }
 
     const Maps& GetMaps() const noexcept {
@@ -90,16 +200,18 @@ public:
     }
 
     const Map* FindMap(const Map::Id& id) const noexcept {
-        for (const auto& map : maps_) {
-            if (map.GetId() == id) {
-                return &map;
-            }
+        if (auto it = map_id_to_index_.find(id);
+            it != map_id_to_index_.end()) {
+            return &maps_.at(it->second);
         }
         return nullptr;
     }
 
 private:
-    Maps maps_;
+    using MapIdHasher = std::hash<Map::Id>;
+
+    std::unordered_map<Map::Id, size_t, MapIdHasher> map_id_to_index_;
+    std::vector<Map> maps_;
 };
 
 } // namespace model
