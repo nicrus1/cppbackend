@@ -5,7 +5,6 @@
 #include <memory>
 #include <unordered_map>
 #include <string>
-#include <iostream>
 
 namespace game {
 
@@ -29,7 +28,10 @@ public:
         model::Player& player = players_.AddPlayer(user_name, map_id);
         model::Token token = players_.GenerateToken(player);
         
-        return JoinResult{std::move(token), player.GetId()};
+        JoinResult result;
+        result.token = std::move(token);
+        result.player_id = player.GetId();
+        return result;
     }
     
     std::unordered_map<std::string, std::string> GetPlayersOnMap(const model::Token& token) {

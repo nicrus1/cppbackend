@@ -20,7 +20,6 @@ namespace beast = boost::beast;
 namespace http = beast::http;
 
 inline void ReportError(beast::error_code ec, std::string_view what) {
-    std::cerr << what << ": " << ec.message() << std::endl;
     logger::LogError(ec.value(), ec.message(), std::string(what));
 }
 
@@ -75,8 +74,6 @@ public:
 
 private:
     void HandleRequest(http::request<http::string_body>&& request) override {
-        // Передаём IP клиента через дополнительный параметр
-        // Для этого используем замыкание
         auto start_time = std::chrono::steady_clock::now();
         std::string client_ip = GetClientIp();
         
@@ -86,7 +83,6 @@ private:
                 auto end_time = std::chrono::steady_clock::now();
                 auto response_time = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count();
                 
-                // Логируем отправку ответа
                 std::string content_type = "null";
                 auto it = response.find(http::field::content_type);
                 if (it != response.end()) {
@@ -156,8 +152,6 @@ private:
                     return;
                 }
                 auto session = std::make_shared<Session<RequestHandler>>(std::move(socket), self->handler_);
-                
-                // Логируем получение запроса (фактическое логирование будет при обработке запроса)
                 session->Run();
                 self->DoAccept();
             });
