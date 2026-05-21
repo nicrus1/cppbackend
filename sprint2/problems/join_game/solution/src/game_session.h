@@ -48,6 +48,16 @@ public:
         return result;
     }
     
+    // Метод для тестов - получить всех игроков на карте без проверки токена
+    std::unordered_map<std::string, std::string> GetPlayersOnMapForTest(const model::Map::Id& map_id) {
+        auto players_on_map = players_.GetPlayersOnMap(map_id);
+        std::unordered_map<std::string, std::string> result;
+        for (auto* p : players_on_map) {
+            result[std::to_string(*p->GetId())] = p->GetName();
+        }
+        return result;
+    }
+    
     bool ValidateToken(const model::Token& token) const {
         return players_.ValidateToken(token);
     }
