@@ -2,74 +2,30 @@
 #include "model.h"
 #include "players.h"
 #include "player_tokens.h"
-#include <memory>
-#include <unordered_map>
+#include "game_session.h"
+#include <boost/json.hpp>
 #include <string>
-#include <iostream>
+#include <functional>
+#include <memory>
 
-namespace game {
+namespace http_handler {
 
-class GameSession {
+class RequestHandler {
 public:
-    explicit GameSession(model::Game& game)
-        : game_(game) {
-    }
+    explicit RequestHandler(model::Game& game);
     
-    struct JoinResult {
-        model::Token token;
-        model::PlayerId player_id;
-    };
+    void operator()(http::request<http::string_body>&& req, 
+                    std::function<void(http::response<http::string_body>&&)>&& send);
     
-    JoinResult JoinGame(const std::string& user_name, const model::Map::Id& map_id) {
-        const model::Map* map = game_.FindMap(map_id);
-        if (!map) {
-            throw std::runtime_error("Map not found");
-        }
-        
-        model::Player& player = players_.AddPlayer(user_name, map_id);
-        model::Token token = players_.GenerateToken(player);
-        
-        std::cerr << "DEBUG: JoinGame - Created player " << *player.GetId() 
-                  << " with token " << *token << std::endl;
-        
-        JoinResult result;
-        result.token = std::move(token);
-        result.player_id = player.GetId();
-        return result;
-    }
-    
-    std::unordered_map<std::string, std::string> GetPlayersOnMap(const model::Token& token) {
-        std::cerr << "DEBUG: GetPlayersOnMap - Looking for token: " << *token << std::endl;
-        
-        model::Player* player = players_.FindPlayerByToken(token);
-        if (!player) {
-            std::cerr << "DEBUG: GetPlayersOnMap - Player not found for token" << std::endl;
-            throw std::runtime_error("Invalid token or player not found");
-        }
-        
-        std::cerr << "DEBUG: GetPlayersOnMap - Found player " << *player->GetId() 
-                  << " on map " << *player->GetMapId() << std::endl;
-        
-        auto players_on_map = players_.GetPlayersOnMap(player->GetMapId());
-        std::unordered_map<std::string, std::string> result;
-        for (auto* p : players_on_map) {
-            result[std::to_string(*p->GetId())] = p->GetName();
-            std::cerr << "DEBUG: GetPlayersOnMap - Player " << *p->GetId() 
-                      << " name " << p->GetName() << std::endl;
-        }
-        return result;
-    }
-    
-    bool ValidateToken(const model::Token& token) const {
-        bool valid = players_.ValidateToken(token);
-        std::cerr << "DEBUG: ValidateToken - Token " << *token 
-                  << " valid? " << valid << std::endl;
-        return valid;
-    }
-
 private:
+    std::string SerializeMaps() const;
+    std::string SerializeMap(const model::Map& map) const;
+    boost::json::array SerializeRoads(const model::Map& map) const;
+    boost::json::array SerializeBuildings(const model::Map& map) const;
+    boost::json::array SerializeOffices(const model::Map& map) const;
+    
     model::Game& game_;
-    model::Players players_;
+    game::GameSession session_;
 };
 
-}  // namespace game
+}  // namespace http_handler
