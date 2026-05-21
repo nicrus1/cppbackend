@@ -1,15 +1,12 @@
 #include "sdk.h"
-//
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/signal_set.hpp>
-#include <boost/asio/ip/address.hpp>
 #include <iostream>
 #include <thread>
 
 #include "json_loader.h"
 #include "request_handler.h"
 #include "logger.h"
-#include "http_server.h"
 
 using namespace std::literals;
 namespace net = boost::asio;
@@ -52,15 +49,15 @@ int main(int argc, const char* argv[]) {
             ioc.stop();
         });
 
-        auto handler = std::make_shared<http_handler::RequestHandler>(game);
+        http_handler::RequestHandler handler{game};
 
         const auto address = net::ip::make_address("0.0.0.0");
         const unsigned short port = 8080;
         
         logger::LogServerStarted(address.to_string(), port);
         
-        http_server::ServeHttp(ioc, {address, port}, [handler](auto&& req, auto&& send) {
-            (*handler)(std::forward<decltype(req)>(req), std::forward<decltype(send)>(send));
+        http_server::ServeHttp(ioc, {address, port}, [&handler](auto&& req, auto&& send) {
+            handler(std::forward<decltype(req)>(req), std::forward<decltype(send)>(send));
         });
 
         RunWorkers(std::max(1u, num_threads), [&ioc] {
