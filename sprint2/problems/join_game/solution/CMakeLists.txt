@@ -13,7 +13,6 @@ endif()
 
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
-
 add_executable(game_server
     src/main.cpp
     src/http_server.cpp
@@ -23,7 +22,6 @@ add_executable(game_server
     src/logger.cpp
     src/boost_json.cpp
     src/game_state.cpp
-    src/api_handler.cpp
     src/http_server.h
     src/model.h
     src/tagged.h

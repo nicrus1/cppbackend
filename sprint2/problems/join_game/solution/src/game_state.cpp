@@ -1,5 +1,4 @@
 #include "game_state.h"
-#include <stdexcept>
 
 namespace game {
 
