@@ -22,6 +22,8 @@ add_executable(game_server
     src/request_handler.cpp
     src/logger.cpp
     src/boost_json.cpp
+    src/game_state.cpp
+    src/api_handler.cpp
     src/http_server.h
     src/model.h
     src/tagged.h
@@ -31,10 +33,10 @@ add_executable(game_server
     src/player.h
     src/players.h
     src/player_tokens.h
-    src/game_session.h
+    src/game_state.h
+    src/api_handler.h
 )
 
 target_link_libraries(game_server PRIVATE Threads::Threads ${Boost_LIBRARIES})
 
-# Устанавливаем директории для include
 target_include_directories(game_server PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
