@@ -50,19 +50,24 @@ private:
         const http::request<Body, http::basic_fields<Allocator>>& req,
         std::string_view header_name) {
 
+        std::string target(header_name);
+        std::transform(target.begin(), target.end(), target.begin(),
+                       [](unsigned char c) { return std::tolower(c); });
+
         for (auto it = req.begin(); it != req.end(); ++it) {
             std::string name = std::string(it->name_string());
-
             std::transform(name.begin(), name.end(), name.begin(),
                            [](unsigned char c) { return std::tolower(c); });
 
-            std::string target(header_name);
-
-            std::transform(target.begin(), target.end(), target.begin(),
-                           [](unsigned char c) { return std::tolower(c); });
-
             if (name == target) {
-                return std::string(it->value());
+                std::string value = std::string(it->value());
+                // Удаляем пробелы в начале и конце
+                size_t start = value.find_first_not_of(" \t\n\r");
+                if (start == std::string::npos) {
+                    return std::nullopt;
+                }
+                size_t end = value.find_last_not_of(" \t\n\r");
+                return value.substr(start, end - start + 1);
             }
         }
 
@@ -427,7 +432,7 @@ private:
                 std::move(req),
                 http::status::unauthorized,
                 "invalidToken",
-                "Authorization header is missing or invalid");
+                "Authorization header is missing");
 
             response.set(http::field::cache_control, "no-cache");
 
@@ -481,16 +486,28 @@ private:
 
             send(std::move(response));
         }
-        catch (...) {
-            auto response = MakeErrorResponse(
-                std::move(req),
-                http::status::unauthorized,
-                "unknownToken",
-                "Player not found");
+        catch (const std::runtime_error& e) {
+            if (std::string(e.what()) == "Invalid token or player not found") {
+                auto response = MakeErrorResponse(
+                    std::move(req),
+                    http::status::unauthorized,
+                    "unknownToken",
+                    "Player not found");
 
-            response.set(http::field::cache_control, "no-cache");
+                response.set(http::field::cache_control, "no-cache");
 
-            send(std::move(response));
+                send(std::move(response));
+            } else {
+                auto response = MakeErrorResponse(
+                    std::move(req),
+                    http::status::unauthorized,
+                    "unknownToken",
+                    "Player token has not been found");
+
+                response.set(http::field::cache_control, "no-cache");
+
+                send(std::move(response));
+            }
         }
     }
 
@@ -506,33 +523,30 @@ private:
 
         std::string auth_value = *auth_value_opt;
 
+        // Ищем "Bearer" (с учетом регистра)
+        const std::string bearer_prefix = "Bearer ";
+        const std::string bearer_prefix_lower = "bearer ";
+        
         std::string auth_lower = auth_value;
+        std::transform(auth_lower.begin(), auth_lower.end(), auth_lower.begin(),
+                       [](unsigned char c) { return std::tolower(c); });
 
-        std::transform(auth_lower.begin(),
-                       auth_lower.end(),
-                       auth_lower.begin(),
-                       [](unsigned char c) {
-                           return std::tolower(c);
-                       });
-
-        const std::string prefix = "bearer ";
-
-        if (auth_lower.size() < prefix.size() ||
-            auth_lower.substr(0, prefix.size()) != prefix) {
-
+        size_t bearer_pos = auth_lower.find(bearer_prefix_lower);
+        
+        if (bearer_pos == std::string::npos) {
             return std::nullopt;
         }
-
-        std::string token_str = auth_value.substr(prefix.size());
-
+        
+        // Извлекаем токен после "bearer "
+        std::string token_str = auth_value.substr(bearer_pos + bearer_prefix.length());
+        
+        // Удаляем пробелы
         size_t start = token_str.find_first_not_of(" \t\n\r");
-
         if (start == std::string::npos) {
             return std::nullopt;
         }
-
+        
         size_t end = token_str.find_last_not_of(" \t\n\r");
-
         token_str = token_str.substr(start, end - start + 1);
 
         if (token_str.empty()) {
@@ -552,9 +566,7 @@ private:
         http::response<http::string_body> response(status, req.version());
 
         response.set(http::field::content_type, content_type);
-
         response.body() = body;
-
         response.prepare_payload();
         response.keep_alive(req.keep_alive());
 
