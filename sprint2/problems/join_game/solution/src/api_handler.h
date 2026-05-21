@@ -114,7 +114,6 @@ public:
         
         const model::Token& token = token_opt.value();
         
-        // Check if token is empty
         if ((*token).empty()) {
             SendError(std::move(req), send, http::status::unauthorized,
                       "invalidToken", "Authorization header is invalid");
@@ -171,8 +170,9 @@ private:
         
         // Case-insensitive check for "Bearer "
         std::string auth_prefix = auth_value.substr(0, bearer_prefix.length());
-        std::transform(auth_prefix.begin(), auth_prefix.end(), auth_prefix.begin(),
-                       [](unsigned char c) { return std::tolower(c); });
+        for (char& c : auth_prefix) {
+            c = std::tolower(static_cast<unsigned char>(c));
+        }
         
         if (auth_prefix != "bearer ") {
             return std::nullopt;

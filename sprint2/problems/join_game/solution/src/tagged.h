@@ -53,21 +53,21 @@ public:
         return *this;
     }
 
-    // Операторы сравнения (важно для unordered_map!)
-    bool operator==(const Tagged& other) const {
-        return value_ == other.value_;
+    // Операторы сравнения (критически важно для unordered_map!)
+    friend bool operator==(const Tagged& lhs, const Tagged& rhs) {
+        return lhs.value_ == rhs.value_;
     }
     
-    bool operator!=(const Tagged& other) const {
-        return value_ != other.value_;
+    friend bool operator!=(const Tagged& lhs, const Tagged& rhs) {
+        return lhs.value_ != rhs.value_;
     }
     
-    bool operator==(const Value& other) const {
-        return value_ == other;
+    friend bool operator==(const Tagged& lhs, const Value& rhs) {
+        return lhs.value_ == rhs;
     }
     
-    bool operator!=(const Value& other) const {
-        return value_ != other;
+    friend bool operator!=(const Tagged& lhs, const Value& rhs) {
+        return lhs.value_ != rhs;
     }
 
     // Оператор сравнения (C++20)
