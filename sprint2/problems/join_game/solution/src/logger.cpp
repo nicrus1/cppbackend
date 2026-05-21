@@ -92,4 +92,8 @@ void LogDebug(const std::string& msg) {
     }) << std::endl;
 }
 
+void LogRawData(const std::string& msg) {
+    std::cout << "RAW: " << msg << std::endl;
+}
+
 }  // namespace logger
