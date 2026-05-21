@@ -2,12 +2,14 @@
 //
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/signal_set.hpp>
+#include <boost/asio/ip/address.hpp>  // Добавлено для make_address
 #include <iostream>
 #include <thread>
 
 #include "json_loader.h"
 #include "request_handler.h"
 #include "logger.h"
+#include "http_server.h"  // Добавлено
 
 using namespace std::literals;
 namespace net = boost::asio;
@@ -50,7 +52,7 @@ int main(int argc, const char* argv[]) {
             ioc.stop();
         });
 
-        http_handler::RequestHandler handler{game};
+        http_handler::RequestHandler handler{game};  // Теперь http_handler доступен через request_handler.h
 
         const auto address = net::ip::make_address("0.0.0.0");
         const unsigned short port = 8080;
