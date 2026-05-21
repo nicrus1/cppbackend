@@ -82,4 +82,14 @@ void LogError(int code, const std::string& text, const std::string& where) {
     }) << std::endl;
 }
 
+void LogDebug(const std::string& msg) {
+    boost::json::object data;
+    data["debug"] = msg;
+    std::cout << boost::json::serialize(boost::json::object{
+        {"timestamp", GetTimestamp()},
+        {"data", data},
+        {"message", "debug"}
+    }) << std::endl;
+}
+
 }  // namespace logger
