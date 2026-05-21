@@ -274,8 +274,7 @@ private:
         try {
             auto result = game_session_.JoinGame(user_name, map_id);
             
-            logger::LogDebug("JoinGame: generated token: '" + *result.token + "' for player " + std::to_string(*result.player_id));
-            logger::LogDebug("JoinGame: token length: " + std::to_string(result.token->size()));
+            logger::LogDebug("JoinGame: generated token: " + *result.token + " for player " + std::to_string(*result.player_id));
             
             boost::json::object response_body;
             response_body["authToken"] = *result.token;
@@ -323,10 +322,7 @@ private:
 
         auto token = ExtractToken(req);
 
-        logger::LogDebug("HandleGetPlayers: extracted token: " + (token ? **token : "nullopt"));
-        
         if (!token) {
-            logger::LogDebug("HandleGetPlayers: no token found in Authorization header");
             auto response = MakeErrorResponse(
                 std::move(req),
                 http::status::unauthorized,
@@ -337,11 +333,10 @@ private:
             return;
         }
 
-        logger::LogDebug("HandleGetPlayers: checking token: '" + *token + "', length: " + std::to_string(token->size()));
-        bool is_valid = game_session_.ValidateToken(*token);
-        logger::LogDebug("HandleGetPlayers: ValidateToken result: " + std::to_string(is_valid));
+        logger::LogDebug("HandleGetPlayers: extracted token: " + **token);
+        logger::LogDebug("ValidateToken result: " + std::to_string(game_session_.ValidateToken(*token)));
 
-        if (!is_valid) {
+        if (!game_session_.ValidateToken(*token)) {
             auto response = MakeErrorResponse(
                 std::move(req),
                 http::status::unauthorized,
@@ -399,34 +394,38 @@ private:
 
         auto auth_value_opt = GetHeaderValue(req, "authorization");
         if (!auth_value_opt) {
-            logger::LogDebug("ExtractToken: no Authorization header");
+            logger::LogDebug("ExtractToken: No Authorization header found");
             return std::nullopt;
         }
 
         std::string auth_value = *auth_value_opt;
-        logger::LogDebug("ExtractToken: Authorization value: '" + auth_value + "'");
-        
+        logger::LogDebug("ExtractToken: Raw auth value: '" + auth_value + "'");
+
         const std::string bearer_prefix = "Bearer ";
         
+        // Проверяем длину и префикс без учета регистра
         if (auth_value.length() < bearer_prefix.length()) {
-            logger::LogDebug("ExtractToken: auth value too short");
+            logger::LogDebug("ExtractToken: Auth value too short");
             return std::nullopt;
         }
         
-        std::string prefix = auth_value.substr(0, bearer_prefix.length());
-        std::transform(prefix.begin(), prefix.end(), prefix.begin(),
+        // Берем префикс нужной длины и приводим к нижнему регистру для сравнения
+        std::string auth_prefix = auth_value.substr(0, bearer_prefix.length());
+        std::transform(auth_prefix.begin(), auth_prefix.end(), auth_prefix.begin(),
                        [](unsigned char c) { return std::tolower(c); });
         
-        if (prefix != "bearer ") {
-            logger::LogDebug("ExtractToken: wrong prefix: '" + prefix + "'");
+        if (auth_prefix != "bearer ") {
+            logger::LogDebug("ExtractToken: Invalid auth scheme: '" + auth_prefix + "'");
             return std::nullopt;
         }
         
+        // Извлекаем токен (все что после "Bearer ")
         std::string token_str = auth_value.substr(bearer_prefix.length());
         
+        // Удаляем пробелы в начале и конце
         size_t start = token_str.find_first_not_of(" \t\n\r");
         if (start == std::string::npos) {
-            logger::LogDebug("ExtractToken: token string empty after trimming");
+            logger::LogDebug("ExtractToken: Token string is empty after trimming");
             return std::nullopt;
         }
         
@@ -434,11 +433,11 @@ private:
         token_str = token_str.substr(start, end - start + 1);
 
         if (token_str.empty()) {
-            logger::LogDebug("ExtractToken: token empty");
+            logger::LogDebug("ExtractToken: Final token string is empty");
             return std::nullopt;
         }
 
-        logger::LogDebug("ExtractToken: extracted token: '" + token_str + "'");
+        logger::LogDebug("ExtractToken: Extracted token: '" + token_str + "'");
         return model::Token{std::move(token_str)};
     }
 
