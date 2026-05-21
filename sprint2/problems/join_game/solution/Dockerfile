@@ -14,9 +14,13 @@ RUN mkdir /app/build && cd /app/build && \
     conan install .. --build=missing
 
 # Копируем исходники из директории src
+# Добавляем ARG для инвалидации кэша при изменениях
+ARG CACHE_BUST=unknown
+RUN echo "Cache bust: ${CACHE_BUST}"
+
 # Копируем все .cpp файлы
 COPY src/*.cpp /app/src/
-# Копируем все .h файлы (включая player.h, players.h, player_tokens.h, game_session.h и т.д.)
+# Копируем все .h файлы
 COPY src/*.h /app/src/
 COPY CMakeLists.txt /app/
 
