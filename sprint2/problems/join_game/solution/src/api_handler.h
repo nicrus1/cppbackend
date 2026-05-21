@@ -8,6 +8,7 @@
 #include <string>
 #include <functional>
 #include <cctype>
+#include <algorithm>
 
 namespace http_handler {
 
@@ -103,29 +104,31 @@ public:
             return;
         }
 
-        auto token = ExtractToken(req);
+        auto token_opt = ExtractToken(req);
         
-        if (!token) {
+        if (!token_opt.has_value()) {
             SendError(std::move(req), send, http::status::unauthorized,
                       "invalidToken", "Authorization header is missing");
             return;
         }
         
+        const model::Token& token = token_opt.value();
+        
         // Check if token is empty
-        if ((*token)->empty()) {
+        if ((*token).empty()) {
             SendError(std::move(req), send, http::status::unauthorized,
                       "invalidToken", "Authorization header is invalid");
             return;
         }
         
-        if (!game_state_.ValidateToken(*token)) {
+        if (!game_state_.ValidateToken(token)) {
             SendError(std::move(req), send, http::status::unauthorized,
                       "unknownToken", "Player token has not been found");
             return;
         }
 
         try {
-            auto players = game_state_.GetPlayersOnMap(*token);
+            auto players = game_state_.GetPlayersOnMap(token);
 
             if (req.method() == http::verb::head) {
                 SendResponseWithCache(std::move(req), send, http::status::ok,
@@ -166,6 +169,7 @@ private:
             return std::nullopt;
         }
         
+        // Case-insensitive check for "Bearer "
         std::string auth_prefix = auth_value.substr(0, bearer_prefix.length());
         std::transform(auth_prefix.begin(), auth_prefix.end(), auth_prefix.begin(),
                        [](unsigned char c) { return std::tolower(c); });

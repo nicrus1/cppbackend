@@ -53,17 +53,13 @@ public:
         return *this;
     }
 
-    // Операторы сравнения
-    bool operator==(const Tagged<Value, Tag>& other) const {
+    // Операторы сравнения (важно для unordered_map!)
+    bool operator==(const Tagged& other) const {
         return value_ == other.value_;
     }
     
-    bool operator!=(const Tagged<Value, Tag>& other) const {
+    bool operator!=(const Tagged& other) const {
         return value_ != other.value_;
-    }
-    
-    bool operator<(const Tagged<Value, Tag>& other) const {
-        return value_ < other.value_;
     }
     
     bool operator==(const Value& other) const {
@@ -75,7 +71,7 @@ public:
     }
 
     // Оператор сравнения (C++20)
-    auto operator<=>(const Tagged<Value, Tag>&) const = default;
+    auto operator<=>(const Tagged&) const = default;
 
 private:
     Value value_{};

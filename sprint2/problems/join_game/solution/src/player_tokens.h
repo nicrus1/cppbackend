@@ -5,7 +5,6 @@
 #include <string>
 #include <sstream>
 #include <iomanip>
-#include "logger.h"
 
 namespace model {
 
