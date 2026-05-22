@@ -4,14 +4,13 @@
 #include "players.h"
 
 #include <unordered_map>
+#include <string>
 
 namespace game {
 
-using PlayerId = uint32_t;
-
 struct JoinResult {
-    model::Token token;
-    PlayerId player_id;
+    app::Player::Id player_id;
+    app::Token token;
 };
 
 class GameState {
@@ -23,17 +22,21 @@ public:
     JoinResult JoinGame(const std::string& user_name,
                         const model::Map::Id& map_id);
 
-    bool ValidateToken(const model::Token& token) const;
+    bool ValidateToken(const app::Token& token) const;
 
     std::unordered_map<std::string, std::string>
-    GetPlayersOnMap(const model::Token& token) const;
+    GetPlayersOnMap(const app::Token& token) const;
 
-    std::unordered_map<PlayerId, app::Player*>
-    GetGameState(const model::Token& token);
+    std::unordered_map<std::string, app::Player*>
+    GetGameState(const app::Token& token);
 
 private:
     model::Game& game_;
     app::Players players_;
+
+    std::unordered_map<app::Token, app::Player*> token_to_player_;
+
+    size_t next_player_id_ = 0;
 };
 
-} // namespace game
+}  // namespace game

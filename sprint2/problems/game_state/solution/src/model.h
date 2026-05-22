@@ -191,7 +191,7 @@ public:
             inserted) {
             maps_.emplace_back(std::move(map));
         } else {
-            throw std::invalid_argument("Map with id " + *it->first + " already exists");
+            throw std::invalid_argument("Map with id " + it->first + " already exists");
         }
     }
 
