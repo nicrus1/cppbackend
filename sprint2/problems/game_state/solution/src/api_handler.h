@@ -151,6 +151,92 @@ public:
     }
 
 private:
+template <typename Body, typename Allocator, typename Send>
+void HandleGameState(
+    http::request<Body, http::basic_fields<Allocator>>&& req,
+    Send&& send) {
+
+    auto token_opt = ExtractToken(req);
+
+    if (!token_opt) {
+
+        http::response<http::string_body> response{
+            http::status::unauthorized,
+            req.version()
+        };
+
+        response.set(http::field::content_type,
+                     "application/json");
+
+        response.body() =
+            R"({"code":"invalidToken","message":"Authorization header is missing"})";
+
+        response.prepare_payload();
+
+        return send(std::move(response));
+    }
+
+    const app::Token& token = token_opt.value();
+
+    if (!game_state_.ValidateToken(token)) {
+
+        http::response<http::string_body> response{
+            http::status::unauthorized,
+            req.version()
+        };
+
+        response.set(http::field::content_type,
+                     "application/json");
+
+        response.body() =
+            R"({"code":"unknownToken","message":"Player token has not been found"})";
+
+        response.prepare_payload();
+
+        return send(std::move(response));
+    }
+
+    auto players =
+        game_state_.GetGameState(token);
+
+    json::object players_json;
+
+    for (const auto& [id, player] : players) {
+
+        json::object player_obj;
+
+        json::array pos;
+        pos.push_back(0);
+        pos.push_back(0);
+
+        json::array speed;
+        speed.push_back(0);
+        speed.push_back(0);
+
+        player_obj["pos"] = pos;
+        player_obj["speed"] = speed;
+        player_obj["dir"] = "U";
+
+        players_json[id] = player_obj;
+    }
+
+    json::object result;
+    result["players"] = players_json;
+
+    http::response<http::string_body> response{
+        http::status::ok,
+        req.version()
+    };
+
+    response.set(http::field::content_type,
+                 "application/json");
+
+    response.body() = json::serialize(result);
+
+    response.prepare_payload();
+
+    send(std::move(response));
+}
     template <typename Body, typename Allocator>
     std::optional<app::Token> ExtractToken(
         const http::request<Body,
@@ -161,7 +247,7 @@ private:
         }
 
         std::string auth =
-            req[http::field::authorization].to_string();
+    std::string(req[http::field::authorization]);
 
         const std::string bearer = "Bearer ";
 
