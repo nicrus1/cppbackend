@@ -33,6 +33,7 @@ add_executable(game_server
     src/player_tokens.h
     src/game_state.h
     src/api_handler.h
+    src/dog.h
 )
 
 target_link_libraries(game_server PRIVATE Threads::Threads ${Boost_LIBRARIES})

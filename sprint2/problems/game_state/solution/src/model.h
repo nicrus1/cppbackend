@@ -1,14 +1,14 @@
 #pragma once
-
 #include <string>
-#include <vector>
 #include <unordered_map>
-#include <stdexcept>
+#include <vector>
+
+#include "tagged.h"
 
 namespace model {
 
 using Dimension = int;
-using Coord = double;
+using Coord = Dimension;
 
 struct Point {
     Coord x, y;
@@ -27,32 +27,18 @@ struct Offset {
     Dimension dx, dy;
 };
 
-struct Speed {
-    double vx = 0.0;
-    double vy = 0.0;
-};
-
-struct Position {
-    double x = 0.0;
-    double y = 0.0;
-};
-
-enum class Direction {
-    NORTH,
-    SOUTH,
-    WEST,
-    EAST
-};
-
 class Road {
     struct HorizontalTag {
+        explicit HorizontalTag() = default;
     };
+
     struct VerticalTag {
+        explicit VerticalTag() = default;
     };
 
 public:
-    static constexpr HorizontalTag HORIZONTAL{};
-    static constexpr VerticalTag VERTICAL{};
+    constexpr static HorizontalTag HORIZONTAL{};
+    constexpr static VerticalTag VERTICAL{};
 
     Road(HorizontalTag, Point start, Coord end_x) noexcept
         : start_{start}
@@ -101,7 +87,7 @@ private:
 
 class Office {
 public:
-    using Id = std::string;
+    using Id = util::Tagged<std::string, Office>;
 
     Office(Id id, Point position, Offset offset) noexcept
         : id_{std::move(id)}
@@ -129,12 +115,12 @@ private:
 
 class Map {
 public:
-    using Id = std::string;
+    using Id = util::Tagged<std::string, Map>;
     using Roads = std::vector<Road>;
     using Buildings = std::vector<Building>;
     using Offices = std::vector<Office>;
 
-    Map(Id id, std::string name)
+    Map(Id id, std::string name) noexcept
         : id_(std::move(id))
         , name_(std::move(name)) {
     }
@@ -147,12 +133,12 @@ public:
         return name_;
     }
 
-    const Roads& GetRoads() const noexcept {
-        return roads_;
-    }
-
     const Buildings& GetBuildings() const noexcept {
         return buildings_;
+    }
+
+    const Roads& GetRoads() const noexcept {
+        return roads_;
     }
 
     const Offices& GetOffices() const noexcept {
@@ -160,23 +146,24 @@ public:
     }
 
     void AddRoad(const Road& road) {
-        roads_.push_back(road);
+        roads_.emplace_back(road);
     }
 
     void AddBuilding(const Building& building) {
-        buildings_.push_back(building);
+        buildings_.emplace_back(building);
     }
 
-    void AddOffice(Office office) {
-        offices_.push_back(std::move(office));
-    }
+    void AddOffice(Office office);
 
 private:
+    using OfficeIdToIndex = std::unordered_map<Office::Id, size_t, util::TaggedHasher<Office::Id>>;
+
     Id id_;
     std::string name_;
-
     Roads roads_;
     Buildings buildings_;
+
+    OfficeIdToIndex warehouse_id_to_index_;
     Offices offices_;
 };
 
@@ -184,34 +171,25 @@ class Game {
 public:
     using Maps = std::vector<Map>;
 
-    void AddMap(Map map) {
-        const size_t index = maps_.size();
-
-        if (auto [it, inserted] = map_id_to_index_.emplace(map.GetId(), index);
-            inserted) {
-            maps_.emplace_back(std::move(map));
-        } else {
-            throw std::invalid_argument("Map with id " + it->first + " already exists");
-        }
-    }
+    void AddMap(Map map);
 
     const Maps& GetMaps() const noexcept {
         return maps_;
     }
 
     const Map* FindMap(const Map::Id& id) const noexcept {
-        if (auto it = map_id_to_index_.find(id);
-            it != map_id_to_index_.end()) {
+        if (auto it = map_id_to_index_.find(id); it != map_id_to_index_.end()) {
             return &maps_.at(it->second);
         }
         return nullptr;
     }
 
 private:
-    using MapIdHasher = std::hash<Map::Id>;
+    using MapIdHasher = util::TaggedHasher<Map::Id>;
+    using MapIdToIndex = std::unordered_map<Map::Id, size_t, MapIdHasher>;
 
-    std::unordered_map<Map::Id, size_t, MapIdHasher> map_id_to_index_;
     std::vector<Map> maps_;
+    MapIdToIndex map_id_to_index_;
 };
 
-} // namespace model
+}  // namespace model

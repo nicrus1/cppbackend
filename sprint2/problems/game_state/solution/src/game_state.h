@@ -1,42 +1,56 @@
 #pragma once
-
 #include "model.h"
 #include "players.h"
-
+#include "player_tokens.h"
+#include "dog.h"
 #include <unordered_map>
+#include <memory>
+#include <vector>
 #include <string>
+#include <optional>
+#include <random>
 
 namespace game {
 
-struct JoinResult {
-    app::Player::Id player_id;
-    app::Token token;
-};
-
 class GameState {
 public:
-    explicit GameState(model::Game& game)
-        : game_(game) {
-    }
+    struct JoinResult {
+        model::Token token;
+        model::PlayerId player_id;
+    };
 
-    JoinResult JoinGame(const std::string& user_name,
-                        const model::Map::Id& map_id);
+    struct PlayerState {
+        std::string player_id;
+        model::Position pos;
+        model::Speed speed;
+        model::Direction dir;
+    };
 
-    bool ValidateToken(const app::Token& token) const;
-
-    std::unordered_map<std::string, std::string>
-    GetPlayersOnMap(const app::Token& token) const;
-
-    std::unordered_map<std::string, app::Player*>
-    GetGameState(const app::Token& token);
+    explicit GameState(model::Game& game) : game_(game), rng_(std::random_device{}()) {}
+    
+    JoinResult JoinGame(const std::string& user_name, const model::Map::Id& map_id);
+    
+    std::unordered_map<std::string, std::string> GetPlayersOnMap(const model::Token& token);
+    
+    bool ValidateToken(const model::Token& token) const;
+    
+    // Получить собаку игрока по токену
+    const model::Dog* GetDogByToken(const model::Token& token) const;
+    
+    // Получить состояние игры для конкретного игрока
+    std::vector<PlayerState> GetGameState(const model::Token& token) const;
+    
+    // Для тестов
+    std::unordered_map<std::string, std::string> GetPlayersOnMapForTest(const model::Map::Id& map_id) const;
 
 private:
+    model::Position GenerateRandomPositionOnMap(const model::Map& map);
+    std::optional<model::Road> SelectRandomRoad(const model::Map& map) const;
+
     model::Game& game_;
-    app::Players players_;
-
-    std::unordered_map<app::Token, app::Player*> token_to_player_;
-
-    size_t next_player_id_ = 0;
+    model::Players players_;
+    std::unordered_map<model::PlayerId, model::Dog, util::TaggedHasher<model::PlayerId>> dogs_;
+    mutable std::mt19937 rng_;
 };
 
-}  // namespace game
+} // namespace game

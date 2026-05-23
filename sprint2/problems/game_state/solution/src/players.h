@@ -1,73 +1,143 @@
 #pragma once
-
-#include "model.h"
-
-#include <string>
+#include "player.h"
+#include "player_tokens.h"
 #include <unordered_map>
+#include <memory>
 #include <vector>
 
-namespace app {
-
-using PlayerId = uint32_t;
-using Token = std::string;
-
-class Player {
-public:
-    using Id = PlayerId;
-
-    Player(Id id,
-           std::string name,
-           const model::Map::Id& map_id)
-        : id_(id)
-        , name_(std::move(name))
-        , map_id_(map_id) {
-    }
-
-    Id GetId() const {
-        return id_;
-    }
-
-    const std::string& GetName() const {
-        return name_;
-    }
-
-    const model::Map::Id& GetMapId() const {
-        return map_id_;
-    }
-
-private:
-    Id id_;
-    std::string name_;
-    model::Map::Id map_id_;
-};
+namespace model {
 
 class Players {
 public:
-    Player& AddPlayer(std::string name,
-                      const model::Map::Id& map_id,
-                      Player::Id id) {
+    Players() = default;
 
-        players_.emplace_back(id, std::move(name), map_id);
+    Players(const PlayerTokens& tokens) = delete;
+    Players& operator=(const PlayerTokens& tokens) = delete;
 
-        return players_.back();
+    Player& AddPlayer(std::string name, const Map::Id& map_id) {
+        PlayerId new_id{next_id_++};
+
+        auto player = std::make_unique<Player>(
+            new_id,
+            std::move(name),
+            map_id
+        );
+
+        Player& ref = *player;
+
+        players_.emplace(new_id, std::move(player));
+        map_players_[map_id].push_back(new_id);
+
+        return ref;
     }
 
-    std::vector<Player*> GetPlayersByMap(
-        const model::Map::Id& map_id) {
+    Token GenerateToken(const Player& player) {
+        return player_tokens_.GenerateToken(player);
+    }
 
+    Player* FindPlayer(PlayerId id) {
+        auto it = players_.find(id);
+
+        if (it == players_.end()) {
+            return nullptr;
+        }
+
+        return it->second.get();
+    }
+
+    const Player* FindPlayer(PlayerId id) const {
+        auto it = players_.find(id);
+
+        if (it == players_.end()) {
+            return nullptr;
+        }
+
+        return it->second.get();
+    }
+
+    // ИСПРАВЛЕНО
+    // Нельзя считать PlayerId{0} невалидным,
+    // потому что первый игрок имеет id = 0
+    Player* FindPlayerByToken(const Token& token) {
+        if (!player_tokens_.IsValidToken(token)) {
+            return nullptr;
+        }
+
+        PlayerId player_id = player_tokens_.FindPlayerByToken(token);
+
+        return FindPlayer(player_id);
+    }
+
+    const Player* FindPlayerByToken(const Token& token) const {
+        if (!player_tokens_.IsValidToken(token)) {
+            return nullptr;
+        }
+
+        PlayerId player_id = player_tokens_.FindPlayerByToken(token);
+
+        return FindPlayer(player_id);
+    }
+
+    bool ValidateToken(const Token& token) const {
+        return player_tokens_.IsValidToken(token);
+    }
+
+    std::vector<Player*> GetPlayersOnMap(const Map::Id& map_id) {
         std::vector<Player*> result;
 
-        for (auto& player : players_) {
-            if (player.GetMapId() == map_id) {
-                result.push_back(&player);
+        auto it = map_players_.find(map_id);
+
+        if (it != map_players_.end()) {
+            for (auto player_id : it->second) {
+                Player* player = FindPlayer(player_id);
+
+                if (player) {
+                    result.push_back(player);
+                }
             }
         }
 
         return result;
     }
 
+    std::vector<const Player*> GetPlayersOnMap(const Map::Id& map_id) const {
+        std::vector<const Player*> result;
+
+        auto it = map_players_.find(map_id);
+
+        if (it != map_players_.end()) {
+            for (auto player_id : it->second) {
+                const Player* player = FindPlayer(player_id);
+
+                if (player) {
+                    result.push_back(player);
+                }
+            }
+        }
+
+        return result;
+    }
+
+    bool HasPlayer(PlayerId id) const {
+        return players_.find(id) != players_.end();
+    }
+
 private:
-    std::vector<Player> players_;
+    uint64_t next_id_ = 0;
+
+    PlayerTokens player_tokens_;
+
+    std::unordered_map<
+        PlayerId,
+        std::unique_ptr<Player>,
+        util::TaggedHasher<PlayerId>
+    > players_;
+
+    std::unordered_map<
+        Map::Id,
+        std::vector<PlayerId>,
+        util::TaggedHasher<Map::Id>
+    > map_players_;
 };
 
-}  // namespace app
+}  // namespace model
