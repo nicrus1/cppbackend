@@ -151,61 +151,6 @@ public:
         }
     }
 
-    // GET /api/v1/game/state
-    template <typename Body, typename Allocator, typename Send>
-    void HandleGameState(http::request<Body, http::basic_fields<Allocator>>&& req, Send&& send) {
-        if (req.method() != http::verb::get && req.method() != http::verb::head) {
-            SendErrorWithAllow(std::move(req), send, http::status::method_not_allowed,
-                               "invalidMethod", "Invalid method", "GET, HEAD");
-            return;
-        }
-
-        auto token_opt = ExtractToken(req);
-        
-        if (!token_opt.has_value()) {
-            SendError(std::move(req), send, http::status::unauthorized,
-                      "invalidToken", "Authorization header is missing");
-            return;
-        }
-        
-        const model::Token& token = token_opt.value();
-        
-        if ((*token).empty()) {
-            SendError(std::move(req), send, http::status::unauthorized,
-                      "invalidToken", "Authorization header is invalid");
-            return;
-        }
-        
-        if (!game_state_.ValidateToken(token)) {
-            SendError(std::move(req), send, http::status::unauthorized,
-                      "unknownToken", "Player token has not been found");
-            return;
-        }
-
-        try {
-            auto game_state = game_state_.GetGameState(token);
-
-            if (req.method() == http::verb::head) {
-                SendResponseWithCache(std::move(req), send, http::status::ok,
-                                      "application/json", "");
-                return;
-            }
-
-            boost::json::object response_body;
-            response_body["players"] = game_state.players;
-            response_body["loot"] = game_state.loot;
-            
-            // Добавьте другие поля состояния игры по необходимости
-
-            SendResponseWithCache(std::move(req), send, http::status::ok,
-                                  "application/json", boost::json::serialize(response_body));
-        }
-        catch (const std::exception& e) {
-            SendError(std::move(req), send, http::status::unauthorized,
-                      "unknownToken", "Player not found");
-        }
-    }
-
 private:
     template <typename Body, typename Allocator>
     std::optional<model::Token> ExtractToken(
