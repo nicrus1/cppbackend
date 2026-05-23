@@ -152,49 +152,78 @@ public:
     }
 
     // GET/HEAD /api/v1/game/state
-    template <typename Body, typename Allocator, typename Send>
-    void HandleGameState(http::request<Body, http::basic_fields<Allocator>>&& req, Send&& send) {
-        if (req.method() != http::verb::get && req.method() != http::verb::head) {
-            SendErrorWithAllow(std::move(req), send, http::status::method_not_allowed,
-                               "invalidMethod", "Invalid method", "GET, HEAD");
-            return;
-        }
-
-        auto token_opt = ExtractToken(req);
-        if (!token_opt.has_value()) {
-            SendError(std::move(req), send, http::status::unauthorized,
-                      "invalidToken", "Authorization header is missing");
-            return;
-        }
-
-        const model::Token& token = token_opt.value();
-        if (!game_state_.ValidateToken(token)) {
-            SendError(std::move(req), send, http::status::unauthorized,
-                      "unknownToken", "Player token has not been found");
-            return;
-        }
-
-        if (req.method() == http::verb::head) {
-            SendResponseWithCache(std::move(req), send, http::status::ok, "application/json", "");
-            return;
-        }
-
-        auto players_state = game_state_.GetGameState(token);
-        boost::json::object players_obj;
-        for (const auto& ps : players_state) {
-            boost::json::object player_info;
-            player_info["pos"] = boost::json::array{ps.pos.x, ps.pos.y};
-            player_info["speed"] = boost::json::array{ps.speed.vx, ps.speed.vy};
-            player_info["dir"] = model::DirectionToString(ps.dir);
-            players_obj[ps.player_id] = player_info;
-        }
-
-        boost::json::object response_body;
-        response_body["players"] = players_obj;
-
-        SendResponseWithCache(std::move(req), send, http::status::ok,
-                              "application/json", boost::json::serialize(response_body));
+    // GET/HEAD /api/v1/game/state
+template <typename Body, typename Allocator, typename Send>
+void HandleGameState(http::request<Body, http::basic_fields<Allocator>>&& req, Send&& send) {
+    if (req.method() != http::verb::get && req.method() != http::verb::head) {
+        SendErrorWithAllow(std::move(req), send, http::status::method_not_allowed,
+                           "invalidMethod", "Invalid method", "GET, HEAD");
+        return;
     }
+
+    auto token_opt = ExtractToken(req);
+    
+    // Проверяем наличие заголовка Authorization
+    if (!token_opt.has_value()) {
+        SendError(std::move(req), send, http::status::unauthorized,
+                  "invalidToken", "Authorization header is missing");
+        return;
+    }
+    
+    const model::Token& token = token_opt.value();
+    
+    // Проверяем, что токен не пустой (формат Bearer <token>)
+    if ((*token).empty()) {
+        SendError(std::move(req), send, http::status::unauthorized,
+                  "invalidToken", "Authorization header is invalid");
+        return;
+    }
+    
+    // Проверяем длину токена (должен быть 32 символа для hex)
+    // Это проверка формата токена
+    if ((*token).length() != 32) {
+        SendError(std::move(req), send, http::status::unauthorized,
+                  "invalidToken", "Authorization header is invalid");
+        return;
+    }
+    
+    // Проверяем, что токен состоит только из hex-символов
+    for (char c : *token) {
+        if (!std::isxdigit(static_cast<unsigned char>(c))) {
+            SendError(std::move(req), send, http::status::unauthorized,
+                      "invalidToken", "Authorization header is invalid");
+            return;
+        }
+    }
+    
+    // Теперь проверяем, существует ли такой токен в системе
+    if (!game_state_.ValidateToken(token)) {
+        SendError(std::move(req), send, http::status::unauthorized,
+                  "unknownToken", "Player token has not been found");
+        return;
+    }
+
+    if (req.method() == http::verb::head) {
+        SendResponseWithCache(std::move(req), send, http::status::ok, "application/json", "");
+        return;
+    }
+
+    auto players_state = game_state_.GetGameState(token);
+    boost::json::object players_obj;
+    for (const auto& ps : players_state) {
+        boost::json::object player_info;
+        player_info["pos"] = boost::json::array{ps.pos.x, ps.pos.y};
+        player_info["speed"] = boost::json::array{ps.speed.vx, ps.speed.vy};
+        player_info["dir"] = model::DirectionToString(ps.dir);
+        players_obj[ps.player_id] = player_info;
+    }
+
+    boost::json::object response_body;
+    response_body["players"] = players_obj;
+
+    SendResponseWithCache(std::move(req), send, http::status::ok,
+                          "application/json", boost::json::serialize(response_body));
+}
 
 private:
     template <typename Body, typename Allocator>
