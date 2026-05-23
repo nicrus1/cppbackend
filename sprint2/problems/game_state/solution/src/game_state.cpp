@@ -37,13 +37,16 @@ GameState::JoinResult GameState::JoinGame(const std::string& user_name, const mo
     model::Token token = players_.GenerateToken(player);
 
     // Генерируем собаку
-    Position start_pos = GenerateRandomPositionOnMap(*map);
-    uint64_t dog_id = player.GetId().operator*(); // или next_dog_id_++
+    model::Position start_pos = GenerateRandomPositionOnMap(*map);  // ← model::Position
+    uint64_t dog_id = *player.GetId();
     model::Dog dog(dog_id, start_pos);
     dogs_.emplace(player.GetId(), std::move(dog));
     player.SetDogId(dog_id);
 
-    return {std::move(token), player.GetId()};
+    JoinResult result;
+    result.token = std::move(token);
+    result.player_id = player.GetId();
+    return result;
 }
 
 const model::Dog* GameState::GetDogByToken(const model::Token& token) const {
@@ -81,6 +84,29 @@ std::vector<GameState::PlayerState> GameState::GetGameState(const model::Token& 
 
 bool GameState::ValidateToken(const model::Token& token) const {
     return players_.ValidateToken(token);
+}
+
+std::unordered_map<std::string, std::string> GameState::GetPlayersOnMapForTest(const model::Map::Id& map_id) const {
+    auto players_on_map = players_.GetPlayersOnMap(map_id);
+    std::unordered_map<std::string, std::string> result;
+    for (auto* p : players_on_map) {
+        result[std::to_string(*p->GetId())] = p->GetName();
+    }
+    return result;
+}
+
+std::unordered_map<std::string, std::string> GameState::GetPlayersOnMap(const model::Token& token) {
+    model::Player* player = players_.FindPlayerByToken(token);
+    if (!player) {
+        throw std::runtime_error("Invalid token or player not found");
+    }
+    
+    auto players_on_map = players_.GetPlayersOnMap(player->GetMapId());
+    std::unordered_map<std::string, std::string> result;
+    for (auto* p : players_on_map) {
+        result[std::to_string(*p->GetId())] = p->GetName();
+    }
+    return result;
 }
 
 } // namespace game
