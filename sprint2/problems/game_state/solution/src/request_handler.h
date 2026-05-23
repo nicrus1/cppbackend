@@ -43,6 +43,12 @@ public:
             return;
         }
 
+        // GAME STATE endpoint (NEW!)
+        if (target == "/api/v1/game/state") {
+            api_handler_.HandleGameState(std::move(req), std::forward<Send>(send));
+            return;
+        }
+
         // MAPS endpoints
         if (target == "/api/v1/maps") {
             if (method != "GET") {
