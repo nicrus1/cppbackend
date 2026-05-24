@@ -189,19 +189,19 @@ private:
     }
 
     template <typename Body, typename Allocator, typename Send>
-    void SendResponse(http::request<Body, http::basic_fields<Allocator>>&& req,
-                      Send&& send,
-                      http::status status,
-                      std::string_view content_type,
-                      std::string_view body) {
-        http::response<http::string_body> response(status, req.version());
-        response.set(http::field::content_type, content_type);
-	response.set(http::field::cache_control, "no-cache");
-        response.body() = body;
-        response.prepare_payload();
-        response.keep_alive(req.keep_alive());
-        send(std::move(response));
-    }
+	void SendResponse(http::request<Body, http::basic_fields<Allocator>>&& req,
+                  Send&& send,
+                  http::status status,
+                  std::string_view content_type,
+                  std::string_view body) {
+    http::response<http::string_body> response(status, req.version());
+    response.set(http::field::content_type, content_type);
+    response.set(http::field::cache_control, "no-cache");  // Важно!
+    response.body() = body;
+    response.prepare_payload();
+    response.keep_alive(req.keep_alive());
+    send(std::move(response));
+}
 
     template <typename Body, typename Allocator, typename Send>
     void SendError(http::request<Body, http::basic_fields<Allocator>>&& req,

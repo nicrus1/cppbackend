@@ -1,7 +1,9 @@
 #include "game_state.h"
+#include "logger.h"
 #include <random>
 #include <cmath>
 #include <algorithm>
+#include <sstream>
 
 namespace game {
 
@@ -64,9 +66,12 @@ void GameState::MoveDogHorizontally(model::Dog& dog, const model::Map* map, doub
         }
         
         dog.SetPosition({new_x, pos.y});
+        logger::LogDebug("MoveDogHorizontally: new_x=" + std::to_string(new_x) + 
+                         ", stopped=" + std::to_string(new_x <= min_x || new_x >= max_x));
     } else {
         // На вертикальной дороге горизонтальное движение невозможно
         dog.Stop();
+        logger::LogDebug("MoveDogHorizontally: dog on vertical road, stopping");
     }
 }
 
@@ -92,9 +97,12 @@ void GameState::MoveDogVertically(model::Dog& dog, const model::Map* map, double
         }
         
         dog.SetPosition({pos.x, new_y});
+        logger::LogDebug("MoveDogVertically: new_y=" + std::to_string(new_y) + 
+                         ", stopped=" + std::to_string(new_y <= min_y || new_y >= max_y));
     } else {
         // На горизонтальной дороге вертикальное движение невозможно
         dog.Stop();
+        logger::LogDebug("MoveDogVertically: dog on horizontal road, stopping");
     }
 }
 
@@ -110,6 +118,7 @@ void GameState::UpdateDogPosition(model::Dog& dog, const model::Map* map, double
     const auto* road_seg = FindRoadForDog(dog, map);
     if (!road_seg) {
         dog.Stop();
+        logger::LogDebug("UpdateDogPosition: dog not on road, stopping");
         return;
     }
     
@@ -118,11 +127,13 @@ void GameState::UpdateDogPosition(model::Dog& dog, const model::Map* map, double
     // Проверяем, что направление движения соответствует типу дороги
     if (std::abs(speed.vx) > 1e-9 && !road.IsHorizontal()) {
         dog.Stop();
+        logger::LogDebug("UpdateDogPosition: horizontal movement on vertical road, stopping");
         return;
     }
     
     if (std::abs(speed.vy) > 1e-9 && !road.IsVertical()) {
         dog.Stop();
+        logger::LogDebug("UpdateDogPosition: vertical movement on horizontal road, stopping");
         return;
     }
     
@@ -142,15 +153,41 @@ void GameState::UpdateDogPosition(model::Dog& dog, const model::Map* map, double
 void GameState::UpdateTime(std::chrono::milliseconds delta) {
     double delta_seconds = delta.count() / 1000.0;
     
+    logger::LogDebug("=== UpdateTime called with delta_seconds = " + std::to_string(delta_seconds) + " ===");
+    logger::LogDebug("Total dogs: " + std::to_string(dogs_.size()));
+    
     // Обновляем позиции всех собак
+    int dog_count = 0;
     for (auto& [player_id, dog] : dogs_) {
+        dog_count++;
         const model::Player* player = players_.FindPlayer(player_id);
-        if (!player) continue;
+        if (!player) {
+            logger::LogDebug("  Dog " + std::to_string(dog_count) + ": player not found");
+            continue;
+        }
         
         const model::Map* map = game_.FindMap(player->GetMapId());
-        if (!map) continue;
+        if (!map) {
+            logger::LogDebug("  Dog " + std::to_string(dog_count) + ": map not found");
+            continue;
+        }
+        
+        const auto& speed = dog.GetSpeed();
+        auto pos = dog.GetPosition();
+        
+        logger::LogDebug("  Dog " + std::to_string(*player_id) + 
+                         " (player: " + player->GetName() + ")" +
+                         " speed: vx=" + std::to_string(speed.vx) + 
+                         " vy=" + std::to_string(speed.vy) +
+                         " pos before: x=" + std::to_string(pos.x) +
+                         " y=" + std::to_string(pos.y));
         
         UpdateDogPosition(dog, map, delta_seconds);
+        
+        auto new_pos = dog.GetPosition();
+        logger::LogDebug("  Dog " + std::to_string(*player_id) + 
+                         " pos after: x=" + std::to_string(new_pos.x) +
+                         " y=" + std::to_string(new_pos.y));
     }
 }
 
@@ -166,6 +203,9 @@ GameState::JoinResult GameState::JoinGame(const std::string& user_name, const mo
     model::Dog dog(dog_id, start_pos);
     dogs_.emplace(player.GetId(), std::move(dog));
     player.SetDogId(dog_id);
+
+    logger::LogDebug("Player " + user_name + " joined map " + *map_id + 
+                     " at position (" + std::to_string(start_pos.x) + ", " + std::to_string(start_pos.y) + ")");
 
     JoinResult result;
     result.token = std::move(token);
@@ -208,6 +248,9 @@ void GameState::SetDogDirection(const model::Token& token, model::Direction dir)
     
     double speed = map->GetDogSpeed();
     dog->SetSpeedFromDirection(dir, speed);
+    
+    logger::LogDebug("SetDogDirection: direction=" + model::DirectionToString(dir) + 
+                     ", speed=" + std::to_string(speed));
 }
 
 void GameState::StopDog(const model::Token& token) {
@@ -216,6 +259,7 @@ void GameState::StopDog(const model::Token& token) {
         throw std::runtime_error("Dog not found");
     }
     dog->Stop();
+    logger::LogDebug("StopDog called");
 }
 
 std::vector<GameState::PlayerState> GameState::GetGameState(const model::Token& token) const {
