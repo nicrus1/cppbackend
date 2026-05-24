@@ -4,7 +4,6 @@
 #include "players.h"
 #include "player_tokens.h"
 #include "dog.h"
-#include "road_map.h"
 
 #include <unordered_map>
 #include <memory>
@@ -75,10 +74,6 @@ private:
     model::Position GenerateStartPosition(
         const model::Map& map);
 
-    std::optional<model::Road>
-    SelectFirstRoad(
-        const model::Map& map) const;
-
     void MoveDog(
         model::Dog& dog,
         const model::Map& map,
@@ -86,22 +81,9 @@ private:
 
 private:
     model::Game& game_;
-
     model::Players players_;
-
-    std::unordered_map<
-        model::PlayerId,
-        model::Dog,
-        util::TaggedHasher<model::PlayerId>
-    > dogs_;
-
-    mutable std::mt19937 rng_;
-
-    mutable std::unordered_map<
-        model::Map::Id,
-        model::RoadMap,
-        util::TaggedHasher<model::Map::Id>
-    > road_maps_;
+    std::unordered_map<model::PlayerId, model::Dog, util::TaggedHasher<model::PlayerId>> dogs_;
+    std::mt19937 rng_;
 };
 
 } // namespace game
