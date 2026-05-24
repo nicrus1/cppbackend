@@ -56,7 +56,7 @@ public:
             
             boost::json::object res_obj;
             res_obj["authToken"] = *join_result.token;
-            res_obj["playerId"] = *join_result.player_id; // Сериализуем как число int
+            res_obj["playerId"] = *join_result.player_id;
 
             SendResponse(std::move(req), send, http::status::ok, boost::json::serialize(res_obj));
         } catch (...) {
@@ -100,6 +100,12 @@ public:
         }
 
         SendResponse(std::move(req), send, http::status::ok, boost::json::serialize(res_obj));
+    }
+
+    // Совместимость со старым вызовом в request_handler.h
+    template <typename Body, typename Allocator, typename Send>
+    void HandleGetPlayers(http::request<Body, http::basic_fields<Allocator>>&& req, Send&& send) {
+        HandlePlayersList(std::move(req), std::forward<Send>(send));
     }
 
     template <typename Body, typename Allocator, typename Send>
@@ -223,7 +229,6 @@ public:
 
         try {
             auto obj = boost::json::parse(req.body()).as_object();
-            // КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем тип строго. bool не должен проходить как int64.
             if (!obj.contains("timeDelta") || !obj.at("timeDelta").is_int64() || obj.at("timeDelta").is_bool()) {
                 SendError(std::move(req), send, http::status::bad_request,
                           "invalidArgument", "Failed to parse tick request JSON");
@@ -256,7 +261,6 @@ private:
         }
 
         std::string token_str = auth_val.substr(prefix.size());
-        // Удаляем лишние пробелы по краям, если они есть
         token_str.erase(token_str.begin(), std::find_if(token_str.begin(), token_str.end(), [](unsigned char ch) {
             return !std::isspace(ch);
         }));
