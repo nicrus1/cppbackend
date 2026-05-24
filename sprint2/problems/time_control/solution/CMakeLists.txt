@@ -34,9 +34,7 @@ add_executable(game_server
     src/game_state.h
     src/api_handler.h
     src/dog.h
-    src/road_map.h
 )
-
 
 target_link_libraries(game_server PRIVATE Threads::Threads ${Boost_LIBRARIES})
 
