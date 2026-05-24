@@ -137,19 +137,35 @@ void GameState::ProcessTick(int64_t time_delta_ms) {
         }
 
         auto old_pos = dog.GetPosition();
+        auto old_speed = dog.GetSpeed();
 
+        // Update position based on current speed
         UpdateDogPosition(dog, *map, delta_seconds);
 
         const auto& new_pos = dog.GetPosition();
-        const auto& speed = dog.GetSpeed();
+        const auto& new_speed = dog.GetSpeed();
 
-        // Если собака упёрлась в границу и не сдвинулась —
-        // останавливаем её.
-        if (speed.vx != 0.0 || speed.vy != 0.0) {
-            if (std::abs(old_pos.x - new_pos.x) < 1e-9 &&
-                std::abs(old_pos.y - new_pos.y) < 1e-9) {
-
-                dog.Stop();
+        // If the dog is at the boundary and has non-zero speed, stop it
+        if (new_speed.vx != 0.0 || new_speed.vy != 0.0) {
+            // Check if we're at a boundary
+            const auto* road_seg = FindRoadAt(*map, new_pos.x, new_pos.y);
+            if (road_seg) {
+                bool at_boundary = false;
+                if (road_seg->road.IsHorizontal()) {
+                    if ((new_speed.vx > 0 && new_pos.x >= road_seg->right) ||
+                        (new_speed.vx < 0 && new_pos.x <= road_seg->left)) {
+                        at_boundary = true;
+                    }
+                } else {
+                    if ((new_speed.vy > 0 && new_pos.y >= road_seg->bottom) ||
+                        (new_speed.vy < 0 && new_pos.y <= road_seg->top)) {
+                        at_boundary = true;
+                    }
+                }
+                
+                if (at_boundary) {
+                    dog.Stop();
+                }
             }
         }
     }

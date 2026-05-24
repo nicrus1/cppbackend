@@ -54,22 +54,22 @@ public:
     void SetDirection(Direction dir) { dir_ = dir; }
     
     void SetSpeedFromDirection(Direction dir, double speed) {
-        switch (dir) {
-            case Direction::NORTH:
-                speed_ = {0.0, -speed};
-                break;
-            case Direction::SOUTH:
-                speed_ = {0.0, speed};
-                break;
-            case Direction::WEST:
-                speed_ = {-speed, 0.0};
-                break;
-            case Direction::EAST:
-                speed_ = {speed, 0.0};
-                break;
-        }
-        dir_ = dir;
+    switch (dir) {
+        case Direction::NORTH:
+            speed_ = {0.0, -speed};
+            break;
+        case Direction::SOUTH:
+            speed_ = {0.0, speed};
+            break;
+        case Direction::WEST:
+            speed_ = {-speed, 0.0};
+            break;
+        case Direction::EAST:
+            speed_ = {speed, 0.0};
+            break;
     }
+    dir_ = dir;
+}
     
     void Stop() {
         speed_ = {0.0, 0.0};
