@@ -196,6 +196,7 @@ private:
                       std::string_view body) {
         http::response<http::string_body> response(status, req.version());
         response.set(http::field::content_type, content_type);
+	response.set(http::field::cache_control, "no-cache");
         response.body() = body;
         response.prepare_payload();
         response.keep_alive(req.keep_alive());

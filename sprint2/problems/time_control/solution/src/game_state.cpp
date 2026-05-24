@@ -48,30 +48,33 @@ void GameState::MoveDogHorizontally(model::Dog& dog, const model::Map* map, doub
     
     auto pos = dog.GetPosition();
     double new_x = pos.x + delta_x;
+    const auto& road = road_seg->road;
     
-    // Проверяем границы
-    if (road_seg->road.IsHorizontal()) {
-        new_x = std::clamp(new_x, road_seg->left + 0.4, road_seg->right - 0.4);
-    } else {
-        // Вертикальная дорога - движение по горизонтали ограничено
-        new_x = std::clamp(new_x, road_seg->left + 0.4, road_seg->right - 0.4);
-    }
-    
-    // Проверяем, не вышли ли за пределы дороги по Y
-    if (road_seg->road.IsHorizontal()) {
-        if (std::abs(pos.y - road_seg->road.GetStart().y) > 0.4) {
-            // Собака сошла с дороги - возвращаем на место
-            return;
-        }
-    } else {
-        if (new_x < road_seg->left || new_x > road_seg->right) {
-            // Достигли границы - останавливаем
+    if (road.IsHorizontal()) {
+        // Горизонтальная дорога - движение вдоль оси X
+        double min_x = std::min(road.GetStart().x, road.GetEnd().x);
+        double max_x = std::max(road.GetStart().x, road.GetEnd().x);
+        
+        if (new_x < min_x) {
+            new_x = min_x;
             dog.Stop();
-            return;
+        } else if (new_x > max_x) {
+            new_x = max_x;
+            dog.Stop();
         }
+        
+        // Y координата должна оставаться на оси дороги
+        double expected_y = road.GetStart().y;
+        if (std::abs(pos.y - expected_y) > 0.4) {
+            dog.SetPosition({new_x, expected_y});
+        } else {
+            dog.SetPosition({new_x, pos.y});
+        }
+    } else {
+        // Вертикальная дорога - движение по горизонтали невозможно
+        // Собака не может двигаться горизонтально на вертикальной дороге
+        dog.Stop();
     }
-    
-    dog.SetPosition({new_x, pos.y});
 }
 
 void GameState::MoveDogVertically(model::Dog& dog, const model::Map* map, double delta_y) {
@@ -80,27 +83,32 @@ void GameState::MoveDogVertically(model::Dog& dog, const model::Map* map, double
     
     auto pos = dog.GetPosition();
     double new_y = pos.y + delta_y;
+    const auto& road = road_seg->road;
     
-    // Проверяем границы
-    if (road_seg->road.IsVertical()) {
-        new_y = std::clamp(new_y, road_seg->top + 0.4, road_seg->bottom - 0.4);
-    } else {
-        new_y = std::clamp(new_y, road_seg->top + 0.4, road_seg->bottom - 0.4);
-    }
-    
-    // Проверяем, не вышли ли за пределы дороги по X
-    if (road_seg->road.IsVertical()) {
-        if (std::abs(pos.x - road_seg->road.GetStart().x) > 0.4) {
-            return;
-        }
-    } else {
-        if (new_y < road_seg->top || new_y > road_seg->bottom) {
+    if (road.IsVertical()) {
+        // Вертикальная дорога - движение вдоль оси Y
+        double min_y = std::min(road.GetStart().y, road.GetEnd().y);
+        double max_y = std::max(road.GetStart().y, road.GetEnd().y);
+        
+        if (new_y < min_y) {
+            new_y = min_y;
             dog.Stop();
-            return;
+        } else if (new_y > max_y) {
+            new_y = max_y;
+            dog.Stop();
         }
+        
+        // X координата должна оставаться на оси дороги
+        double expected_x = road.GetStart().x;
+        if (std::abs(pos.x - expected_x) > 0.4) {
+            dog.SetPosition({expected_x, new_y});
+        } else {
+            dog.SetPosition({pos.x, new_y});
+        }
+    } else {
+        // Горизонтальная дорога - движение по вертикали невозможно
+        dog.Stop();
     }
-    
-    dog.SetPosition({pos.x, new_y});
 }
 
 void GameState::UpdateDogPosition(model::Dog& dog, const model::Map* map, double delta_seconds) {
@@ -111,9 +119,33 @@ void GameState::UpdateDogPosition(model::Dog& dog, const model::Map* map, double
         return; // Собака стоит на месте
     }
     
+    // Находим дорогу, на которой находится собака
+    const auto* road_seg = FindRoadForDog(dog, map);
+    if (!road_seg) {
+        // Собака не на дороге - останавливаем
+        dog.Stop();
+        return;
+    }
+    
+    // Проверяем, соответствует ли направление движения типу дороги
+    const auto& road = road_seg->road;
+    
+    if (std::abs(speed.vx) > 1e-9 && !road.IsHorizontal()) {
+        // Горизонтальное движение на вертикальной дороге - останавливаем
+        dog.Stop();
+        return;
+    }
+    
+    if (std::abs(speed.vy) > 1e-9 && !road.IsVertical()) {
+        // Вертикальное движение на горизонтальной дороге - останавливаем
+        dog.Stop();
+        return;
+    }
+    
     double delta_x = speed.vx * delta_seconds;
     double delta_y = speed.vy * delta_seconds;
     
+    // Двигаемся строго по направлению
     if (std::abs(delta_x) > 1e-9) {
         MoveDogHorizontally(dog, map, delta_x);
     }
