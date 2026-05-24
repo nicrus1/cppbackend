@@ -3,6 +3,7 @@
 #include <boost/asio/signal_set.hpp>
 #include <iostream>
 #include <thread>
+#include <filesystem>
 
 #include "json_loader.h"
 #include "request_handler.h"
@@ -30,8 +31,8 @@ void RunWorkers(unsigned n, const Fn& fn) {
 int main(int argc, const char* argv[]) {
     logger::InitLogging();
     
-    if (argc != 2) {
-        std::cerr << "Usage: game_server <game-config-json>"sv << std::endl;
+    if (argc != 2 && argc != 3) {
+        std::cerr << "Usage: game_server <game-config-json> [static-dir]"sv << std::endl;
         return EXIT_FAILURE;
     }
     
@@ -40,6 +41,17 @@ int main(int argc, const char* argv[]) {
     
     try {
         model::Game game = json_loader::LoadGame(argv[1]);
+        
+        // Путь к статическим файлам
+        std::string static_dir = "/app/static";
+        if (argc == 3) {
+            static_dir = argv[2];
+        } else {
+            // Проверяем наличие папки static в текущей директории
+            if (std::filesystem::exists("static")) {
+                static_dir = "static";
+            }
+        }
 
         const unsigned num_threads = std::thread::hardware_concurrency();
         net::io_context ioc(num_threads);
@@ -49,7 +61,7 @@ int main(int argc, const char* argv[]) {
             ioc.stop();
         });
 
-        http_handler::RequestHandler handler{game};
+        http_handler::RequestHandler handler{game, static_dir};
 
         const auto address = net::ip::make_address("0.0.0.0");
         const unsigned short port = 8080;

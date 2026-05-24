@@ -5,6 +5,9 @@
 #include "logger.h"
 #include <boost/json.hpp>
 #include <optional>
+#include <filesystem>
+#include <fstream>
+#include <sstream>
 
 namespace http_handler {
 
@@ -26,36 +29,46 @@ public:
         std::string target = std::string(req.target());
         std::string method = std::string(req.method_string());
 
+        // Убираем query parameters
         auto query_pos = target.find('?');
         if (query_pos != std::string::npos) {
             target = target.substr(0, query_pos);
         }
+        
+        // Убираем ведущий слеш для статических файлов
+        std::string path = target;
+        if (!path.empty() && path[0] == '/') {
+            path = path.substr(1);
+        }
 
-        // JOIN endpoint
+        // Проверка для API запросов с неверной версией
+        if (target.find("/api/v") == 0 && target.find("/api/v1/") != 0) {
+            SendError(std::move(req), send, http::status::bad_request,
+                      "badRequest", "Invalid API version");
+            return;
+        }
+
+        // API endpoints
         if (target == "/api/v1/game/join") {
             api_handler_.HandleJoin(std::move(req), std::forward<Send>(send));
             return;
         }
 
-        // PLAYERS endpoint
         if (target == "/api/v1/game/players") {
             api_handler_.HandleGetPlayers(std::move(req), std::forward<Send>(send));
             return;
         }
 
-        // GAME STATE endpoint
         if (target == "/api/v1/game/state") {
             api_handler_.HandleGameState(std::move(req), std::forward<Send>(send));
             return;
         }
         
-        // PLAYER ACTION endpoint
         if (target == "/api/v1/game/player/action") {
             api_handler_.HandlePlayerAction(std::move(req), std::forward<Send>(send));
             return;
         }
 
-        // MAPS endpoints
         if (target == "/api/v1/maps") {
             if (method != "GET") {
                 SendError(std::move(req), send, http::status::method_not_allowed,
@@ -67,7 +80,6 @@ public:
             return;
         }
 
-        // Single map endpoint
         const std::string prefix = "/api/v1/maps/";
         if (target.find(prefix) == 0) {
             if (method != "GET") {
@@ -81,7 +93,7 @@ public:
                 map_id_str.pop_back();
             }
 
-            auto query_pos = map_id_str.find('?');
+            query_pos = map_id_str.find('?');
             if (query_pos != std::string::npos) {
                 map_id_str = map_id_str.substr(0, query_pos);
             }
@@ -100,11 +112,76 @@ public:
             return;
         }
 
-        // Not found
-        SendError(std::move(req), send, http::status::not_found, "badRequest", "Not found");
+        // Статические файлы
+        HandleStaticFile(std::move(req), std::forward<Send>(send), path);
     }
 
 private:
+    template <typename Body, typename Allocator, typename Send>
+    void HandleStaticFile(http::request<Body, http::basic_fields<Allocator>>&& req,
+                          Send&& send,
+                          const std::string& path) {
+        // Только GET для статики
+        if (req.method() != http::verb::get) {
+            SendError(std::move(req), send, http::status::method_not_allowed,
+                      "badRequest", "Method not allowed");
+            return;
+        }
+        
+        // Если путь пустой - index.html
+        std::string file_path = path.empty() ? "index.html" : path;
+        
+        // Защита от path traversal
+        if (file_path.find("..") != std::string::npos) {
+            SendStaticNotFound(std::move(req), send);
+            return;
+        }
+        
+        // Полный путь в Docker контейнере
+        std::filesystem::path full_path = std::filesystem::path("/app/static") / file_path;
+        
+        // Пробуем открыть файл
+        std::ifstream file(full_path, std::ios::binary);
+        if (!file.is_open()) {
+            SendStaticNotFound(std::move(req), send);
+            return;
+        }
+        
+        // Определяем content type по расширению
+        std::string content_type = "text/plain";
+        std::string ext = full_path.extension().string();
+        if (ext == ".html") content_type = "text/html";
+        else if (ext == ".css") content_type = "text/css";
+        else if (ext == ".js") content_type = "application/javascript";
+        else if (ext == ".svg") content_type = "image/svg+xml";
+        else if (ext == ".png") content_type = "image/png";
+        else if (ext == ".jpg" || ext == ".jpeg") content_type = "image/jpeg";
+        
+        // Читаем файл
+        std::stringstream buffer;
+        buffer << file.rdbuf();
+        std::string body = buffer.str();
+        
+        // Отправляем ответ
+        http::response<http::string_body> response(http::status::ok, req.version());
+        response.set(http::field::content_type, content_type);
+        response.body() = body;
+        response.prepare_payload();
+        response.keep_alive(req.keep_alive());
+        send(std::move(response));
+    }
+    
+    template <typename Body, typename Allocator, typename Send>
+    void SendStaticNotFound(http::request<Body, http::basic_fields<Allocator>>&& req,
+                            Send&& send) {
+        http::response<http::string_body> response(http::status::not_found, req.version());
+        response.set(http::field::content_type, "text/plain");
+        response.body() = "404 Not Found";
+        response.prepare_payload();
+        response.keep_alive(req.keep_alive());
+        send(std::move(response));
+    }
+
     template <typename Body, typename Allocator, typename Send>
     void SendResponse(http::request<Body, http::basic_fields<Allocator>>&& req,
                       Send&& send,
