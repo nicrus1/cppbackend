@@ -1,9 +1,9 @@
 #include "game_state.h"
 
-#include <random>
-#include <cmath>
 #include <algorithm>
+#include <cmath>
 #include <iostream>
+#include <random>
 
 namespace game {
 
@@ -14,7 +14,7 @@ std::optional<model::Road> GameState::SelectFirstRoad(const model::Map& map) con
         return std::nullopt;
     }
 
-    return roads[0];
+    return roads.front();
 }
 
 model::Position GameState::GenerateStartPosition(const model::Map& map) {
@@ -24,8 +24,7 @@ model::Position GameState::GenerateStartPosition(const model::Map& map) {
         return {0.0, 0.0};
     }
 
-    const auto& road = *road_opt;
-    auto start = road.GetStart();
+    const auto start = road_opt->GetStart();
 
     return {
         static_cast<double>(start.x),
@@ -47,7 +46,10 @@ const model::RoadMap::RoadSegment* GameState::FindRoadAt(
             road_map.AddRoad(road);
         }
 
-        it = road_maps_.emplace(map.GetId(), std::move(road_map)).first;
+        it = road_maps_.emplace(
+            map.GetId(),
+            std::move(road_map)
+        ).first;
     }
 
     return it->second.FindRoad(x, y);
@@ -65,7 +67,11 @@ model::Position GameState::MoveDogWithCollision(
         return pos;
     }
 
-    const auto* road_seg = FindRoadAt(map, pos.x, pos.y);
+    const auto* road_seg = FindRoadAt(
+        map,
+        pos.x,
+        pos.y
+    );
 
     if (!road_seg) {
         return pos;
@@ -75,22 +81,25 @@ model::Position GameState::MoveDogWithCollision(
     double new_y = pos.y + speed.vy * delta_seconds;
 
     if (road_seg->road.IsHorizontal()) {
+
         new_x = std::clamp(
             new_x,
             static_cast<double>(road_seg->left),
             static_cast<double>(road_seg->right)
         );
 
-        // Движение только по X
+        // Y не меняем
         new_y = pos.y;
+
     } else {
+
         new_y = std::clamp(
             new_y,
             static_cast<double>(road_seg->top),
             static_cast<double>(road_seg->bottom)
         );
 
-        // Движение только по Y
+        // X не меняем
         new_x = pos.x;
     }
 
@@ -102,12 +111,14 @@ void GameState::UpdateDogPosition(
     const model::Map& map,
     double delta_seconds) {
 
-    model::Position new_pos =
-        MoveDogWithCollision(dog, map, delta_seconds);
+    auto new_pos = MoveDogWithCollision(
+        dog,
+        map,
+        delta_seconds
+    );
 
     dog.SetPosition(new_pos);
 
-    // Если дошли до границы дороги — останавливаем
     const auto* road_seg = FindRoadAt(
         map,
         new_pos.x,
@@ -122,11 +133,14 @@ void GameState::UpdateDogPosition(
     const auto& speed = dog.GetSpeed();
 
     if (road_seg->road.IsHorizontal()) {
+
         if ((speed.vx > 0.0 && new_pos.x >= road_seg->right) ||
             (speed.vx < 0.0 && new_pos.x <= road_seg->left)) {
             dog.Stop();
         }
+
     } else {
+
         if ((speed.vy > 0.0 && new_pos.y >= road_seg->bottom) ||
             (speed.vy < 0.0 && new_pos.y <= road_seg->top)) {
             dog.Stop();
@@ -139,10 +153,11 @@ void GameState::ProcessTick(int64_t time_delta_ms) {
         return;
     }
 
-    double delta_seconds =
+    const double delta_seconds =
         static_cast<double>(time_delta_ms) / 1000.0;
 
     for (auto& [player_id, dog] : dogs_) {
+
         const auto* player =
             players_.FindPlayer(player_id);
 
@@ -169,7 +184,8 @@ GameState::JoinResult GameState::JoinGame(
     const std::string& user_name,
     const model::Map::Id& map_id) {
 
-    const model::Map* map = game_.FindMap(map_id);
+    const model::Map* map =
+        game_.FindMap(map_id);
 
     if (!map) {
         throw std::runtime_error("Map not found");
@@ -188,7 +204,10 @@ GameState::JoinResult GameState::JoinGame(
 
     model::Dog dog(dog_id, start_pos);
 
-    dogs_.emplace(player.GetId(), std::move(dog));
+    dogs_.emplace(
+        player.GetId(),
+        std::move(dog)
+    );
 
     player.SetDogId(dog_id);
 
@@ -268,12 +287,18 @@ void GameState::SetDogDirection(
         throw std::runtime_error("Map not found");
     }
 
-    double speed = map->GetDogSpeed();
+    const double speed =
+        map->GetDogSpeed();
 
-    dog->SetSpeedFromDirection(dir, speed);
+    dog->SetSpeedFromDirection(
+        dir,
+        speed
+    );
 }
 
-void GameState::StopDog(const model::Token& token) {
+void GameState::StopDog(
+    const model::Token& token) {
+
     model::Dog* dog =
         GetDogByTokenMutable(token);
 
@@ -285,7 +310,8 @@ void GameState::StopDog(const model::Token& token) {
 }
 
 std::vector<GameState::PlayerState>
-GameState::GetGameState(const model::Token& token) const {
+GameState::GetGameState(
+    const model::Token& token) const {
 
     const model::Player* player =
         players_.FindPlayerByToken(token);
@@ -297,21 +323,26 @@ GameState::GetGameState(const model::Token& token) const {
     std::vector<PlayerState> result;
 
     auto players_on_map =
-        players_.GetPlayersOnMap(player->GetMapId());
+        players_.GetPlayersOnMap(
+            player->GetMapId()
+        );
 
     for (const auto* p : players_on_map) {
+
         auto it = dogs_.find(p->GetId());
 
-        if (it != dogs_.end()) {
-            const auto& d = it->second;
-
-            result.push_back({
-                std::to_string(*p->GetId()),
-                d.GetPosition(),
-                d.GetSpeed(),
-                d.GetDirection()
-            });
+        if (it == dogs_.end()) {
+            continue;
         }
+
+        const auto& d = it->second;
+
+        result.push_back({
+            std::to_string(*p->GetId()),
+            d.GetPosition(),
+            d.GetSpeed(),
+            d.GetDirection()
+        });
     }
 
     return result;
@@ -349,11 +380,14 @@ GameState::GetPlayersOnMap(
 
     if (!player) {
         throw std::runtime_error(
-            "Invalid token or player not found");
+            "Invalid token or player not found"
+        );
     }
 
     auto players_on_map =
-        players_.GetPlayersOnMap(player->GetMapId());
+        players_.GetPlayersOnMap(
+            player->GetMapId()
+        );
 
     std::unordered_map<std::string, std::string> result;
 
