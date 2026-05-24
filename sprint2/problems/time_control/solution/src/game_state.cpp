@@ -42,7 +42,6 @@ void GameState::MoveDog(model::Dog& dog, const model::Map& map, int64_t time_del
     double target_x = pos.x + speed.vx * dt;
     double target_y = pos.y + speed.vy * dt;
 
-    // КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Алгоритм честного расчёта границ без раннего return
     if (speed.vx != 0) {
         double min_x = pos.x;
         double max_x = pos.x;
@@ -138,9 +137,10 @@ GameState::JoinResult GameState::JoinGame(const std::string& user_name, const mo
 
     model::Position start_pos = GenerateStartPosition(*map);
     uint64_t dog_id = *player.GetId();
+    double dog_speed = map->GetDogSpeed(); // Берем скорость собаки из карты
     
-    model::Dog dog(dog_id, user_name);
-    dog.SetPosition(start_pos.x, start_pos.y);
+    // Передаем правильные параметры конструктору Dog
+    model::Dog dog(dog_id, start_pos, dog_speed);
     
     dogs_.emplace(player.GetId(), std::move(dog));
     player.SetDogId(dog_id);
@@ -149,7 +149,8 @@ GameState::JoinResult GameState::JoinGame(const std::string& user_name, const mo
 }
 
 const model::Dog* GameState::GetDogByToken(const model::Token& token) const {
-    model::Player* player = players_.FindPlayerByToken(token);
+    // Исправлено: Возвращаем const указатель
+    const model::Player* player = players_.FindPlayerByToken(token);
     if (!player) return nullptr;
 
     auto it = dogs_.find(player->GetId());
@@ -194,7 +195,8 @@ void GameState::StopDog(const model::Token& token) {
 }
 
 const model::Map* GameState::GetPlayerMap(const model::Token& token) const {
-    model::Player* player = players_.FindPlayerByToken(token);
+    // Исправлено: Возвращаем const указатель
+    const model::Player* player = players_.FindPlayerByToken(token);
     if (!player) return nullptr;
 
     return game_.FindMap(player->GetMapId());
@@ -215,7 +217,8 @@ void GameState::ProcessTick(int64_t time_delta_ms) {
 std::vector<GameState::PlayerState> GameState::GetGameState(const model::Token& token) const {
     std::vector<PlayerState> result;
 
-    model::Player* player = players_.FindPlayerByToken(token);
+    // Исправлено: Возвращаем const указатель
+    const model::Player* player = players_.FindPlayerByToken(token);
     if (!player) return result;
 
     auto players_on_map = players_.GetPlayersOnMap(player->GetMapId());
