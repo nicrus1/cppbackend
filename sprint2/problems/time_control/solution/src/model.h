@@ -28,6 +28,101 @@ struct Offset {
     Dimension dx, dy;
 };
 
+struct Position {
+    double x = 0.0;
+    double y = 0.0;
+};
+
+struct Speed {
+    double vx = 0.0;
+    double vy = 0.0;
+};
+
+enum class Direction {
+    NORTH,
+    SOUTH,
+    WEST,
+    EAST
+};
+
+inline std::string DirectionToString(Direction dir) {
+    switch (dir) {
+        case Direction::NORTH: return "U";
+        case Direction::SOUTH: return "D";
+        case Direction::WEST:  return "L";
+        case Direction::EAST:  return "R";
+    }
+    return "U";
+}
+
+inline Direction StringToDirection(const std::string& str) {
+    if (str == "U") return Direction::NORTH;
+    if (str == "D") return Direction::SOUTH;
+    if (str == "L") return Direction::WEST;
+    if (str == "R") return Direction::EAST;
+    return Direction::NORTH;
+}
+
+class Dog {
+public:
+    using Id = uint64_t;
+
+    Dog(Id id, Point pos, double speed)
+        : id_(id)
+        , pos_{static_cast<double>(pos.x), static_cast<double>(pos.y)}
+        , default_speed_(speed) {
+    }
+
+    Dog(Id id, Position pos, double speed)
+        : id_(id)
+        , pos_(pos)
+        , default_speed_(speed) {
+    }
+
+    Id GetId() const {
+        return id_;
+    }
+
+    const Position& GetPosition() const {
+        return pos_;
+    }
+
+    void SetPosition(Position pos) {
+        pos_ = pos;
+    }
+    
+    void SetPosition(Point pos) {
+        pos_ = {static_cast<double>(pos.x), static_cast<double>(pos.y)};
+    }
+
+    const Speed& GetSpeed() const {
+        return speed_;
+    }
+
+    void SetSpeed(Speed speed) {
+        speed_ = speed;
+    }
+
+    Direction GetDirection() const {
+        return direction_;
+    }
+
+    void SetDirection(Direction dir) {
+        direction_ = dir;
+    }
+
+    double GetDefaultSpeed() const {
+        return default_speed_;
+    }
+
+private:
+    Id id_;
+    Position pos_;
+    Speed speed_{0.0, 0.0};
+    Direction direction_ = Direction::NORTH;
+    double default_speed_;
+};
+
 class Road {
     struct HorizontalTag {
         explicit HorizontalTag() = default;

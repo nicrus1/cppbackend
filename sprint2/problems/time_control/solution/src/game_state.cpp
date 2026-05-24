@@ -5,6 +5,20 @@
 #include <iostream>
 #include <random>
 
+namespace {
+
+constexpr double ROAD_HALF_WIDTH = 0.4;
+
+bool IsHorizontal(const model::Road& road) {
+    return road.IsHorizontal();
+}
+
+bool IsVertical(const model::Road& road) {
+    return road.IsVertical();
+}
+
+} // namespace
+
 namespace game {
 
 std::optional<model::Road> GameState::SelectFirstRoad(const model::Map& map) const {
@@ -32,117 +46,89 @@ model::Position GameState::GenerateStartPosition(const model::Map& map) {
     };
 }
 
-const model::RoadMap::RoadSegment* GameState::FindRoadAt(
-    const model::Map& map,
-    double x,
-    double y) const {
+void GameState::MoveDog(model::Dog& dog, const model::Map& map, int64_t time_delta_ms) {
+    const double dt = time_delta_ms / 1000.0;
 
-    auto it = road_maps_.find(map.GetId());
+    auto pos = dog.GetPosition();
+    auto speed = dog.GetSpeed();
 
-    if (it == road_maps_.end()) {
-        model::RoadMap road_map;
-
-        for (const auto& road : map.GetRoads()) {
-            road_map.AddRoad(road);
-        }
-
-        it = road_maps_.emplace(
-            map.GetId(),
-            std::move(road_map)
-        ).first;
-    }
-
-    return it->second.FindRoad(x, y);
-}
-
-model::Position GameState::ClampPositionToRoad(
-    const model::RoadMap::RoadSegment* road_seg,
-    double x,
-    double y) const {
-
-    if (!road_seg) {
-        return {x, y};
-    }
-
-    if (road_seg->road.IsHorizontal()) {
-        x = std::clamp(
-            x,
-            road_seg->left - ROAD_HALF_WIDTH,
-            road_seg->right + ROAD_HALF_WIDTH
-        );
-
-        y = road_seg->top;
-    } else {
-        x = road_seg->left;
-
-        y = std::clamp(
-            y,
-            road_seg->top - ROAD_HALF_WIDTH,
-            road_seg->bottom + ROAD_HALF_WIDTH
-        );
-    }
-
-    return {x, y};
-}
-
-model::Position GameState::MoveDogWithCollision(
-    const model::Dog& dog,
-    const model::Map& map,
-    double delta_seconds) const {
-
-    const auto& pos = dog.GetPosition();
-    const auto& speed = dog.GetSpeed();
-
-    if (speed.vx == 0.0 && speed.vy == 0.0) {
-        return pos;
-    }
-
-    double new_x = pos.x + speed.vx * delta_seconds;
-    double new_y = pos.y + speed.vy * delta_seconds;
-
-    const auto* road_seg = FindRoadAt(map, pos.x, pos.y);
-
-    if (!road_seg) {
-        return pos;
-    }
-
-    return ClampPositionToRoad(road_seg, new_x, new_y);
-}
-
-void GameState::UpdateDogPosition(
-    model::Dog& dog,
-    const model::Map& map,
-    double delta_seconds) {
-
-    auto new_pos = MoveDogWithCollision(dog, map, delta_seconds);
-
-    dog.SetPosition(new_pos);
-
-    const auto* road_seg = FindRoadAt(map, new_pos.x, new_pos.y);
-
-    if (!road_seg) {
-        dog.Stop();
+    if (speed.vx == 0 && speed.vy == 0) {
         return;
     }
 
-    const auto& speed = dog.GetSpeed();
+    double target_x = pos.x + speed.vx * dt;
+    double target_y = pos.y + speed.vy * dt;
 
-    if (road_seg->road.IsHorizontal()) {
-        if ((speed.vx > 0.0 &&
-             new_pos.x >= road_seg->right + ROAD_HALF_WIDTH) ||
-            (speed.vx < 0.0 &&
-             new_pos.x <= road_seg->left - ROAD_HALF_WIDTH)) {
+    bool moved = false;
 
-            dog.Stop();
+    for (const auto& road : map.GetRoads()) {
+        if (road.IsHorizontal()) {
+            auto start = road.GetStart();
+            auto end = road.GetEnd();
+
+            double min_x = std::min(start.x, end.x) - ROAD_HALF_WIDTH;
+            double max_x = std::max(start.x, end.x) + ROAD_HALF_WIDTH;
+
+            double road_y = start.y;
+
+            if (std::abs(pos.y - road_y) > ROAD_HALF_WIDTH) {
+                continue;
+            }
+
+            if (target_x < min_x) {
+                target_x = min_x;
+                speed.vx = 0;
+                speed.vy = 0;
+            }
+
+            if (target_x > max_x) {
+                target_x = max_x;
+                speed.vx = 0;
+                speed.vy = 0;
+            }
+
+            dog.SetPosition({target_x, road_y});
+            dog.SetSpeed(speed);
+
+            moved = true;
+            break;
         }
-    } else {
-        if ((speed.vy > 0.0 &&
-             new_pos.y >= road_seg->bottom + ROAD_HALF_WIDTH) ||
-            (speed.vy < 0.0 &&
-             new_pos.y <= road_seg->top - ROAD_HALF_WIDTH)) {
 
-            dog.Stop();
+        if (road.IsVertical()) {
+            auto start = road.GetStart();
+            auto end = road.GetEnd();
+
+            double min_y = std::min(start.y, end.y) - ROAD_HALF_WIDTH;
+            double max_y = std::max(start.y, end.y) + ROAD_HALF_WIDTH;
+
+            double road_x = start.x;
+
+            if (std::abs(pos.x - road_x) > ROAD_HALF_WIDTH) {
+                continue;
+            }
+
+            if (target_y < min_y) {
+                target_y = min_y;
+                speed.vx = 0;
+                speed.vy = 0;
+            }
+
+            if (target_y > max_y) {
+                target_y = max_y;
+                speed.vx = 0;
+                speed.vy = 0;
+            }
+
+            dog.SetPosition({road_x, target_y});
+            dog.SetSpeed(speed);
+
+            moved = true;
+            break;
         }
+    }
+
+    if (!moved) {
+        dog.SetSpeed({0.0, 0.0});
     }
 }
 
@@ -151,9 +137,6 @@ void GameState::ProcessTick(int64_t time_delta_ms) {
         return;
     }
 
-    const double delta_seconds =
-        static_cast<double>(time_delta_ms) / 1000.0;
-
     for (auto& [player_id, dog] : dogs_) {
         const auto* player = players_.FindPlayer(player_id);
 
@@ -161,14 +144,46 @@ void GameState::ProcessTick(int64_t time_delta_ms) {
             continue;
         }
 
-        const model::Map* map =
-            game_.FindMap(player->GetMapId());
+        const model::Map* map = game_.FindMap(player->GetMapId());
 
         if (!map) {
             continue;
         }
 
-        UpdateDogPosition(dog, *map, delta_seconds);
+        MoveDog(dog, *map, time_delta_ms);
+    }
+}
+
+void GameState::SetDogDirection(const model::Token& token, model::Direction dir) {
+    model::Dog* dog = GetDogByTokenMutable(token);
+
+    if (!dog) {
+        throw std::runtime_error("Dog not found");
+    }
+
+    const model::Map* map = GetPlayerMap(token);
+
+    if (!map) {
+        throw std::runtime_error("Map not found");
+    }
+
+    dog->SetDirection(dir);
+
+    const double speed = dog->GetDefaultSpeed();
+
+    switch (dir) {
+        case model::Direction::NORTH:
+            dog->SetSpeed({0.0, -speed});
+            break;
+        case model::Direction::SOUTH:
+            dog->SetSpeed({0.0, speed});
+            break;
+        case model::Direction::WEST:
+            dog->SetSpeed({-speed, 0.0});
+            break;
+        case model::Direction::EAST:
+            dog->SetSpeed({speed, 0.0});
+            break;
     }
 }
 
@@ -182,18 +197,17 @@ GameState::JoinResult GameState::JoinGame(
         throw std::runtime_error("Map not found");
     }
 
-    model::Player& player =
-        players_.AddPlayer(user_name, map_id);
+    model::Player& player = players_.AddPlayer(user_name, map_id);
 
-    model::Token token =
-        players_.GenerateToken(player);
+    model::Token token = players_.GenerateToken(player);
 
-    model::Position start_pos =
-        GenerateStartPosition(*map);
+    model::Position start_pos = GenerateStartPosition(*map);
 
     uint64_t dog_id = *player.GetId();
 
-    model::Dog dog(dog_id, start_pos);
+    double dog_speed = map->GetDogSpeed();
+
+    model::Dog dog(dog_id, start_pos, dog_speed);
 
     dogs_.emplace(player.GetId(), std::move(dog));
 
@@ -209,8 +223,7 @@ GameState::JoinResult GameState::JoinGame(
 const model::Dog* GameState::GetDogByToken(
     const model::Token& token) const {
 
-    const model::Player* player =
-        players_.FindPlayerByToken(token);
+    const model::Player* player = players_.FindPlayerByToken(token);
 
     if (!player) {
         return nullptr;
@@ -228,8 +241,7 @@ const model::Dog* GameState::GetDogByToken(
 model::Dog* GameState::GetDogByTokenMutable(
     const model::Token& token) {
 
-    model::Player* player =
-        players_.FindPlayerByToken(token);
+    model::Player* player = players_.FindPlayerByToken(token);
 
     if (!player) {
         return nullptr;
@@ -247,8 +259,7 @@ model::Dog* GameState::GetDogByTokenMutable(
 const model::Map* GameState::GetPlayerMap(
     const model::Token& token) const {
 
-    const model::Player* player =
-        players_.FindPlayerByToken(token);
+    const model::Player* player = players_.FindPlayerByToken(token);
 
     if (!player) {
         return nullptr;
@@ -257,48 +268,23 @@ const model::Map* GameState::GetPlayerMap(
     return game_.FindMap(player->GetMapId());
 }
 
-void GameState::SetDogDirection(
-    const model::Token& token,
-    model::Direction dir) {
-
-    model::Dog* dog =
-        GetDogByTokenMutable(token);
-
-    if (!dog) {
-        throw std::runtime_error("Dog not found");
-    }
-
-    const model::Map* map =
-        GetPlayerMap(token);
-
-    if (!map) {
-        throw std::runtime_error("Map not found");
-    }
-
-    const double speed = map->GetDogSpeed();
-
-    dog->SetSpeedFromDirection(dir, speed);
-}
-
 void GameState::StopDog(
     const model::Token& token) {
 
-    model::Dog* dog =
-        GetDogByTokenMutable(token);
+    model::Dog* dog = GetDogByTokenMutable(token);
 
     if (!dog) {
         throw std::runtime_error("Dog not found");
     }
 
-    dog->Stop();
+    dog->SetSpeed({0.0, 0.0});
 }
 
 std::vector<GameState::PlayerState>
 GameState::GetGameState(
     const model::Token& token) const {
 
-    const model::Player* player =
-        players_.FindPlayerByToken(token);
+    const model::Player* player = players_.FindPlayerByToken(token);
 
     if (!player) {
         return {};
@@ -306,8 +292,7 @@ GameState::GetGameState(
 
     std::vector<PlayerState> result;
 
-    auto players_on_map =
-        players_.GetPlayersOnMap(player->GetMapId());
+    auto players_on_map = players_.GetPlayersOnMap(player->GetMapId());
 
     for (const auto* p : players_on_map) {
         auto it = dogs_.find(p->GetId());
@@ -339,14 +324,12 @@ std::unordered_map<std::string, std::string>
 GameState::GetPlayersOnMapForTest(
     const model::Map::Id& map_id) const {
 
-    auto players_on_map =
-        players_.GetPlayersOnMap(map_id);
+    auto players_on_map = players_.GetPlayersOnMap(map_id);
 
     std::unordered_map<std::string, std::string> result;
 
     for (auto* p : players_on_map) {
-        result[std::to_string(*p->GetId())] =
-            p->GetName();
+        result[std::to_string(*p->GetId())] = p->GetName();
     }
 
     return result;
@@ -356,22 +339,18 @@ std::unordered_map<std::string, std::string>
 GameState::GetPlayersOnMap(
     const model::Token& token) {
 
-    model::Player* player =
-        players_.FindPlayerByToken(token);
+    model::Player* player = players_.FindPlayerByToken(token);
 
     if (!player) {
-        throw std::runtime_error(
-            "Invalid token or player not found");
+        throw std::runtime_error("Invalid token or player not found");
     }
 
-    auto players_on_map =
-        players_.GetPlayersOnMap(player->GetMapId());
+    auto players_on_map = players_.GetPlayersOnMap(player->GetMapId());
 
     std::unordered_map<std::string, std::string> result;
 
     for (auto* p : players_on_map) {
-        result[std::to_string(*p->GetId())] =
-            p->GetName();
+        result[std::to_string(*p->GetId())] = p->GetName();
     }
 
     return result;

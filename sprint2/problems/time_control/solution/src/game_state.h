@@ -79,26 +79,10 @@ private:
     SelectFirstRoad(
         const model::Map& map) const;
 
-    void UpdateDogPosition(
+    void MoveDog(
         model::Dog& dog,
         const model::Map& map,
-        double delta_seconds);
-
-    model::Position MoveDogWithCollision(
-        const model::Dog& dog,
-        const model::Map& map,
-        double delta_seconds) const;
-
-    const model::RoadMap::RoadSegment*
-    FindRoadAt(
-        const model::Map& map,
-        double x,
-        double y) const;
-
-    model::Position ClampPositionToRoad(
-        const model::RoadMap::RoadSegment* road_seg,
-        double x,
-        double y) const;
+        int64_t time_delta_ms);
 
 private:
     model::Game& game_;
