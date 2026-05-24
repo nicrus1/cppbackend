@@ -87,7 +87,8 @@ void GameState::MoveDog(model::Dog& dog, const model::Map& map, int64_t time_del
                 speed.vy = 0;
             }
 
-            dog.SetPosition({target_x, road_y});
+            // Используем SetPosition с двумя координатами
+            dog.SetPosition(target_x, road_y);
             dog.SetSpeed(speed);
 
             moved = true;
@@ -119,7 +120,8 @@ void GameState::MoveDog(model::Dog& dog, const model::Map& map, int64_t time_del
                 speed.vy = 0;
             }
 
-            dog.SetPosition({road_x, target_y});
+            // Используем SetPosition с двумя координатами
+            dog.SetPosition(road_x, target_y);
             dog.SetSpeed(speed);
 
             moved = true;

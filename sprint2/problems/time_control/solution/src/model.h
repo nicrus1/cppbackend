@@ -91,8 +91,9 @@ public:
         pos_ = pos;
     }
     
-    void SetPosition(Point pos) {
-        pos_ = {static_cast<double>(pos.x), static_cast<double>(pos.y)};
+    // Убираем перегрузку с Point, используем Position везде
+    void SetPosition(double x, double y) {
+        pos_ = {x, y};
     }
 
     const Speed& GetSpeed() const {
