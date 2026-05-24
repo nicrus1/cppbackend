@@ -1,11 +1,4 @@
 #include "game_state.h"
-    }
-
-    const model::Map* map = GetPlayerMap(token);
-
-    if (!map) {
-        throw std::runtime_error("Map not found");
-    }
 
     const double speed = map->GetDogSpeed();
 
