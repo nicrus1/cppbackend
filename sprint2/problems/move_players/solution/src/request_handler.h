@@ -16,9 +16,10 @@ namespace http = beast::http;
 
 class RequestHandler {
 public:
-    explicit RequestHandler(model::Game& game)
+    explicit RequestHandler(model::Game& game, const std::string& static_dir = "/app/static")
         : game_{game}
-        , api_handler_{game} {
+        , api_handler_{game}
+        , static_dir_(static_dir) {
     }
 
     RequestHandler(const RequestHandler&) = delete;
@@ -137,8 +138,8 @@ private:
             return;
         }
         
-        // Полный путь в Docker контейнере
-        std::filesystem::path full_path = std::filesystem::path("/app/static") / file_path;
+        // Полный путь
+        std::filesystem::path full_path = std::filesystem::path(static_dir_) / file_path;
         
         // Пробуем открыть файл
         std::ifstream file(full_path, std::ios::binary);
@@ -225,6 +226,7 @@ private:
 
     model::Game& game_;
     ApiHandler api_handler_;
+    std::string static_dir_;
 };
 
 } // namespace http_handler
