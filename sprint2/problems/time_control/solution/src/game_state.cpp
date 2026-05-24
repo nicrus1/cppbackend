@@ -65,41 +65,33 @@ model::Position GameState::MoveDogWithCollision(
         return pos;
     }
 
-    // Ищем дорогу по ТЕКУЩЕЙ позиции, а не по новой.
-    // Это позволяет корректно дойти до края дороги.
     const auto* road_seg = FindRoadAt(map, pos.x, pos.y);
 
     if (!road_seg) {
         return pos;
     }
 
-    double new_x = pos.x;
-    double new_y = pos.y;
+    double new_x = pos.x + speed.vx * delta_seconds;
+    double new_y = pos.y + speed.vy * delta_seconds;
 
     if (road_seg->road.IsHorizontal()) {
-        new_x += speed.vx * delta_seconds;
-
-        // Ограничиваем движение границами дороги
         new_x = std::clamp(
             new_x,
-            road_seg->left,
-            road_seg->right
+            static_cast<double>(road_seg->left),
+            static_cast<double>(road_seg->right)
         );
 
-        // Y фиксирован для горизонтальной дороги
-        new_y = road_seg->top;
+        // Движение только по X
+        new_y = pos.y;
     } else {
-        new_y += speed.vy * delta_seconds;
-
-        // Ограничиваем движение границами дороги
         new_y = std::clamp(
             new_y,
-            road_seg->top,
-            road_seg->bottom
+            static_cast<double>(road_seg->top),
+            static_cast<double>(road_seg->bottom)
         );
 
-        // X фиксирован для вертикальной дороги
-        new_x = road_seg->left;
+        // Движение только по Y
+        new_x = pos.x;
     }
 
     return {new_x, new_y};
@@ -114,6 +106,32 @@ void GameState::UpdateDogPosition(
         MoveDogWithCollision(dog, map, delta_seconds);
 
     dog.SetPosition(new_pos);
+
+    // Если дошли до границы дороги — останавливаем
+    const auto* road_seg = FindRoadAt(
+        map,
+        new_pos.x,
+        new_pos.y
+    );
+
+    if (!road_seg) {
+        dog.Stop();
+        return;
+    }
+
+    const auto& speed = dog.GetSpeed();
+
+    if (road_seg->road.IsHorizontal()) {
+        if ((speed.vx > 0.0 && new_pos.x >= road_seg->right) ||
+            (speed.vx < 0.0 && new_pos.x <= road_seg->left)) {
+            dog.Stop();
+        }
+    } else {
+        if ((speed.vy > 0.0 && new_pos.y >= road_seg->bottom) ||
+            (speed.vy < 0.0 && new_pos.y <= road_seg->top)) {
+            dog.Stop();
+        }
+    }
 }
 
 void GameState::ProcessTick(int64_t time_delta_ms) {
@@ -121,53 +139,29 @@ void GameState::ProcessTick(int64_t time_delta_ms) {
         return;
     }
 
-    double delta_seconds = time_delta_ms / 1000.0;
+    double delta_seconds =
+        static_cast<double>(time_delta_ms) / 1000.0;
 
     for (auto& [player_id, dog] : dogs_) {
-        const auto* player = players_.FindPlayer(player_id);
+        const auto* player =
+            players_.FindPlayer(player_id);
 
         if (!player) {
             continue;
         }
 
-        const model::Map* map = game_.FindMap(player->GetMapId());
+        const model::Map* map =
+            game_.FindMap(player->GetMapId());
 
         if (!map) {
             continue;
         }
 
-        auto old_pos = dog.GetPosition();
-        auto old_speed = dog.GetSpeed();
-
-        // Update position based on current speed
-        UpdateDogPosition(dog, *map, delta_seconds);
-
-        const auto& new_pos = dog.GetPosition();
-        const auto& new_speed = dog.GetSpeed();
-
-        // If the dog is at the boundary and has non-zero speed, stop it
-        if (new_speed.vx != 0.0 || new_speed.vy != 0.0) {
-            // Check if we're at a boundary
-            const auto* road_seg = FindRoadAt(*map, new_pos.x, new_pos.y);
-            if (road_seg) {
-                bool at_boundary = false;
-                if (road_seg->road.IsHorizontal()) {
-                    if ((new_speed.vx > 0 && new_pos.x >= road_seg->right) ||
-                        (new_speed.vx < 0 && new_pos.x <= road_seg->left)) {
-                        at_boundary = true;
-                    }
-                } else {
-                    if ((new_speed.vy > 0 && new_pos.y >= road_seg->bottom) ||
-                        (new_speed.vy < 0 && new_pos.y <= road_seg->top)) {
-                        at_boundary = true;
-                    }
-                }
-                
-                if (at_boundary) {
-                    dog.Stop();
-                }
-            }
-        }
+        UpdateDogPosition(
+            dog,
+            *map,
+            delta_seconds
+        );
     }
 }
 
