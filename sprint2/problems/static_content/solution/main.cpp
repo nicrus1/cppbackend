@@ -8,6 +8,7 @@
 #include <unordered_map>
 #include <cctype>
 #include <cstdlib>
+#include <algorithm>
 #include <boost/beast.hpp>
 #include <boost/asio.hpp>
 
@@ -45,8 +46,8 @@ std::string UrlDecode(std::string_view encoded) {
 }
 
 // Функция для определения MIME-типа по расширению файла
-std::string_view GetMimeType(const fs::path& filepath) {
-    static const std::unordered_map<std::string, std::string_view> mime_types = {
+std::string GetMimeType(const fs::path& filepath) {
+    static const std::unordered_map<std::string, std::string> mime_types = {
         {".htm", "text/html"},
         {".html", "text/html"},
         {".css", "text/css"},
@@ -70,9 +71,7 @@ std::string_view GetMimeType(const fs::path& filepath) {
     
     std::string ext = filepath.extension().string();
     // Приводим расширение к нижнему регистру
-    for (char& c : ext) {
-        c = std::tolower(c);
-    }
+    std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
     
     auto it = mime_types.find(ext);
     if (it != mime_types.end()) {
@@ -130,20 +129,36 @@ http::response<http::file_body> HandleStaticFile(const std::string& target, cons
         
         // Проверяем, что путь находится внутри корневого каталога
         if (!IsSubPath(file_path, static_root)) {
-            response.result(http::status::bad_request);
-            response.set(http::field::content_type, "text/plain");
-            response.body() = "Bad Request: Path outside root directory";
-            response.prepare_payload();
-            return response;
+            // Для ошибок возвращаем string_body, но функция обещает file_body
+            // Создаем response с string_body для ошибки
+            http::response<http::string_body> error_response;
+            error_response.result(http::status::bad_request);
+            error_response.set(http::field::content_type, "text/plain");
+            error_response.body() = "Bad Request: Path outside root directory";
+            error_response.prepare_payload();
+            
+            // Конвертируем в file_body (не идеально, но для простоты)
+            http::response<http::file_body> converted;
+            converted.result(error_response.result());
+            converted.set(http::field::content_type, "text/plain");
+            // Не можем установить тело, поэтому просто возвращаем
+            converted.prepare_payload();
+            return converted;
         }
         
         // Проверяем существование файла
         if (!fs::exists(file_path) || !fs::is_regular_file(file_path)) {
-            response.result(http::status::not_found);
-            response.set(http::field::content_type, "text/plain");
-            response.body() = "404 Not Found";
-            response.prepare_payload();
-            return response;
+            http::response<http::string_body> error_response;
+            error_response.result(http::status::not_found);
+            error_response.set(http::field::content_type, "text/plain");
+            error_response.body() = "404 Not Found";
+            error_response.prepare_payload();
+            
+            http::response<http::file_body> converted;
+            converted.result(error_response.result());
+            converted.set(http::field::content_type, "text/plain");
+            converted.prepare_payload();
+            return converted;
         }
         
         // Открываем файл
@@ -152,11 +167,17 @@ http::response<http::file_body> HandleStaticFile(const std::string& target, cons
         file.open(file_path.string().c_str(), beast::file_mode::read, ec);
         
         if (ec) {
-            response.result(http::status::internal_server_error);
-            response.set(http::field::content_type, "text/plain");
-            response.body() = "Internal Server Error: Cannot open file";
-            response.prepare_payload();
-            return response;
+            http::response<http::string_body> error_response;
+            error_response.result(http::status::internal_server_error);
+            error_response.set(http::field::content_type, "text/plain");
+            error_response.body() = "Internal Server Error: Cannot open file";
+            error_response.prepare_payload();
+            
+            http::response<http::file_body> converted;
+            converted.result(error_response.result());
+            converted.set(http::field::content_type, "text/plain");
+            converted.prepare_payload();
+            return converted;
         }
         
         // Формируем успешный ответ
@@ -168,14 +189,14 @@ http::response<http::file_body> HandleStaticFile(const std::string& target, cons
     } catch (const std::exception& e) {
         response.result(http::status::internal_server_error);
         response.set(http::field::content_type, "text/plain");
-        response.body() = "Internal Server Error: "s + e.what();
+        // Для file_body нельзя присвоить строку, поэтому просто создаем пустой ответ
         response.prepare_payload();
     }
     
     return response;
 }
 
-// Пример обработчика API (заглушка)
+// Обработчик API (заглушка)
 http::response<http::string_body> HandleApiRequest(const std::string& target) {
     http::response<http::string_body> response;
     response.set(http::field::content_type, "application/json");
@@ -193,6 +214,18 @@ http::response<http::string_body> HandleApiRequest(const std::string& target) {
     
     response.prepare_payload();
     return response;
+}
+
+// Вспомогательная функция для отправки ответа с ошибкой
+void SendErrorResponse(tcp::socket& socket, http::status status, const std::string& message) {
+    http::response<http::string_body> response;
+    response.result(status);
+    response.set(http::field::content_type, "text/plain");
+    response.body() = message;
+    response.prepare_payload();
+    
+    beast::error_code ec;
+    http::write(socket, response, ec);
 }
 
 int main(int argc, char* argv[]) {
@@ -248,10 +281,54 @@ int main(int argc, char* argv[]) {
                 }
             } else {
                 // Статический файл
-                auto response = HandleStaticFile(target, static_root);
-                http::write(socket, response, ec);
-                if (ec) {
-                    LOG("Error writing response: ", ec.message());
+                // Сначала проверяем с string_body, чтобы корректно обработать ошибки
+                try {
+                    std::string decoded_path = UrlDecode(target);
+                    if (!decoded_path.empty() && decoded_path[0] == '/') {
+                        decoded_path = decoded_path.substr(1);
+                    }
+                    if (decoded_path.empty()) {
+                        decoded_path = "index.html";
+                    }
+                    
+                    fs::path file_path = static_root / decoded_path;
+                    if (fs::exists(file_path) && fs::is_directory(file_path)) {
+                        file_path /= "index.html";
+                    }
+                    
+                    if (!IsSubPath(file_path, static_root)) {
+                        SendErrorResponse(socket, http::status::bad_request, 
+                                        "Bad Request: Path outside root directory");
+                        continue;
+                    }
+                    
+                    if (!fs::exists(file_path) || !fs::is_regular_file(file_path)) {
+                        SendErrorResponse(socket, http::status::not_found, "404 Not Found");
+                        continue;
+                    }
+                    
+                    // Открываем и отправляем файл
+                    http::response<http::file_body> response;
+                    response.result(http::status::ok);
+                    response.set(http::field::content_type, GetMimeType(file_path));
+                    
+                    http::file_body::value_type file;
+                    boost::system::error_code file_ec;
+                    file.open(file_path.string().c_str(), beast::file_mode::read, file_ec);
+                    
+                    if (file_ec) {
+                        SendErrorResponse(socket, http::status::internal_server_error, 
+                                        "Internal Server Error: Cannot open file");
+                        continue;
+                    }
+                    
+                    response.body() = std::move(file);
+                    response.prepare_payload();
+                    http::write(socket, response, ec);
+                    
+                } catch (const std::exception& e) {
+                    SendErrorResponse(socket, http::status::internal_server_error, 
+                                    "Internal Server Error: "s + e.what());
                 }
             }
             
