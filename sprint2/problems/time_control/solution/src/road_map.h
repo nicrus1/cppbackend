@@ -52,6 +52,10 @@ public:
         }
         return nullptr;
     }
+    
+    const std::vector<RoadSegment>& GetRoads() const {
+        return roads_;
+    }
 
 private:
     std::vector<RoadSegment> roads_;
