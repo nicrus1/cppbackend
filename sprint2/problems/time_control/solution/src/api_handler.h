@@ -322,69 +322,73 @@ public:
 
     // POST /api/v1/game/tick
     template <typename Body, typename Allocator, typename Send>
-void HandleTick(http::request<Body, http::basic_fields<Allocator>>&& req, Send&& send) {
-    if (req.method() != http::verb::post) {
-        SendErrorWithAllow(std::move(req), send, http::status::method_not_allowed,
-                           "invalidMethod", "Only POST method is expected", "POST");
-        return;
+    void HandleTick(http::request<Body, http::basic_fields<Allocator>>&& req, Send&& send) {
+        logger::LogDebug("HandleTick: ENTERED");
+        
+        if (req.method() != http::verb::post) {
+            SendErrorWithAllow(std::move(req), send, http::status::method_not_allowed,
+                               "invalidMethod", "Only POST method is expected", "POST");
+            return;
+        }
+        
+        // Check Content-Type
+        auto content_type = req.find(http::field::content_type);
+        if (content_type == req.end() || content_type->value() != "application/json") {
+            SendError(std::move(req), send, http::status::bad_request,
+                      "invalidArgument", "Invalid Content-Type");
+            return;
+        }
+        
+        boost::json::value json;
+        try {
+            json = boost::json::parse(req.body());
+        }
+        catch (...) {
+            SendError(std::move(req), send, http::status::bad_request,
+                      "invalidArgument", "Failed to parse tick request JSON");
+            return;
+        }
+        
+        if (!json.is_object()) {
+            SendError(std::move(req), send, http::status::bad_request,
+                      "invalidArgument", "Failed to parse tick request JSON");
+            return;
+        }
+        
+        auto& obj = json.as_object();
+        
+        if (!obj.contains("timeDelta")) {
+            SendError(std::move(req), send, http::status::bad_request,
+                      "invalidArgument", "Missing timeDelta field");
+            return;
+        }
+        
+        if (!obj.at("timeDelta").is_int64()) {
+            SendError(std::move(req), send, http::status::bad_request,
+                      "invalidArgument", "timeDelta must be an integer");
+            return;
+        }
+        
+        int64_t time_delta_ms = obj.at("timeDelta").as_int64();
+        
+        if (time_delta_ms < 0) {
+            SendError(std::move(req), send, http::status::bad_request,
+                      "invalidArgument", "timeDelta must be non-negative");
+            return;
+        }
+        
+        // Отладочный вывод
+        logger::LogDebug("HandleTick: timeDelta = " + std::to_string(time_delta_ms) + " ms");
+        
+        // Update game state
+        logger::LogDebug("HandleTick: calling UpdateTime");
+        game_state_.UpdateTime(std::chrono::milliseconds(time_delta_ms));
+        logger::LogDebug("HandleTick: UpdateTime completed");
+        
+        // Send empty response
+        SendResponseWithCache(std::move(req), send, http::status::ok,
+                              "application/json", "{}");
     }
-    
-    // Check Content-Type
-    auto content_type = req.find(http::field::content_type);
-    if (content_type == req.end() || content_type->value() != "application/json") {
-        SendError(std::move(req), send, http::status::bad_request,
-                  "invalidArgument", "Invalid Content-Type");
-        return;
-    }
-    
-    boost::json::value json;
-    try {
-        json = boost::json::parse(req.body());
-    }
-    catch (...) {
-        SendError(std::move(req), send, http::status::bad_request,
-                  "invalidArgument", "Failed to parse tick request JSON");
-        return;
-    }
-    
-    if (!json.is_object()) {
-        SendError(std::move(req), send, http::status::bad_request,
-                  "invalidArgument", "Failed to parse tick request JSON");
-        return;
-    }
-    
-    auto& obj = json.as_object();
-    
-    if (!obj.contains("timeDelta")) {
-        SendError(std::move(req), send, http::status::bad_request,
-                  "invalidArgument", "Missing timeDelta field");
-        return;
-    }
-    
-    if (!obj.at("timeDelta").is_int64()) {
-        SendError(std::move(req), send, http::status::bad_request,
-                  "invalidArgument", "timeDelta must be an integer");
-        return;
-    }
-    
-    int64_t time_delta_ms = obj.at("timeDelta").as_int64();
-    
-    if (time_delta_ms < 0) {
-        SendError(std::move(req), send, http::status::bad_request,
-                  "invalidArgument", "timeDelta must be non-negative");
-        return;
-    }
-    
-    // Отладочный вывод
-    logger::LogDebug("HandleTick: timeDelta = " + std::to_string(time_delta_ms) + " ms");
-    
-    // Update game state
-    game_state_.UpdateTime(std::chrono::milliseconds(time_delta_ms));
-    
-    // Send empty response
-    SendResponseWithCache(std::move(req), send, http::status::ok,
-                          "application/json", "{}");
-}
 
 private:
     template <typename Body, typename Allocator>

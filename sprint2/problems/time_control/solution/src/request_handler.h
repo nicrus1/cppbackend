@@ -71,9 +71,10 @@ public:
         }
 
         if (target == "/api/v1/game/tick") {
-            api_handler_.HandleTick(std::move(req), std::forward<Send>(send));
-            return;
-        }
+    logger::LogDebug("RequestHandler: handling /api/v1/game/tick");
+    api_handler_.HandleTick(std::move(req), std::forward<Send>(send));
+    return;
+}
 
         if (target == "/api/v1/maps") {
             if (method != "GET") {

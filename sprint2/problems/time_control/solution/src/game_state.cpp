@@ -75,62 +75,20 @@ void GameState::UpdateDogPosition(
     double new_x = pos.x + speed.vx * delta_seconds;
     double new_y = pos.y + speed.vy * delta_seconds;
 
-    // Ищем дорогу, на которой находится собака
-    const auto* road_seg = FindRoadForDog(dog, map);
-
-    // Если собака не на дороге, просто обновляем позицию (движение разрешено)
-    if (!road_seg) {
-        dog.SetPosition({new_x, new_y});
-        return;
-    }
-
-    const auto& road = road_seg->road;
-
-    if (road.IsHorizontal()) {
-        double min_x = std::min(road.GetStart().x, road.GetEnd().x);
-        double max_x = std::max(road.GetStart().x, road.GetEnd().x);
-
-        // Ограничиваем позицию, но не останавливаем собаку
-        if (new_x < min_x) {
-            new_x = min_x;
-        } else if (new_x > max_x) {
-            new_x = max_x;
-        }
-
-        new_y = static_cast<double>(road.GetStart().y);
-        
-        dog.SetPosition({new_x, new_y});
-        
-        // Останавливаем собаку только если она достигла конца дороги
-        // и не может продолжить движение (нет соединяющей дороги)
-        // Для простоты пока останавливаем только при достижении границы
-        if (new_x <= min_x || new_x >= max_x) {
-            dog.Stop();
-        }
-    } else if (road.IsVertical()) {
-        double min_y = std::min(road.GetStart().y, road.GetEnd().y);
-        double max_y = std::max(road.GetStart().y, road.GetEnd().y);
-
-        // Ограничиваем позицию, но не останавливаем собаку
-        if (new_y < min_y) {
-            new_y = min_y;
-        } else if (new_y > max_y) {
-            new_y = max_y;
-        }
-
-        new_x = static_cast<double>(road.GetStart().x);
-        
-        dog.SetPosition({new_x, new_y});
-        
-        // Останавливаем собаку только если она достигла конца дороги
-        if (new_y <= min_y || new_y >= max_y) {
-            dog.Stop();
-        }
-    }
+    // Просто обновляем позицию без всяких проверок дорог
+    dog.SetPosition({new_x, new_y});
+    
+    logger::LogDebug("UpdateDogPosition: pos=(" + std::to_string(new_x) + "," + 
+                     std::to_string(new_y) + "), speed=(" + 
+                     std::to_string(speed.vx) + "," + std::to_string(speed.vy) + 
+                     "), delta=" + std::to_string(delta_seconds));
 }
 
 void GameState::UpdateTime(std::chrono::milliseconds delta) {
     const double delta_seconds = delta.count() / 1000.0;
+    
+    logger::LogDebug("UpdateTime: delta_ms=" + std::to_string(delta.count()) + 
+                     ", delta_sec=" + std::to_string(delta_seconds));
 
     for (auto& [player_id, dog] : dogs_) {
         const model::Player* player = players_.FindPlayer(player_id);
@@ -239,8 +197,9 @@ void GameState::SetDogDirection(const model::Token& token, model::Direction dir)
     dog->SetSpeedFromDirection(dir, speed);
     
     logger::LogDebug("SetDogDirection: dir=" + model::DirectionToString(dir) + 
-                     ", speed=(" + std::to_string(dog->GetSpeed().vx) + "," + 
-                     std::to_string(dog->GetSpeed().vy) + ")");
+                     ", speed=" + std::to_string(speed) +
+                     ", vx=" + std::to_string(dog->GetSpeed().vx) + 
+                     ", vy=" + std::to_string(dog->GetSpeed().vy));
 }
 
 void GameState::StopDog(const model::Token& token) {
