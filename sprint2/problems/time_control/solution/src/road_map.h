@@ -17,21 +17,26 @@ public:
             auto end = r.GetEnd();
             
             if (r.IsHorizontal()) {
-                left = std::min(start.x, end.x) - 0.4;
-                right = std::max(start.x, end.x) + 0.4;
-                top = start.y - 0.4;
-                bottom = start.y + 0.4;
+                left = std::min(start.x, end.x);
+                right = std::max(start.x, end.x);
+                top = start.y;
+                bottom = start.y;
             } else {
-                left = start.x - 0.4;
-                right = start.x + 0.4;
-                top = std::min(start.y, end.y) - 0.4;
-                bottom = std::max(start.y, end.y) + 0.4;
+                left = start.x;
+                right = start.x;
+                top = std::min(start.y, end.y);
+                bottom = std::max(start.y, end.y);
             }
         }
         
         bool Contains(double x, double y) const {
-            return x >= left - 1e-9 && x <= right + 1e-9 &&
-                   y >= top - 1e-9 && y <= bottom + 1e-9;
+            if (road.IsHorizontal()) {
+                return x >= left - 1e-9 && x <= right + 1e-9 &&
+                       std::abs(y - top) <= 0.4 + 1e-9;
+            } else {
+                return y >= top - 1e-9 && y <= bottom + 1e-9 &&
+                       std::abs(x - left) <= 0.4 + 1e-9;
+            }
         }
     };
     

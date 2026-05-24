@@ -51,10 +51,10 @@ void GameState::MoveDogHorizontally(model::Dog& dog, const model::Map* map, doub
     const auto& road = road_seg->road;
     
     if (road.IsHorizontal()) {
-        // Горизонтальная дорога - движение вдоль оси X
         double min_x = std::min(road.GetStart().x, road.GetEnd().x);
         double max_x = std::max(road.GetStart().x, road.GetEnd().x);
         
+        // Проверяем, не выходит ли за границы
         if (new_x < min_x) {
             new_x = min_x;
             dog.Stop();
@@ -63,16 +63,9 @@ void GameState::MoveDogHorizontally(model::Dog& dog, const model::Map* map, doub
             dog.Stop();
         }
         
-        // Y координата должна оставаться на оси дороги
-        double expected_y = road.GetStart().y;
-        if (std::abs(pos.y - expected_y) > 0.4) {
-            dog.SetPosition({new_x, expected_y});
-        } else {
-            dog.SetPosition({new_x, pos.y});
-        }
+        dog.SetPosition({new_x, pos.y});
     } else {
-        // Вертикальная дорога - движение по горизонтали невозможно
-        // Собака не может двигаться горизонтально на вертикальной дороге
+        // На вертикальной дороге горизонтальное движение невозможно
         dog.Stop();
     }
 }
@@ -86,10 +79,10 @@ void GameState::MoveDogVertically(model::Dog& dog, const model::Map* map, double
     const auto& road = road_seg->road;
     
     if (road.IsVertical()) {
-        // Вертикальная дорога - движение вдоль оси Y
         double min_y = std::min(road.GetStart().y, road.GetEnd().y);
         double max_y = std::max(road.GetStart().y, road.GetEnd().y);
         
+        // Проверяем, не выходит ли за границы
         if (new_y < min_y) {
             new_y = min_y;
             dog.Stop();
@@ -98,15 +91,9 @@ void GameState::MoveDogVertically(model::Dog& dog, const model::Map* map, double
             dog.Stop();
         }
         
-        // X координата должна оставаться на оси дороги
-        double expected_x = road.GetStart().x;
-        if (std::abs(pos.x - expected_x) > 0.4) {
-            dog.SetPosition({expected_x, new_y});
-        } else {
-            dog.SetPosition({pos.x, new_y});
-        }
+        dog.SetPosition({pos.x, new_y});
     } else {
-        // Горизонтальная дорога - движение по вертикали невозможно
+        // На горизонтальной дороге вертикальное движение невозможно
         dog.Stop();
     }
 }
@@ -116,36 +103,34 @@ void GameState::UpdateDogPosition(model::Dog& dog, const model::Map* map, double
     
     const auto& speed = dog.GetSpeed();
     if (std::abs(speed.vx) < 1e-9 && std::abs(speed.vy) < 1e-9) {
-        return; // Собака стоит на месте
+        return;
     }
     
     // Находим дорогу, на которой находится собака
     const auto* road_seg = FindRoadForDog(dog, map);
     if (!road_seg) {
-        // Собака не на дороге - останавливаем
         dog.Stop();
         return;
     }
     
-    // Проверяем, соответствует ли направление движения типу дороги
     const auto& road = road_seg->road;
     
+    // Проверяем, что направление движения соответствует типу дороги
     if (std::abs(speed.vx) > 1e-9 && !road.IsHorizontal()) {
-        // Горизонтальное движение на вертикальной дороге - останавливаем
         dog.Stop();
         return;
     }
     
     if (std::abs(speed.vy) > 1e-9 && !road.IsVertical()) {
-        // Вертикальное движение на горизонтальной дороге - останавливаем
         dog.Stop();
         return;
     }
     
+    // Вычисляем перемещение
     double delta_x = speed.vx * delta_seconds;
     double delta_y = speed.vy * delta_seconds;
     
-    // Двигаемся строго по направлению
+    // Двигаемся
     if (std::abs(delta_x) > 1e-9) {
         MoveDogHorizontally(dog, map, delta_x);
     }
@@ -159,7 +144,6 @@ void GameState::UpdateTime(std::chrono::milliseconds delta) {
     
     // Обновляем позиции всех собак
     for (auto& [player_id, dog] : dogs_) {
-        // Находим карту игрока
         const model::Player* player = players_.FindPlayer(player_id);
         if (!player) continue;
         
@@ -177,7 +161,6 @@ GameState::JoinResult GameState::JoinGame(const std::string& user_name, const mo
     model::Player& player = players_.AddPlayer(user_name, map_id);
     model::Token token = players_.GenerateToken(player);
 
-    // Генерируем собаку на начальной позиции первой дороги
     model::Position start_pos = GenerateStartPositionOnMap(*map);
     uint64_t dog_id = *player.GetId();
     model::Dog dog(dog_id, start_pos);
@@ -238,9 +221,6 @@ void GameState::StopDog(const model::Token& token) {
 std::vector<GameState::PlayerState> GameState::GetGameState(const model::Token& token) const {
     const model::Player* player = players_.FindPlayerByToken(token);
     if (!player) return {};
-
-    const model::Dog* dog = GetDogByToken(token);
-    if (!dog) return {};
 
     std::vector<PlayerState> result;
     auto players_on_map = players_.GetPlayersOnMap(player->GetMapId());
