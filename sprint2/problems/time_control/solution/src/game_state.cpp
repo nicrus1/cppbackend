@@ -134,93 +134,100 @@ void GameState::Update(uint64_t time_ms) {
     double dt = time_ms / 1000.0;
 
     for (auto& [id, dog] : dogs_) {
-
         auto pos = dog.GetPosition();
         auto speed = dog.GetSpeed();
 
-        if (speed.vx == 0.0 &&
-            speed.vy == 0.0) {
+        if (speed.vx == 0.0 && speed.vy == 0.0) {
             continue;
         }
 
-        double new_x =
-            pos.x + speed.vx * dt;
+        double new_x = pos.x + speed.vx * dt;
+        double new_y = pos.y + speed.vy * dt;
 
-        double new_y =
-            pos.y + speed.vy * dt;
-
-        model::Player* player =
-            players_.FindPlayer(id);
-
+        model::Player* player = players_.FindPlayer(id);
         if (!player) {
             continue;
         }
 
-        const model::Map* map =
-            game_.FindMap(player->GetMapId());
-
+        const model::Map* map = game_.FindMap(player->GetMapId());
         if (!map) {
             continue;
         }
 
+        // Check if the new position is on any road
+        bool on_road = false;
+        const model::Road* current_road = nullptr;
+        
         for (const auto& road : map->GetRoads()) {
-
             auto start = road.GetStart();
             auto end = road.GetEnd();
-
+            
             if (road.IsHorizontal()) {
-
-                if (std::abs(pos.y - start.y) > 0.4) {
-                    continue;
+                // Check if Y is within road width (0.4 units)
+                if (std::abs(new_y - start.y) <= 0.4 + 1e-9) {
+                    double min_x = std::min(start.x, end.x);
+                    double max_x = std::max(start.x, end.x);
+                    if (new_x >= min_x - 0.4 - 1e-9 && new_x <= max_x + 0.4 + 1e-9) {
+                        on_road = true;
+                        current_road = &road;
+                        break;
+                    }
                 }
-
-                double min_x =
-                    std::min(start.x, end.x) - 0.4;
-
-                double max_x =
-                    std::max(start.x, end.x) + 0.4;
-
-                if (new_x < min_x) {
-                    new_x = min_x;
-                    dog.Stop();
+            } else {
+                // Check if X is within road width (0.4 units)
+                if (std::abs(new_x - start.x) <= 0.4 + 1e-9) {
+                    double min_y = std::min(start.y, end.y);
+                    double max_y = std::max(start.y, end.y);
+                    if (new_y >= min_y - 0.4 - 1e-9 && new_y <= max_y + 0.4 + 1e-9) {
+                        on_road = true;
+                        current_road = &road;
+                        break;
+                    }
                 }
-
-                if (new_x > max_x) {
-                    new_x = max_x;
-                    dog.Stop();
-                }
-
-                new_y = pos.y;
-
-                dog.SetPosition({new_x, new_y});
-                break;
             }
-            else {
-
-                if (std::abs(pos.x - start.x) > 0.4) {
-                    continue;
+        }
+        
+        if (on_road) {
+            // Movement is valid - update position
+            dog.SetPosition({new_x, new_y});
+        } else {
+            // Hit the edge of the road - stop the dog
+            dog.Stop();
+            
+            // Try to find where we should snap to
+            for (const auto& road : map->GetRoads()) {
+                auto start = road.GetStart();
+                auto end = road.GetEnd();
+                
+                if (road.IsHorizontal()) {
+                    if (std::abs(pos.y - start.y) <= 0.4 + 1e-9) {
+                        double min_x = std::min(start.x, end.x);
+                        double max_x = std::max(start.x, end.x);
+                        
+                        if (speed.vx < 0 && new_x < min_x - 0.4) {
+                            new_x = min_x - 0.4;
+                            dog.SetPosition({new_x, pos.y});
+                        } else if (speed.vx > 0 && new_x > max_x + 0.4) {
+                            new_x = max_x + 0.4;
+                            dog.SetPosition({new_x, pos.y});
+                        }
+                        break;
+                    }
+                } else {
+                    if (std::abs(pos.x - start.x) <= 0.4 + 1e-9) {
+                        double min_y = std::min(start.y, end.y);
+                        double max_y = std::max(start.y, end.y);
+                        
+                        if (speed.vy < 0 && new_y < min_y - 0.4) {
+                            new_y = min_y - 0.4;
+                            dog.SetPosition({pos.x, new_y});
+                        } else if (speed.vy > 0 && new_y > max_y + 0.4) {
+                            new_y = max_y + 0.4;
+                            dog.SetPosition({pos.x, new_y});
+                        }
+                        break;
+                    }
                 }
-
-                double min_y =
-                    std::min(start.y, end.y) - 0.4;
-
-                double max_y =
-                    std::max(start.y, end.y) + 0.4;
-
-                if (new_y < min_y) {
-                    new_y = min_y;
-                    dog.Stop();
-                }
-
-                if (new_y > max_y) {
-                    new_y = max_y;
-                    dog.Stop();
-                }
-
-                new_x = pos.x;
-
-                dog.SetPosition({new_x, new_y});
-                break;
             }
         }
     }
