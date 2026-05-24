@@ -19,11 +19,11 @@ public:
             if (r.IsHorizontal()) {
                 left = std::min(start.x, end.x);
                 right = std::max(start.x, end.x);
-                top = start.y;
-                bottom = start.y;
+                top = static_cast<double>(start.y);
+                bottom = static_cast<double>(start.y);
             } else {
-                left = start.x;
-                right = start.x;
+                left = static_cast<double>(start.x);
+                right = static_cast<double>(start.x);
                 top = std::min(start.y, end.y);
                 bottom = std::max(start.y, end.y);
             }
@@ -33,11 +33,9 @@ public:
             const double ROAD_HALF_WIDTH = 0.4;
             
             if (road.IsHorizontal()) {
-                // Горизонтальная дорога: x между left и right, y в пределах 0.4 от центра
                 return x >= left - 1e-9 && x <= right + 1e-9 &&
                        std::abs(y - top) <= ROAD_HALF_WIDTH + 1e-9;
             } else {
-                // Вертикальная дорога: y между top и bottom, x в пределах 0.4 от центра
                 return y >= top - 1e-9 && y <= bottom + 1e-9 &&
                        std::abs(x - left) <= ROAD_HALF_WIDTH + 1e-9;
             }

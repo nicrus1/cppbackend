@@ -15,6 +15,8 @@ namespace game {
 
 class GameState {
 public:
+    static constexpr double ROAD_HALF_WIDTH = 0.4;
+    
     struct JoinResult {
         model::Token token;
         model::PlayerId player_id;
@@ -56,6 +58,8 @@ private:
     void UpdateDogPosition(model::Dog& dog, const model::Map& map, double delta_seconds);
     model::Position MoveDogWithCollision(const model::Dog& dog, const model::Map& map, double delta_seconds) const;
     const model::RoadMap::RoadSegment* FindRoadAt(const model::Map& map, double x, double y) const;
+    bool CanMoveInDirection(const model::RoadMap::RoadSegment* road_seg, model::Direction dir) const;
+    model::Position ClampPositionToRoad(const model::RoadMap::RoadSegment* road_seg, double x, double y) const;
     
     model::Game& game_;
     model::Players players_;
