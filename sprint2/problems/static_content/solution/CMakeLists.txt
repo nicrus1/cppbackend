@@ -1,25 +1,11 @@
-cmake_minimum_required(VERSION 3.9)
-project(game_server CXX)
-set(CMAKE_CXX_STANDARD 20)
+cmake_minimum_required(VERSION 3.10)
+project(game_server LANGUAGES CXX)
+
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# Обратите внимание на аргумент TARGETS у команды conan_basic_setup
-include(${CMAKE_BINARY_DIR}/conanbuildinfo.cmake)
-conan_basic_setup(TARGETS)
+add_executable(game_server src/main.cpp)
 
-# Добавляем find_package для Boost
-find_package(Boost REQUIRED COMPONENTS system)
-
-add_executable(game_server main.cpp)
-
-# Используем "импортированную" цель CONAN_PKG::boost
-target_include_directories(game_server PRIVATE ${CONAN_INCLUDE_DIRS_BOOST})
-target_link_libraries(game_server 
-    ${CONAN_LIBS_BOOST}
-    ${Boost_LIBRARIES}
+set_target_properties(game_server PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
 )
-
-# Для линковки с pthread на Linux
-if(UNIX)
-    target_link_libraries(game_server pthread)
-endif()

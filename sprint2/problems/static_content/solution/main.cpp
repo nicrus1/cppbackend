@@ -1,345 +1,401 @@
-#include "my_logger.h"
-
-#include <string_view>
-#include <thread>
 #include <iostream>
-#include <filesystem>
 #include <fstream>
+#include <sstream>
+#include <string>
+#include <filesystem>
 #include <unordered_map>
 #include <cctype>
-#include <cstdlib>
 #include <algorithm>
-#include <boost/beast.hpp>
-#include <boost/asio.hpp>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <unistd.h>
+#include <arpa/inet.h>
 
-namespace beast = boost::beast;
-namespace http = beast::http;
-namespace net = boost::asio;
 namespace fs = std::filesystem;
-using tcp = net::ip::tcp;
 
-using namespace std::literals;
-
-// Функция для URL-декодирования
-std::string UrlDecode(std::string_view encoded) {
+std::string urlDecode(const std::string& str) {
     std::string result;
-    result.reserve(encoded.size());
-    
-    for (size_t i = 0; i < encoded.size(); ++i) {
-        if (encoded[i] == '%' && i + 2 < encoded.size()) {
-            char hex[3] = {encoded[i + 1], encoded[i + 2], '\0'};
-            char* endptr;
-            long value = std::strtol(hex, &endptr, 16);
-            if (endptr == hex + 2) {
-                result.push_back(static_cast<char>(value));
-                i += 2;
-                continue;
-            }
-        } else if (encoded[i] == '+') {
-            result.push_back(' ');
-            continue;
+    for (size_t i = 0; i < str.length(); ++i) {
+        if (str[i] == '%' && i + 2 < str.length()) {
+            int value;
+            std::istringstream iss(str.substr(i + 1, 2));
+            iss >> std::hex >> value;
+            result += static_cast<char>(value);
+            i += 2;
+        } else if (str[i] == '+') {
+            result += ' ';
+        } else {
+            result += str[i];
         }
-        result.push_back(encoded[i]);
     }
-    
     return result;
 }
 
-// Функция для определения MIME-типа по расширению файла
-std::string GetMimeType(const fs::path& filepath) {
-    static const std::unordered_map<std::string, std::string> mime_types = {
-        {".htm", "text/html"},
-        {".html", "text/html"},
-        {".css", "text/css"},
-        {".txt", "text/plain"},
-        {".js", "text/javascript"},
-        {".json", "application/json"},
-        {".xml", "application/xml"},
-        {".png", "image/png"},
-        {".jpg", "image/jpeg"},
-        {".jpe", "image/jpeg"},
-        {".jpeg", "image/jpeg"},
-        {".gif", "image/gif"},
-        {".bmp", "image/bmp"},
+std::string getMimeType(const std::string& path) {
+    static const std::unordered_map<std::string, std::string> mime = {
+        {".html", "text/html"}, {".htm", "text/html"},
+        {".css", "text/css"}, {".js", "text/javascript"},
+        {".json", "application/json"}, {".xml", "application/xml"},
+        {".png", "image/png"}, {".jpg", "image/jpeg"},
+        {".jpeg", "image/jpeg"}, {".jpe", "image/jpeg"},
+        {".gif", "image/gif"}, {".bmp", "image/bmp"},
         {".ico", "image/vnd.microsoft.icon"},
-        {".tiff", "image/tiff"},
-        {".tif", "image/tiff"},
-        {".svg", "image/svg+xml"},
-        {".svgz", "image/svg+xml"},
-        {".mp3", "audio/mpeg"},
+        {".tiff", "image/tiff"}, {".tif", "image/tiff"},
+        {".svg", "image/svg+xml"}, {".svgz", "image/svg+xml"},
+        {".mp3", "audio/mpeg"}, {".txt", "text/plain"}
     };
     
-    std::string ext = filepath.extension().string();
-    // Приводим расширение к нижнему регистру
-    std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
-    
-    auto it = mime_types.find(ext);
-    if (it != mime_types.end()) {
-        return it->second;
+    std::string ext;
+    size_t dot_pos = path.rfind('.');
+    if (dot_pos != std::string::npos) {
+        ext = path.substr(dot_pos);
+        for (char& c : ext) c = std::tolower(c);
     }
     
-    return "application/octet-stream";
+    auto it = mime.find(ext);
+    return it != mime.end() ? it->second : "application/octet-stream";
 }
 
-// Проверка, находится ли путь внутри корневого каталога
-bool IsSubPath(const fs::path& path, const fs::path& base) {
-    try {
-        auto canonical_path = fs::weakly_canonical(path);
-        auto canonical_base = fs::weakly_canonical(base);
-        
-        auto b = canonical_base.begin();
-        auto p = canonical_path.begin();
-        
-        for (; b != canonical_base.end(); ++b, ++p) {
-            if (p == canonical_path.end() || *p != *b) {
-                return false;
+std::string readFile(const fs::path& path) {
+    std::ifstream file(path, std::ios::binary);
+    if (!file.is_open()) return "";
+    std::stringstream buffer;
+    buffer << file.rdbuf();
+    return buffer.str();
+}
+
+// Поиск карты по ID - возвращает полный JSON объекта
+std::string findMapByID(const std::string& config, const std::string& map_id) {
+    // Ищем "id":"map1"
+    std::string pattern = "\"id\":\"" + map_id + "\"";
+    size_t pos = config.find(pattern);
+    if (pos == std::string::npos) {
+        // Пробуем с пробелом: "id": "map1"
+        pattern = "\"id\": \"" + map_id + "\"";
+        pos = config.find(pattern);
+    }
+    if (pos == std::string::npos) return "";
+    
+    // Ищем начало объекта {
+    size_t start = pos;
+    while (start > 0 && config[start] != '{') {
+        start--;
+    }
+    if (config[start] != '{') return "";
+    
+    // Ищем конец объекта }
+    int brace_count = 0;
+    size_t end = start;
+    for (size_t i = start; i < config.length(); ++i) {
+        if (config[i] == '{') brace_count++;
+        else if (config[i] == '}') {
+            brace_count--;
+            if (brace_count == 0) {
+                end = i;
+                break;
             }
         }
-        return true;
-    } catch (const std::exception&) {
-        return false;
     }
+    
+    return config.substr(start, end - start + 1);
 }
 
-// Обработчик статических файлов
-http::response<http::file_body> HandleStaticFile(const std::string& target, const fs::path& static_root) {
-    http::response<http::file_body> response;
+// Получение списка карт
+std::string getMapsList(const std::string& config) {
+    std::string result = "[";
+    bool first = true;
+    
+    size_t pos = 0;
+    while (true) {
+        size_t obj_start = config.find("{", pos);
+        if (obj_start == std::string::npos) break;
+        
+        int brace_count = 0;
+        size_t obj_end = obj_start;
+        for (size_t i = obj_start; i < config.length(); ++i) {
+            if (config[i] == '{') brace_count++;
+            else if (config[i] == '}') {
+                brace_count--;
+                if (brace_count == 0) {
+                    obj_end = i;
+                    break;
+                }
+            }
+        }
+        
+        std::string obj = config.substr(obj_start, obj_end - obj_start + 1);
+        
+        // Извлекаем id
+        std::string id;
+        size_t id_pos = obj.find("\"id\"");
+        if (id_pos != std::string::npos) {
+            size_t colon = obj.find(":", id_pos);
+            size_t q1 = obj.find("\"", colon);
+            if (q1 != std::string::npos) {
+                size_t q2 = obj.find("\"", q1 + 1);
+                if (q2 != std::string::npos) {
+                    id = obj.substr(q1 + 1, q2 - q1 - 1);
+                }
+            }
+        }
+        
+        // Извлекаем name
+        std::string name;
+        size_t name_pos = obj.find("\"name\"");
+        if (name_pos != std::string::npos) {
+            size_t colon = obj.find(":", name_pos);
+            size_t q1 = obj.find("\"", colon);
+            if (q1 != std::string::npos) {
+                size_t q2 = obj.find("\"", q1 + 1);
+                if (q2 != std::string::npos) {
+                    name = obj.substr(q1 + 1, q2 - q1 - 1);
+                }
+            }
+        }
+        
+        if (!id.empty() && !name.empty()) {
+            if (!first) result += ",";
+            first = false;
+            result += "{\"id\":\"" + id + "\",\"name\":\"" + name + "\"}";
+        }
+        
+        pos = obj_end + 1;
+    }
+    
+    result += "]";
+    return result;
+}
+
+std::string errorJson(const std::string& code, const std::string& message) {
+    return "{\"code\":\"" + code + "\",\"message\":\"" + message + "\"}";
+}
+
+bool handleStaticFile(const std::string& method, const std::string& uri,
+                      const fs::path& static_dir, std::string& response) {
+    
+    if (method != "GET" && method != "HEAD") return false;
+    
+    std::string decoded = urlDecode(uri);
+    size_t query_pos = decoded.find('?');
+    if (query_pos != std::string::npos) decoded = decoded.substr(0, query_pos);
+    
+    if (decoded == "/") decoded = "/index.html";
+    
+    fs::path file_path = static_dir / decoded.substr(1);
     
     try {
-        // Декодируем URL
-        std::string decoded_path = UrlDecode(target);
-        
-        // Удаляем начальный слеш, если есть
-        if (!decoded_path.empty() && decoded_path[0] == '/') {
-            decoded_path = decoded_path.substr(1);
+        fs::path canonical_static = fs::canonical(static_dir);
+        fs::path canonical_file = fs::canonical(file_path);
+        if (canonical_file.string().find(canonical_static.string()) != 0) {
+            response = "HTTP/1.1 400 Bad Request\r\n"
+                       "Content-Type: text/plain\r\n"
+                       "Content-Length: 11\r\n"
+                       "Connection: close\r\n\r\nBad Request";
+            return true;
         }
-        
-        // Если путь пустой, используем index.html
-        if (decoded_path.empty()) {
-            decoded_path = "index.html";
-        }
-        
-        // Строим полный путь к файлу
-        fs::path file_path = static_root / decoded_path;
-        
-        // Если путь указывает на директорию, добавляем index.html
-        if (fs::exists(file_path) && fs::is_directory(file_path)) {
-            file_path /= "index.html";
-        }
-        
-        // Проверяем, что путь находится внутри корневого каталога
-        if (!IsSubPath(file_path, static_root)) {
-            // Для ошибок возвращаем string_body, но функция обещает file_body
-            // Создаем response с string_body для ошибки
-            http::response<http::string_body> error_response;
-            error_response.result(http::status::bad_request);
-            error_response.set(http::field::content_type, "text/plain");
-            error_response.body() = "Bad Request: Path outside root directory";
-            error_response.prepare_payload();
-            
-            // Конвертируем в file_body (не идеально, но для простоты)
-            http::response<http::file_body> converted;
-            converted.result(error_response.result());
-            converted.set(http::field::content_type, "text/plain");
-            // Не можем установить тело, поэтому просто возвращаем
-            converted.prepare_payload();
-            return converted;
-        }
-        
-        // Проверяем существование файла
-        if (!fs::exists(file_path) || !fs::is_regular_file(file_path)) {
-            http::response<http::string_body> error_response;
-            error_response.result(http::status::not_found);
-            error_response.set(http::field::content_type, "text/plain");
-            error_response.body() = "404 Not Found";
-            error_response.prepare_payload();
-            
-            http::response<http::file_body> converted;
-            converted.result(error_response.result());
-            converted.set(http::field::content_type, "text/plain");
-            converted.prepare_payload();
-            return converted;
-        }
-        
-        // Открываем файл
-        http::file_body::value_type file;
-        boost::system::error_code ec;
-        file.open(file_path.string().c_str(), beast::file_mode::read, ec);
-        
-        if (ec) {
-            http::response<http::string_body> error_response;
-            error_response.result(http::status::internal_server_error);
-            error_response.set(http::field::content_type, "text/plain");
-            error_response.body() = "Internal Server Error: Cannot open file";
-            error_response.prepare_payload();
-            
-            http::response<http::file_body> converted;
-            converted.result(error_response.result());
-            converted.set(http::field::content_type, "text/plain");
-            converted.prepare_payload();
-            return converted;
-        }
-        
-        // Формируем успешный ответ
-        response.result(http::status::ok);
-        response.set(http::field::content_type, GetMimeType(file_path));
-        response.body() = std::move(file);
-        response.prepare_payload();
-        
-    } catch (const std::exception& e) {
-        response.result(http::status::internal_server_error);
-        response.set(http::field::content_type, "text/plain");
-        // Для file_body нельзя присвоить строку, поэтому просто создаем пустой ответ
-        response.prepare_payload();
+    } catch (...) {
+        response = "HTTP/1.1 404 Not Found\r\n"
+                   "Content-Type: text/plain\r\n"
+                   "Content-Length: 9\r\n"
+                   "Connection: close\r\n\r\nNot Found";
+        return true;
     }
     
-    return response;
-}
-
-// Обработчик API (заглушка)
-http::response<http::string_body> HandleApiRequest(const std::string& target) {
-    http::response<http::string_body> response;
-    response.set(http::field::content_type, "application/json");
-    
-    if (target == "/api/v1/maps") {
-        response.result(http::status::ok);
-        response.body() = R"({"maps": []})";
-    } else if (target.find("/api/v1/maps/") == 0) {
-        response.result(http::status::ok);
-        response.body() = R"({"map": {"id": "1", "name": "Test Map"}})";
-    } else {
-        response.result(http::status::not_found);
-        response.body() = R"({"error": "Not found"})";
+    if (fs::is_directory(file_path)) {
+        file_path /= "index.html";
     }
     
-    response.prepare_payload();
-    return response;
+    if (!fs::exists(file_path) || !fs::is_regular_file(file_path)) {
+        response = "HTTP/1.1 404 Not Found\r\n"
+                   "Content-Type: text/plain\r\n"
+                   "Content-Length: 9\r\n"
+                   "Connection: close\r\n\r\nNot Found";
+        return true;
+    }
+    
+    std::string content = readFile(file_path);
+    if (content.empty()) {
+        response = "HTTP/1.1 404 Not Found\r\n"
+                   "Content-Type: text/plain\r\n"
+                   "Content-Length: 9\r\n"
+                   "Connection: close\r\n\r\nNot Found";
+        return true;
+    }
+    
+    std::stringstream resp;
+    resp << "HTTP/1.1 200 OK\r\n";
+    resp << "Content-Type: " << getMimeType(file_path.string()) << "\r\n";
+    resp << "Content-Length: " << content.size() << "\r\n";
+    resp << "Connection: close\r\n";
+    resp << "\r\n";
+    
+    if (method == "GET") {
+        resp << content;
+    }
+    
+    response = resp.str();
+    return true;
 }
 
-// Вспомогательная функция для отправки ответа с ошибкой
-void SendErrorResponse(tcp::socket& socket, http::status status, const std::string& message) {
-    http::response<http::string_body> response;
-    response.result(status);
-    response.set(http::field::content_type, "text/plain");
-    response.body() = message;
-    response.prepare_payload();
+bool handleApiRequest(const std::string& method, const std::string& uri,
+                      const fs::path& config_path, std::string& response) {
     
-    beast::error_code ec;
-    http::write(socket, response, ec);
+    if (uri.find("/api/v1/") != 0) {
+        std::string err = errorJson("badRequest", "Invalid API path");
+        response = "HTTP/1.1 400 Bad Request\r\n"
+                   "Content-Type: application/json\r\n"
+                   "Content-Length: " + std::to_string(err.size()) + "\r\n"
+                   "Connection: close\r\n\r\n" + err;
+        return true;
+    }
+    
+    if (method != "GET") {
+        std::string err = errorJson("methodNotAllowed", "Only GET method is allowed");
+        response = "HTTP/1.1 405 Method Not Allowed\r\n"
+                   "Content-Type: application/json\r\n"
+                   "Content-Length: " + std::to_string(err.size()) + "\r\n"
+                   "Connection: close\r\n\r\n" + err;
+        return true;
+    }
+    
+    std::string config = readFile(config_path);
+    if (config.empty()) {
+        std::string err = errorJson("internalError", "Failed to load config");
+        response = "HTTP/1.1 500 Internal Server Error\r\n"
+                   "Content-Type: application/json\r\n"
+                   "Content-Length: " + std::to_string(err.size()) + "\r\n"
+                   "Connection: close\r\n\r\n" + err;
+        return true;
+    }
+    
+    if (uri == "/api/v1/maps") {
+        std::string maps_list = getMapsList(config);
+        response = "HTTP/1.1 200 OK\r\n"
+                   "Content-Type: application/json\r\n"
+                   "Content-Length: " + std::to_string(maps_list.size()) + "\r\n"
+                   "Connection: close\r\n\r\n" + maps_list;
+        return true;
+    }
+    
+    if (uri.find("/api/v1/maps/") == 0) {
+        const std::string prefix = "/api/v1/maps/";
+        std::string map_id = uri.substr(prefix.size());
+        
+        if (map_id.empty()) {
+            std::string err = errorJson("badRequest", "Map ID is empty");
+            response = "HTTP/1.1 400 Bad Request\r\n"
+                       "Content-Type: application/json\r\n"
+                       "Content-Length: " + std::to_string(err.size()) + "\r\n"
+                       "Connection: close\r\n\r\n" + err;
+            return true;
+        }
+        
+        std::string map_content = findMapByID(config, map_id);
+        
+        if (map_content.empty()) {
+            std::string err = errorJson("mapNotFound", "Map not found");
+            response = "HTTP/1.1 404 Not Found\r\n"
+                       "Content-Type: application/json\r\n"
+                       "Content-Length: " + std::to_string(err.size()) + "\r\n"
+                       "Connection: close\r\n\r\n" + err;
+        } else {
+            response = "HTTP/1.1 200 OK\r\n"
+                       "Content-Type: application/json\r\n"
+                       "Content-Length: " + std::to_string(map_content.size()) + "\r\n"
+                       "Connection: close\r\n\r\n" + map_content;
+        }
+        return true;
+    }
+    
+    std::string err = errorJson("notFound", "Endpoint not found");
+    response = "HTTP/1.1 404 Not Found\r\n"
+               "Content-Type: application/json\r\n"
+               "Content-Length: " + std::to_string(err.size()) + "\r\n"
+               "Connection: close\r\n\r\n" + err;
+    return true;
 }
 
 int main(int argc, char* argv[]) {
     if (argc != 3) {
-        std::cerr << "Usage: " << argv[0] << " <config.json> <static_dir>" << std::endl;
-        return EXIT_FAILURE;
+        std::cerr << "Usage: " << argv[0] << " <config_file> <static_dir>" << std::endl;
+        return 1;
     }
     
-    std::string config_path = argv[1];
-    fs::path static_root = argv[2];
+    fs::path config_path = argv[1];
+    fs::path static_dir = argv[2];
     
-    // Проверяем существование статической директории
-    if (!fs::exists(static_root) || !fs::is_directory(static_root)) {
-        std::cerr << "Error: Static directory does not exist: " << static_root << std::endl;
-        return EXIT_FAILURE;
+    // Проверяем существование файла конфига
+    if (!fs::exists(config_path)) {
+        std::cerr << "Config file not found: " << config_path << std::endl;
+        return 1;
     }
     
-    // Инициализация логгера
-    Logger::GetInstance().SetTimestamp(std::chrono::system_clock::now());
-    LOG("Server starting with config: ", config_path, ", static root: ", static_root.string());
+    if (!fs::exists(static_dir)) {
+        std::cerr << "Static directory not found: " << static_dir << std::endl;
+        return 1;
+    }
     
-    try {
-        net::io_context ioc{1};
-        tcp::acceptor acceptor{ioc, tcp::endpoint(tcp::v4(), 8080)};
+    int server_fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (server_fd < 0) {
+        std::cerr << "Failed to create socket" << std::endl;
+        return 1;
+    }
+    
+    int opt = 1;
+    setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+    
+    struct sockaddr_in address;
+    address.sin_family = AF_INET;
+    address.sin_addr.s_addr = INADDR_ANY;
+    address.sin_port = htons(8080);
+    
+    if (bind(server_fd, (struct sockaddr*)&address, sizeof(address)) < 0) {
+        std::cerr << "Bind failed" << std::endl;
+        close(server_fd);
+        return 1;
+    }
+    
+    if (listen(server_fd, 10) < 0) {
+        std::cerr << "Listen failed" << std::endl;
+        close(server_fd);
+        return 1;
+    }
+    
+    std::cout << "Server has started..." << std::endl;
+    
+    while (true) {
+        struct sockaddr_in client_addr;
+        socklen_t client_len = sizeof(client_addr);
+        int client_fd = accept(server_fd, (struct sockaddr*)&client_addr, &client_len);
         
-        std::cout << "Server has started..." << std::endl;
-        LOG("Server listening on port 8080");
+        if (client_fd < 0) continue;
         
-        while (true) {
-            tcp::socket socket{ioc};
-            acceptor.accept(socket);
-            
-            beast::flat_buffer buffer;
-            http::request<http::string_body> req;
-            beast::error_code ec;
-            
-            http::read(socket, buffer, req, ec);
-            if (ec) {
-                LOG("Error reading request: ", ec.message());
-                continue;
-            }
-            
-            std::string target(req.target());
-            LOG("Received request: ", req.method_string(), " ", target);
-            
-            // Обработка запросов
-            if (target.find("/api/") == 0) {
-                // API запрос
-                auto response = HandleApiRequest(target);
-                http::write(socket, response, ec);
-                if (ec) {
-                    LOG("Error writing response: ", ec.message());
-                }
-            } else {
-                // Статический файл
-                // Сначала проверяем с string_body, чтобы корректно обработать ошибки
-                try {
-                    std::string decoded_path = UrlDecode(target);
-                    if (!decoded_path.empty() && decoded_path[0] == '/') {
-                        decoded_path = decoded_path.substr(1);
-                    }
-                    if (decoded_path.empty()) {
-                        decoded_path = "index.html";
-                    }
-                    
-                    fs::path file_path = static_root / decoded_path;
-                    if (fs::exists(file_path) && fs::is_directory(file_path)) {
-                        file_path /= "index.html";
-                    }
-                    
-                    if (!IsSubPath(file_path, static_root)) {
-                        SendErrorResponse(socket, http::status::bad_request, 
-                                        "Bad Request: Path outside root directory");
-                        continue;
-                    }
-                    
-                    if (!fs::exists(file_path) || !fs::is_regular_file(file_path)) {
-                        SendErrorResponse(socket, http::status::not_found, "404 Not Found");
-                        continue;
-                    }
-                    
-                    // Открываем и отправляем файл
-                    http::response<http::file_body> response;
-                    response.result(http::status::ok);
-                    response.set(http::field::content_type, GetMimeType(file_path));
-                    
-                    http::file_body::value_type file;
-                    boost::system::error_code file_ec;
-                    file.open(file_path.string().c_str(), beast::file_mode::read, file_ec);
-                    
-                    if (file_ec) {
-                        SendErrorResponse(socket, http::status::internal_server_error, 
-                                        "Internal Server Error: Cannot open file");
-                        continue;
-                    }
-                    
-                    response.body() = std::move(file);
-                    response.prepare_payload();
-                    http::write(socket, response, ec);
-                    
-                } catch (const std::exception& e) {
-                    SendErrorResponse(socket, http::status::internal_server_error, 
-                                    "Internal Server Error: "s + e.what());
-                }
-            }
-            
-            socket.shutdown(tcp::socket::shutdown_send, ec);
+        char buffer[65536] = {0};
+        ssize_t bytes_read = read(client_fd, buffer, sizeof(buffer) - 1);
+        
+        if (bytes_read <= 0) {
+            close(client_fd);
+            continue;
         }
         
-    } catch (const std::exception& e) {
-        LOG("Server error: ", e.what());
-        std::cerr << "Error: " << e.what() << std::endl;
-        return EXIT_FAILURE;
+        std::string request(buffer);
+        std::istringstream request_stream(request);
+        
+        std::string method, uri, version;
+        request_stream >> method >> uri >> version;
+        
+        std::string response;
+        
+        if (uri.find("/api/") == 0) {
+            handleApiRequest(method, uri, config_path, response);
+        } else {
+            handleStaticFile(method, uri, static_dir, response);
+        }
+        
+        send(client_fd, response.c_str(), response.size(), 0);
+        close(client_fd);
     }
     
-    return EXIT_SUCCESS;
+    close(server_fd);
+    return 0;
 }
