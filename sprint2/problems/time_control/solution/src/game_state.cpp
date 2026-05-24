@@ -2,6 +2,7 @@
 #include <random>
 #include <cmath>
 #include <algorithm>
+#include <iostream>
 
 namespace game {
 
@@ -18,6 +19,7 @@ model::Position GameState::GenerateStartPosition(const model::Map& map) {
     const auto& road = *road_opt;
     auto start = road.GetStart();
     
+    // Для горизонтальной дороги возвращаем точку на оси дороги
     if (road.IsHorizontal()) {
         return {static_cast<double>(start.x), static_cast<double>(start.y)};
     } else {
@@ -46,61 +48,34 @@ model::Position GameState::MoveDogWithCollision(const model::Dog& dog, const mod
         return pos;
     }
     
+    // Вычисляем новую позицию
     double new_x = pos.x + speed.vx * delta_seconds;
     double new_y = pos.y + speed.vy * delta_seconds;
     
+    // Проверяем, находится ли новая позиция на дороге
     const auto* road_seg = FindRoadAt(map, new_x, new_y);
     if (road_seg) {
-        const auto& seg = *road_seg;
+        // Ограничиваем движение пределами дороги
         if (road_seg->road.IsHorizontal()) {
-            new_x = std::max(seg.left, std::min(seg.right, new_x));
+            // Горизонтальная дорога: y фиксирован, x ограничен
+            new_x = std::max(road_seg->left, std::min(road_seg->right, new_x));
+            new_y = road_seg->top;  // Центр дороги
         } else {
-            new_y = std::max(seg.top, std::min(seg.bottom, new_y));
+            // Вертикальная дорога: x фиксирован, y ограничен
+            new_x = road_seg->left;  // Центр дороги
+            new_y = std::max(road_seg->top, std::min(road_seg->bottom, new_y));
         }
         return {new_x, new_y};
     }
     
-    const int steps = 10;
-    double step = delta_seconds / steps;
-    
-    double current_x = pos.x;
-    double current_y = pos.y;
-    
-    for (int i = 1; i <= steps; ++i) {
-        double test_x = pos.x + speed.vx * step * i;
-        double test_y = pos.y + speed.vy * step * i;
-        
-        const auto* test_road = FindRoadAt(map, test_x, test_y);
-        if (!test_road) {
-            return {current_x, current_y};
-        }
-        
-        if (test_road->road.IsHorizontal()) {
-            if (test_x < test_road->left) test_x = test_road->left;
-            if (test_x > test_road->right) test_x = test_road->right;
-        } else {
-            if (test_y < test_road->top) test_y = test_road->top;
-            if (test_y > test_road->bottom) test_y = test_road->bottom;
-        }
-        
-        current_x = test_x;
-        current_y = test_y;
-    }
-    
-    return {current_x, current_y};
+    // Если ушли с дороги, ищем ближайшую точку на дороге
+    // Возвращаем текущую позицию (останавливаемся)
+    return pos;
 }
 
 void GameState::UpdateDogPosition(model::Dog& dog, const model::Map& map, double delta_seconds) {
     model::Position new_pos = MoveDogWithCollision(dog, map, delta_seconds);
     dog.SetPosition(new_pos);
-    
-    const auto& speed = dog.GetSpeed();
-    if (speed.vx != 0.0 || speed.vy != 0.0) {
-        model::Position test_pos = MoveDogWithCollision(dog, map, delta_seconds / 100.0);
-        if (std::abs(test_pos.x - new_pos.x) < 1e-9 && std::abs(test_pos.y - new_pos.y) < 1e-9) {
-            dog.Stop();
-        }
-    }
 }
 
 void GameState::ProcessTick(int64_t time_delta_ms) {
@@ -108,6 +83,7 @@ void GameState::ProcessTick(int64_t time_delta_ms) {
     
     double delta_seconds = time_delta_ms / 1000.0;
     
+    // Обновляем всех собак
     for (auto& [player_id, dog] : dogs_) {
         const auto* player = players_.FindPlayer(player_id);
         if (!player) continue;
@@ -115,7 +91,20 @@ void GameState::ProcessTick(int64_t time_delta_ms) {
         const model::Map* map = game_.FindMap(player->GetMapId());
         if (!map) continue;
         
+        // Обновляем позицию
         UpdateDogPosition(dog, *map, delta_seconds);
+        
+        // Проверяем, можем ли мы продолжать движение
+        // Если скорость не нулевая, но позиция не изменилась, останавливаем собаку
+        const auto& speed = dog.GetSpeed();
+        if ((speed.vx != 0.0 || speed.vy != 0.0)) {
+            model::Position test_pos = MoveDogWithCollision(dog, *map, delta_seconds / 100.0);
+            if (std::abs(test_pos.x - dog.GetPosition().x) < 1e-9 && 
+                std::abs(test_pos.y - dog.GetPosition().y) < 1e-9) {
+                // Собака уперлась в границу и не может двигаться
+                dog.Stop();
+            }
+        }
     }
 }
 
@@ -126,6 +115,7 @@ GameState::JoinResult GameState::JoinGame(const std::string& user_name, const mo
     model::Player& player = players_.AddPlayer(user_name, map_id);
     model::Token token = players_.GenerateToken(player);
 
+    // Генерируем собаку в начальной позиции
     model::Position start_pos = GenerateStartPosition(*map);
     uint64_t dog_id = *player.GetId();
     model::Dog dog(dog_id, start_pos);
@@ -186,9 +176,6 @@ void GameState::StopDog(const model::Token& token) {
 std::vector<GameState::PlayerState> GameState::GetGameState(const model::Token& token) const {
     const model::Player* player = players_.FindPlayerByToken(token);
     if (!player) return {};
-
-    const model::Dog* dog = GetDogByToken(token);
-    if (!dog) return {};
 
     std::vector<PlayerState> result;
     auto players_on_map = players_.GetPlayersOnMap(player->GetMapId());

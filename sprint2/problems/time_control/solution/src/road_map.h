@@ -30,15 +30,16 @@ public:
         }
         
         bool Contains(double x, double y) const {
-            const double ROAD_WIDTH = 0.8;
-            const double HALF_WIDTH = ROAD_WIDTH / 2.0;
+            const double ROAD_HALF_WIDTH = 0.4;
             
             if (road.IsHorizontal()) {
+                // Горизонтальная дорога: x между left и right, y в пределах 0.4 от центра
                 return x >= left - 1e-9 && x <= right + 1e-9 &&
-                       std::abs(y - top) <= HALF_WIDTH + 1e-9;
+                       std::abs(y - top) <= ROAD_HALF_WIDTH + 1e-9;
             } else {
+                // Вертикальная дорога: y между top и bottom, x в пределах 0.4 от центра
                 return y >= top - 1e-9 && y <= bottom + 1e-9 &&
-                       std::abs(x - left) <= HALF_WIDTH + 1e-9;
+                       std::abs(x - left) <= ROAD_HALF_WIDTH + 1e-9;
             }
         }
     };
