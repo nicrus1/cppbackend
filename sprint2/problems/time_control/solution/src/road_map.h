@@ -30,12 +30,15 @@ public:
         }
         
         bool Contains(double x, double y) const {
+            const double ROAD_WIDTH = 0.8;
+            const double HALF_WIDTH = ROAD_WIDTH / 2.0;
+            
             if (road.IsHorizontal()) {
                 return x >= left - 1e-9 && x <= right + 1e-9 &&
-                       std::abs(y - top) <= 0.4 + 1e-9;
+                       std::abs(y - top) <= HALF_WIDTH + 1e-9;
             } else {
                 return y >= top - 1e-9 && y <= bottom + 1e-9 &&
-                       std::abs(x - left) <= 0.4 + 1e-9;
+                       std::abs(x - left) <= HALF_WIDTH + 1e-9;
             }
         }
     };

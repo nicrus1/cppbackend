@@ -15,10 +15,10 @@ struct Speed {
 };
 
 enum class Direction {
-    NORTH,  // "U"
-    SOUTH,  // "D"
-    WEST,   // "L"
-    EAST    // "R"
+    NORTH,
+    SOUTH,
+    WEST,
+    EAST
 };
 
 inline std::string DirectionToString(Direction dir) {

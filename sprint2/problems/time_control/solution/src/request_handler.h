@@ -30,26 +30,22 @@ public:
         std::string target = std::string(req.target());
         std::string method = std::string(req.method_string());
 
-        // Убираем query parameters
         auto query_pos = target.find('?');
         if (query_pos != std::string::npos) {
             target = target.substr(0, query_pos);
         }
         
-        // Убираем ведущий слеш для статических файлов
         std::string path = target;
         if (!path.empty() && path[0] == '/') {
             path = path.substr(1);
         }
 
-        // Проверка для API запросов с неверной версией
         if (target.find("/api/v") == 0 && target.find("/api/v1/") != 0) {
             SendError(std::move(req), send, http::status::bad_request,
                       "badRequest", "Invalid API version");
             return;
         }
 
-        // API endpoints
         if (target == "/api/v1/game/join") {
             api_handler_.HandleJoin(std::move(req), std::forward<Send>(send));
             return;
@@ -66,20 +62,14 @@ public:
         }
         
         if (target == "/api/v1/game/player/action") {
-    api_handler_.HandlePlayerAction(
-        std::move(req),
-        std::forward<Send>(send)
-    );
-    return;
-}
+            api_handler_.HandlePlayerAction(std::move(req), std::forward<Send>(send));
+            return;
+        }
 
-if (target == "/api/v1/game/tick") {
-    api_handler_.HandleTick(
-        std::move(req),
-        std::forward<Send>(send)
-    );
-    return;
-}
+        if (target == "/api/v1/game/tick") {
+            api_handler_.HandleTick(std::move(req), std::forward<Send>(send));
+            return;
+        }
 
         if (target == "/api/v1/maps") {
             if (method != "GET") {
@@ -124,7 +114,6 @@ if (target == "/api/v1/game/tick") {
             return;
         }
 
-        // Статические файлы
         HandleStaticFile(std::move(req), std::forward<Send>(send), path);
     }
 
@@ -133,33 +122,27 @@ private:
     void HandleStaticFile(http::request<Body, http::basic_fields<Allocator>>&& req,
                           Send&& send,
                           const std::string& path) {
-        // Только GET для статики
         if (req.method() != http::verb::get) {
             SendError(std::move(req), send, http::status::method_not_allowed,
                       "badRequest", "Method not allowed");
             return;
         }
         
-        // Если путь пустой - index.html
         std::string file_path = path.empty() ? "index.html" : path;
         
-        // Защита от path traversal
         if (file_path.find("..") != std::string::npos) {
             SendStaticNotFound(std::move(req), send);
             return;
         }
         
-        // Полный путь
         std::filesystem::path full_path = std::filesystem::path(static_dir_) / file_path;
         
-        // Пробуем открыть файл
         std::ifstream file(full_path, std::ios::binary);
         if (!file.is_open()) {
             SendStaticNotFound(std::move(req), send);
             return;
         }
         
-        // Определяем content type по расширению
         std::string content_type = "text/plain";
         std::string ext = full_path.extension().string();
         if (ext == ".html") content_type = "text/html";
@@ -169,12 +152,10 @@ private:
         else if (ext == ".png") content_type = "image/png";
         else if (ext == ".jpg" || ext == ".jpeg") content_type = "image/jpeg";
         
-        // Читаем файл
         std::stringstream buffer;
         buffer << file.rdbuf();
         std::string body = buffer.str();
         
-        // Отправляем ответ
         http::response<http::string_body> response(http::status::ok, req.version());
         response.set(http::field::content_type, content_type);
         response.body() = body;

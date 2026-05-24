@@ -28,7 +28,6 @@ public:
             return;
         }
 
-        // Check Content-Type
         auto content_type = req.find(http::field::content_type);
         if (content_type == req.end() || content_type->value() != "application/json") {
             SendError(std::move(req), send, http::status::bad_request,
@@ -319,85 +318,68 @@ public:
         }
     }
 
-	template <typename Body, typename Allocator, typename Send>
-void HandleTick(
-    http::request<Body, http::basic_fields<Allocator>>&& req,
-    Send&& send) {
-
-    if (req.method() != http::verb::post) {
-        SendErrorWithAllow(
-            std::move(req),
-            send,
-            http::status::method_not_allowed,
-            "invalidMethod",
-            "Only POST method is expected",
-            "POST"
-        );
-        return;
-    }
-
-    auto content_type =
-        req.find(http::field::content_type);
-
-    if (content_type == req.end() ||
-        content_type->value() != "application/json") {
-
-        SendError(
-            std::move(req),
-            send,
-            http::status::bad_request,
-            "invalidArgument",
-            "Invalid Content-Type"
-        );
-
-        return;
-    }
-
-    try {
-
-        auto json =
-            boost::json::parse(req.body()).as_object();
-
-        if (!json.contains("timeDelta") ||
-            !json.at("timeDelta").is_int64()) {
-
-            SendError(
-                std::move(req),
-                send,
-                http::status::bad_request,
-                "invalidArgument",
-                "Failed to parse tick request JSON"
-            );
-
+    // POST /api/v1/game/tick
+    template <typename Body, typename Allocator, typename Send>
+    void HandleTick(http::request<Body, http::basic_fields<Allocator>>&& req, Send&& send) {
+        if (req.method() != http::verb::post) {
+            SendErrorWithAllow(std::move(req), send, http::status::method_not_allowed,
+                               "invalidMethod", "Only POST method is expected", "POST");
             return;
         }
 
-        uint64_t delta =
-            static_cast<uint64_t>(
-                json.at("timeDelta").as_int64()
-            );
+        auto content_type = req.find(http::field::content_type);
+        if (content_type == req.end() || content_type->value() != "application/json") {
+            SendError(std::move(req), send, http::status::bad_request,
+                      "invalidArgument", "Invalid content type");
+            return;
+        }
 
-        game_state_.Update(delta);
+        boost::json::value json;
+        try {
+            json = boost::json::parse(req.body());
+        }
+        catch (...) {
+            SendError(std::move(req), send, http::status::bad_request,
+                      "invalidArgument", "Failed to parse tick request JSON");
+            return;
+        }
 
-        SendResponseWithCache(
-            std::move(req),
-            send,
-            http::status::ok,
-            "application/json",
-            "{}"
-        );
+        if (!json.is_object()) {
+            SendError(std::move(req), send, http::status::bad_request,
+                      "invalidArgument", "Failed to parse tick request JSON");
+            return;
+        }
+
+        auto& obj = json.as_object();
+        if (!obj.contains("timeDelta") || !obj.at("timeDelta").is_int64()) {
+            SendError(std::move(req), send, http::status::bad_request,
+                      "invalidArgument", "Invalid timeDelta value");
+            return;
+        }
+
+        int64_t time_delta = obj.at("timeDelta").as_int64();
+        if (time_delta <= 0) {
+            SendError(std::move(req), send, http::status::bad_request,
+                      "invalidArgument", "timeDelta must be positive");
+            return;
+        }
+
+        try {
+            game_state_.ProcessTick(time_delta);
+            
+            http::response<http::string_body> response(http::status::ok, req.version());
+            response.set(http::field::content_type, "application/json");
+            response.set(http::field::cache_control, "no-cache");
+            response.body() = "{}";
+            response.prepare_payload();
+            response.keep_alive(req.keep_alive());
+            send(std::move(response));
+        }
+        catch (const std::exception& e) {
+            SendError(std::move(req), send, http::status::internal_server_error,
+                      "internalError", e.what());
+        }
     }
-    catch (...) {
-
-        SendError(
-            std::move(req),
-            send,
-            http::status::bad_request,
-            "invalidArgument",
-            "Failed to parse tick request JSON"
-        );
-    }
-}
 
 private:
     template <typename Body, typename Allocator>
