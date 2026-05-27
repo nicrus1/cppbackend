@@ -39,7 +39,6 @@ add_executable(game_server
     src/road_map.h
 )
 
-# Явно указываем библиотеки для линковки
 target_link_libraries(game_server PRIVATE 
     Threads::Threads 
     ${Boost_LIBRARIES}
