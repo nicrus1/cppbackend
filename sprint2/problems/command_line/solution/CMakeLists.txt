@@ -9,10 +9,12 @@ conan_basic_setup()
 find_package(Boost 1.78.0 REQUIRED COMPONENTS program_options)
 if(Boost_FOUND)
   include_directories(${Boost_INCLUDE_DIRS})
+  link_directories(${Boost_LIBRARY_DIRS})
 endif()
 
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
+
 add_executable(game_server
     src/main.cpp
     src/http_server.cpp
@@ -37,6 +39,14 @@ add_executable(game_server
     src/road_map.h
 )
 
-target_link_libraries(game_server PRIVATE Threads::Threads ${Boost_LIBRARIES})
+# Явно указываем библиотеки для линковки
+target_link_libraries(game_server PRIVATE 
+    Threads::Threads 
+    ${Boost_LIBRARIES}
+    boost_program_options
+)
+
+# Добавляем путь к библиотекам Boost от Conan
+target_link_directories(game_server PRIVATE ${Boost_LIBRARY_DIRS})
 
 target_include_directories(game_server PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
