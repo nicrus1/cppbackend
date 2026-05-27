@@ -3,3 +3,7 @@ boost/1.78.0
 
 [generators]
 cmake
+
+[options]
+boost:without_program_options=False
+boost:shared=False
