@@ -3,6 +3,7 @@
 #include <boost/asio/signal_set.hpp>
 #include <iostream>
 #include <thread>
+#include <chrono>
 
 #include "json_loader.h"
 #include "request_handler.h"
@@ -30,8 +31,10 @@ void RunWorkers(unsigned n, const Fn& fn) {
 int main(int argc, const char* argv[]) {
     logger::InitLogging();
     
+    std::cerr << "=== Game Server Starting ===" << std::endl;
+    
     if (argc != 2) {
-        std::cerr << "Usage: game_server <game-config-json>"sv << std::endl;
+        std::cerr << "Usage: game_server <game-config-json>" << std::endl;
         return EXIT_FAILURE;
     }
     
@@ -39,37 +42,52 @@ int main(int argc, const char* argv[]) {
     std::string exception_msg;
     
     try {
+        std::cerr << "Loading game config from: " << argv[1] << std::endl;
         model::Game game = json_loader::LoadGame(argv[1]);
+        std::cerr << "Game config loaded successfully" << std::endl;
 
         const unsigned num_threads = std::thread::hardware_concurrency();
+        std::cerr << "Using " << num_threads << " threads" << std::endl;
+        
         net::io_context ioc(num_threads);
 
         net::signal_set signals(ioc, SIGINT, SIGTERM);
-        signals.async_wait([&ioc](const boost::system::error_code&, int) {
+        signals.async_wait([&ioc](const boost::system::error_code&, int signal) {
+            std::cerr << "Received signal " << signal << ", stopping server..." << std::endl;
             ioc.stop();
         });
 
+        std::cerr << "Creating RequestHandler..." << std::endl;
         http_handler::RequestHandler handler{game};
+        std::cerr << "RequestHandler created" << std::endl;
 
         const auto address = net::ip::make_address("0.0.0.0");
         const unsigned short port = 8080;
         
         logger::LogServerStarted(address.to_string(), port);
+        std::cerr << "Starting HTTP server on " << address.to_string() << ":" << port << std::endl;
         
         http_server::ServeHttp(ioc, {address, port}, [&handler](auto&& req, auto&& send) {
             handler(std::forward<decltype(req)>(req), std::forward<decltype(send)>(send));
         });
 
+        std::cerr << "Server is running. Press Ctrl+C to stop." << std::endl;
+        
         RunWorkers(std::max(1u, num_threads), [&ioc] {
             ioc.run();
         });
         
+        std::cerr << "Server stopped" << std::endl;
+        
     } catch (const std::exception& ex) {
         exit_code = EXIT_FAILURE;
         exception_msg = ex.what();
+        std::cerr << "FATAL ERROR: " << exception_msg << std::endl;
     }
     
     logger::LogServerExited(exit_code, exception_msg);
+    
+    std::cerr << "Server exited with code " << exit_code << std::endl;
     
     return exit_code;
 }

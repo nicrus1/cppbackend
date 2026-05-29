@@ -9,6 +9,7 @@
 #include <functional>
 #include <cctype>
 #include <algorithm>
+#include <memory>
 
 namespace http_handler {
 
@@ -17,7 +18,8 @@ namespace http = beast::http;
 
 class ApiHandler {
 public:
-    explicit ApiHandler(model::Game& game) : game_state_(game) {}
+    explicit ApiHandler(model::Game& game) 
+        : game_state_(std::make_unique<game::GameState>(game)) {}
 
     template <typename Body, typename Allocator, typename Send>
     void HandleJoin(http::request<Body, http::basic_fields<Allocator>>&& req, Send&& send) {
@@ -52,13 +54,17 @@ public:
             std::string map_id_str = std::string(obj.at("mapId").as_string());
             model::Map::Id map_id{map_id_str};
 
-            auto join_result = game_state_.JoinGame(user_name, map_id);
+            auto join_result = game_state_->JoinGame(user_name, map_id);
             
             boost::json::object res_obj;
             res_obj["authToken"] = *join_result.token;
             res_obj["playerId"] = *join_result.player_id;
 
             SendResponse(std::move(req), send, http::status::ok, boost::json::serialize(res_obj));
+        } catch (const std::exception& e) {
+            logger::LogError("Join game error: " + std::string(e.what()));
+            SendError(std::move(req), send, http::status::bad_request,
+                      "invalidArgument", "Join game request parses but misses fields");
         } catch (...) {
             SendError(std::move(req), send, http::status::bad_request,
                       "invalidArgument", "Join game request parses but misses fields");
@@ -80,7 +86,7 @@ public:
             return;
         }
 
-        if (!game_state_.ValidateToken(*token_opt)) {
+        if (!game_state_->ValidateToken(*token_opt)) {
             SendError(std::move(req), send, http::status::unauthorized,
                       "unknownToken", "Player token not found");
             return;
@@ -91,7 +97,7 @@ public:
             return;
         }
 
-        auto players = game_state_.GetPlayersOnMap(*token_opt);
+        auto players = game_state_->GetPlayersOnMap(*token_opt);
         boost::json::object res_obj;
         for (const auto& [id_str, name] : players) {
             boost::json::object p_obj;
@@ -122,7 +128,7 @@ public:
             return;
         }
 
-        if (!game_state_.ValidateToken(*token_opt)) {
+        if (!game_state_->ValidateToken(*token_opt)) {
             SendError(std::move(req), send, http::status::unauthorized,
                       "unknownToken", "Player token not found");
             return;
@@ -133,7 +139,7 @@ public:
             return;
         }
 
-        auto states = game_state_.GetGameState(*token_opt);
+        auto states = game_state_->GetGameState(*token_opt);
         boost::json::object players_obj;
 
         for (const auto& ps : states) {
@@ -182,7 +188,7 @@ public:
             return;
         }
 
-        if (!game_state_.ValidateToken(*token_opt)) {
+        if (!game_state_->ValidateToken(*token_opt)) {
             SendError(std::move(req), send, http::status::unauthorized,
                       "unknownToken", "Player token not found");
             return;
@@ -198,9 +204,9 @@ public:
 
             std::string move_dir = std::string(obj.at("move").as_string());
             if (move_dir.empty()) {
-                game_state_.StopDog(*token_opt);
+                game_state_->StopDog(*token_opt);
             } else {
-                game_state_.SetDogDirection(*token_opt, model::StringToDirection(move_dir));
+                game_state_->SetDogDirection(*token_opt, model::StringToDirection(move_dir));
             }
 
             boost::json::object res_obj;
@@ -228,17 +234,27 @@ public:
 
         try {
             auto obj = boost::json::parse(req.body()).as_object();
-            if (!obj.contains("timeDelta") || !obj.at("timeDelta").is_int64() || obj.at("timeDelta").is_bool()) {
+            if (!obj.contains("timeDelta") || !obj.at("timeDelta").is_int64()) {
                 SendError(std::move(req), send, http::status::bad_request,
                           "invalidArgument", "Failed to parse tick request JSON");
                 return;
             }
 
             int64_t time_delta_ms = obj.at("timeDelta").as_int64();
-            game_state_.ProcessTick(time_delta_ms);
+            if (time_delta_ms <= 0) {
+                SendError(std::move(req), send, http::status::bad_request,
+                          "invalidArgument", "timeDelta must be positive");
+                return;
+            }
+            
+            game_state_->ProcessTick(time_delta_ms);
 
             boost::json::object res_obj;
             SendResponse(std::move(req), send, http::status::ok, boost::json::serialize(res_obj));
+        } catch (const std::exception& e) {
+            logger::LogError("Tick error: " + std::string(e.what()));
+            SendError(std::move(req), send, http::status::bad_request,
+                      "invalidArgument", "Failed to parse tick request JSON");
         } catch (...) {
             SendError(std::move(req), send, http::status::bad_request,
                       "invalidArgument", "Failed to parse tick request JSON");
@@ -326,7 +342,7 @@ private:
     }
 
 private:
-    game::GameState game_state_;
+    std::unique_ptr<game::GameState> game_state_;
 };
 
 } // namespace http_handler

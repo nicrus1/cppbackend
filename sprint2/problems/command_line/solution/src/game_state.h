@@ -30,17 +30,22 @@ public:
         model::Direction dir;
     };
 
-    explicit GameState(model::Game& game)
-        : game_(game)
-        , rng_(std::random_device{}()) {
-    }
+    explicit GameState(model::Game& game);
+
+    // Запрещаем копирование
+    GameState(const GameState&) = delete;
+    GameState& operator=(const GameState&) = delete;
+
+    // Разрешаем перемещение
+    GameState(GameState&&) = default;
+    GameState& operator=(GameState&&) = default;
 
     JoinResult JoinGame(
         const std::string& user_name,
         const model::Map::Id& map_id);
 
     std::unordered_map<std::string, std::string>
-    GetPlayersOnMap(const model::Token& token);
+    GetPlayersOnMap(const model::Token& token) const;
 
     bool ValidateToken(
         const model::Token& token) const;
