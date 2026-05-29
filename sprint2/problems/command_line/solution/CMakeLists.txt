@@ -3,9 +3,15 @@ cmake_minimum_required(VERSION 3.11)
 project(game_server CXX)
 set(CMAKE_CXX_STANDARD 20)
 
-# Настройки Conan
 include(${CMAKE_BINARY_DIR}/conanbuildinfo.cmake)
 conan_basic_setup()
+
+# Если при сборке будет ошибка линковки program_options, 
+# можно заменить эту строку на: find_package(Boost 1.78.0 REQUIRED COMPONENTS program_options)
+find_package(Boost 1.78.0 REQUIRED)
+if(Boost_FOUND)
+  include_directories(${Boost_INCLUDE_DIRS})
+endif()
 
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
@@ -19,7 +25,6 @@ add_executable(game_server
     src/logger.cpp
     src/boost_json.cpp
     src/game_state.cpp
-    # Заголовочные файлы
     src/http_server.h
     src/model.h
     src/tagged.h
@@ -33,20 +38,10 @@ add_executable(game_server
     src/api_handler.h
     src/dog.h
     src/road_map.h
+    src/command_line.h
+    src/ticker.h
 )
 
-# Используем find_package для Boost (с правильными путями от Conan)
-set(Boost_NO_SYSTEM_PATHS ON)
-set(Boost_USE_STATIC_LIBS ON)
-find_package(Boost 1.78.0 REQUIRED COMPONENTS program_options)
+target_link_libraries(game_server PRIVATE Threads::Threads ${Boost_LIBRARIES})
 
-# Линковка
-target_link_libraries(game_server PRIVATE 
-    Threads::Threads
-    ${Boost_LIBRARIES}
-)
-
-target_include_directories(game_server PRIVATE 
-    ${CMAKE_CURRENT_SOURCE_DIR}/src
-    ${Boost_INCLUDE_DIRS}
-)
+target_include_directories(game_server PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)

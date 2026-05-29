@@ -8,7 +8,6 @@
 #include <filesystem>
 #include <fstream>
 #include <sstream>
-#include <chrono>
 
 namespace http_handler {
 
@@ -17,25 +16,14 @@ namespace http = beast::http;
 
 class RequestHandler {
 public:
-    explicit RequestHandler(model::Game& game, 
-                           const std::string& static_dir = "/app/static",
-                           bool randomize_spawn = false)
+    explicit RequestHandler(model::Game& game, const std::string& static_dir = "/app/static")
         : game_{game}
-        , api_handler_{game, randomize_spawn}
-        , static_dir_(static_dir)
-        , manual_tick_enabled_{true} {
+        , api_handler_{game}
+        , static_dir_(static_dir) {
     }
 
     RequestHandler(const RequestHandler&) = delete;
     RequestHandler& operator=(const RequestHandler&) = delete;
-
-    void DisableManualTick() {
-        manual_tick_enabled_ = false;
-    }
-    
-    void ProcessTick(std::chrono::milliseconds delta) {
-        api_handler_.ProcessTick(delta.count());
-    }
 
     template <typename Body, typename Allocator, typename Send>
     void operator()(http::request<Body, http::basic_fields<Allocator>>&& req, Send&& send) {
@@ -78,14 +66,7 @@ public:
             return;
         }
 
-        // Обработка tick запроса - только если ручной режим включён
         if (target == "/api/v1/game/tick") {
-            if (!manual_tick_enabled_) {
-                // В автоматическом режиме tick недоступен
-                SendError(std::move(req), send, http::status::bad_request,
-                          "badRequest", "Invalid endpoint");
-                return;
-            }
             api_handler_.HandleTick(std::move(req), std::forward<Send>(send));
             return;
         }
@@ -195,19 +176,19 @@ private:
     }
 
     template <typename Body, typename Allocator, typename Send>
-    void SendResponse(http::request<Body, http::basic_fields<Allocator>>&& req,
-                      Send&& send,
-                      http::status status,
-                      std::string_view content_type,
-                      std::string_view body) {
-        http::response<http::string_body> response(status, req.version());
-        response.set(http::field::content_type, content_type);
-        response.set(http::field::cache_control, "no-cache");
-        response.body() = body;
-        response.prepare_payload();
-        response.keep_alive(req.keep_alive());
-        send(std::move(response));
-    }
+void SendResponse(http::request<Body, http::basic_fields<Allocator>>&& req,
+                  Send&& send,
+                  http::status status,
+                  std::string_view content_type,
+                  std::string_view body) {
+    http::response<http::string_body> response(status, req.version());
+    response.set(http::field::content_type, content_type);
+    response.set(http::field::cache_control, "no-cache");  // Добавьте эту строку
+    response.body() = body;
+    response.prepare_payload();
+    response.keep_alive(req.keep_alive());
+    send(std::move(response));
+}
 
     template <typename Body, typename Allocator, typename Send>
     void SendError(http::request<Body, http::basic_fields<Allocator>>&& req,
@@ -239,7 +220,6 @@ private:
     model::Game& game_;
     ApiHandler api_handler_;
     std::string static_dir_;
-    bool manual_tick_enabled_;
 };
 
 } // namespace http_handler

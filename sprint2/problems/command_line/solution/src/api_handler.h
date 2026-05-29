@@ -17,8 +17,7 @@ namespace http = beast::http;
 
 class ApiHandler {
 public:
-    explicit ApiHandler(model::Game& game, bool randomize_spawn = false) 
-        : game_state_(game, randomize_spawn) {}
+    explicit ApiHandler(model::Game& game) : game_state_(game) {}
 
     template <typename Body, typename Allocator, typename Send>
     void HandleJoin(http::request<Body, http::basic_fields<Allocator>>&& req, Send&& send) {
@@ -245,10 +244,6 @@ public:
             SendError(std::move(req), send, http::status::bad_request,
                       "invalidArgument", "Failed to parse tick request JSON");
         }
-    }
-
-    void ProcessTick(int64_t time_delta_ms) {
-        game_state_.ProcessTick(time_delta_ms);
     }
 
 private:

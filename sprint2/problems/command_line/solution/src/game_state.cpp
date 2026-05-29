@@ -4,7 +4,6 @@
 #include <cmath>
 #include <iostream>
 #include <random>
-#include <chrono>
 
 namespace {
 
@@ -14,38 +13,9 @@ constexpr double ROAD_HALF_WIDTH = 0.4;
 
 namespace game {
 
-model::Position GameState::GenerateRandomStartPosition(const model::Map& map) {
-    const auto& roads = map.GetRoads();
-    if (roads.empty()) {
-        return {0.0, 0.0};
-    }
-    
-    // Выбираем случайную дорогу
-    std::uniform_int_distribution<size_t> road_dist(0, roads.size() - 1);
-    const auto& road = roads[road_dist(rng_)];
-    
-    const auto& start = road.GetStart();
-    const auto& end = road.GetEnd();
-    
-    std::uniform_real_distribution<double> pos_dist(0.0, 1.0);
-    
-    if (road.IsHorizontal()) {
-        double t = pos_dist(rng_);
-        double x = start.x + t * (end.x - start.x);
-        return {x, static_cast<double>(start.y)};
-    } else {
-        double t = pos_dist(rng_);
-        double y = start.y + t * (end.y - start.y);
-        return {static_cast<double>(start.x), y};
-    }
-}
-
 model::Position GameState::GenerateStartPosition(const model::Map& map) {
-    if (randomize_spawn_) {
-        return GenerateRandomStartPosition(map);
-    }
-    
     const auto& roads = map.GetRoads();
+    
     if (roads.empty()) {
         return {0.0, 0.0};
     }

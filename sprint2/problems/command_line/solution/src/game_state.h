@@ -30,10 +30,9 @@ public:
         model::Direction dir;
     };
 
-    explicit GameState(model::Game& game, bool randomize_spawn = false)
+    explicit GameState(model::Game& game)
         : game_(game)
-        , rng_(std::random_device{}())
-        , randomize_spawn_(randomize_spawn) {
+        , rng_(std::random_device{}()) {
     }
 
     JoinResult JoinGame(
@@ -74,9 +73,6 @@ public:
 private:
     model::Position GenerateStartPosition(
         const model::Map& map);
-    
-    model::Position GenerateRandomStartPosition(
-        const model::Map& map);
 
     void MoveDog(
         model::Dog& dog,
@@ -88,7 +84,6 @@ private:
     model::Players players_;
     std::unordered_map<model::PlayerId, model::Dog, util::TaggedHasher<model::PlayerId>> dogs_;
     std::mt19937 rng_;
-    bool randomize_spawn_;
 };
 
 } // namespace game
