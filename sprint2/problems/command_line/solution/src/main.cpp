@@ -4,12 +4,13 @@
 #include <iostream>
 #include <thread>
 
+// Твои реальные заголовочные файлы
 #include "json_loader.h"
 #include "request_handler.h"
-#include "app.h"
 #include "logger.h"
 #include "command_line.h"
 #include "ticker.h"
+#include "model.h"
 
 using namespace std::literals;
 namespace net = boost::asio;
@@ -39,7 +40,7 @@ int main(int argc, const char* argv[]) {
         // 2. Инициализация логгера
         logger::InitLogger();
 
-        // 3. Загрузка карты
+        // 3. Загрузка карты и инициализация игры
         model::Game game = json_loader::LoadGame(args->config_file);
 
         // 4. Инициализация io_context
@@ -47,29 +48,28 @@ int main(int argc, const char* argv[]) {
         net::io_context ioc(num_threads);
         auto api_strand = net::make_strand(ioc);
 
-        // 5. Инициализация фасада приложения
-        // Обязательно добавь args->randomize_spawn_points в конструктор Application!
-        app::Application app{game, args->randomize_spawn_points};
-
-        // 6. Инициализация обработчика запросов
+        // 5. Инициализация обработчика запросов
         bool is_auto_tick = args->tick_period > 0;
+        
+        // ВНИМАНИЕ: Твой RequestHandler должен принимать game и is_auto_tick в конструкторе!
         auto handler = std::make_shared<http_handler::RequestHandler>(
-            app, args->www_root, api_strand, is_auto_tick
+            game, args->www_root, api_strand, is_auto_tick
         );
 
-        // 7. Настройка таймера
+        // 6. Настройка таймера
         if (is_auto_tick) {
             auto ticker = std::make_shared<Ticker>(
                 api_strand, 
                 std::chrono::milliseconds(args->tick_period),
-                [&app](std::chrono::milliseconds delta) { 
-                    app.Tick(delta); 
+                [&game](std::chrono::milliseconds delta) { 
+                    // ВНИМАНИЕ: Убедись, что в классе Game у тебя есть метод Tick!
+                    game.Tick(delta); 
                 }
             );
             ticker->Start();
         }
 
-        // 8. Запуск HTTP-сервера
+        // 7. Запуск HTTP-сервера
         const auto address = net::ip::make_address("0.0.0.0");
         constexpr net::ip::port_type port = 8080;
         
@@ -77,7 +77,7 @@ int main(int argc, const char* argv[]) {
             handler->operator()(std::forward<decltype(req)>(req), std::forward<decltype(send)>(send));
         });
 
-        // 9. Обработка сигналов
+        // 8. Обработка сигналов
         net::signal_set signals(ioc, SIGINT, SIGTERM);
         signals.async_wait([&ioc](const sys::error_code& ec, [[maybe_unused]] int signal_number) {
             if (!ec) {
@@ -85,7 +85,7 @@ int main(int argc, const char* argv[]) {
             }
         });
 
-        // 10. Запуск пула потоков
+        // 9. Запуск пула потоков
         RunWorkers(num_threads, [&ioc] {
             ioc.run();
         });
