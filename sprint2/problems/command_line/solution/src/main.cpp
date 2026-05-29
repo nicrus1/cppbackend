@@ -4,7 +4,7 @@
 #include <iostream>
 #include <thread>
 
-// Твои реальные заголовочные файлы
+// Твои заголовочные файлы
 #include "json_loader.h"
 #include "request_handler.h"
 #include "logger.h"
@@ -31,45 +31,38 @@ void RunWorkers(unsigned n, const Fn& fn) {
 
 int main(int argc, const char* argv[]) {
     try {
-        // 1. Парсинг параметров командной строки
         auto args = ParseCommandLine(argc, argv);
         if (!args) {
             return EXIT_SUCCESS;
         }
 
-        // 2. Инициализация логгера
-        logger::InitLogger();
+        // Исправлено: теперь вызывается InitLogging
+        logger::InitLogging();
 
-        // 3. Загрузка карты и инициализация игры
         model::Game game = json_loader::LoadGame(args->config_file);
 
-        // 4. Инициализация io_context
         const unsigned num_threads = std::thread::hardware_concurrency();
         net::io_context ioc(num_threads);
         auto api_strand = net::make_strand(ioc);
 
-        // 5. Инициализация обработчика запросов
         bool is_auto_tick = args->tick_period > 0;
         
-        // ВНИМАНИЕ: Твой RequestHandler должен принимать game и is_auto_tick в конструкторе!
+        // Исправлено: передаем 4 аргумента, как требует логика
         auto handler = std::make_shared<http_handler::RequestHandler>(
             game, args->www_root, api_strand, is_auto_tick
         );
 
-        // 6. Настройка таймера
         if (is_auto_tick) {
             auto ticker = std::make_shared<Ticker>(
                 api_strand, 
                 std::chrono::milliseconds(args->tick_period),
                 [&game](std::chrono::milliseconds delta) { 
-                    // ВНИМАНИЕ: Убедись, что в классе Game у тебя есть метод Tick!
                     game.Tick(delta); 
                 }
             );
             ticker->Start();
         }
 
-        // 7. Запуск HTTP-сервера
         const auto address = net::ip::make_address("0.0.0.0");
         constexpr net::ip::port_type port = 8080;
         
@@ -77,7 +70,6 @@ int main(int argc, const char* argv[]) {
             handler->operator()(std::forward<decltype(req)>(req), std::forward<decltype(send)>(send));
         });
 
-        // 8. Обработка сигналов
         net::signal_set signals(ioc, SIGINT, SIGTERM);
         signals.async_wait([&ioc](const sys::error_code& ec, [[maybe_unused]] int signal_number) {
             if (!ec) {
@@ -85,7 +77,6 @@ int main(int argc, const char* argv[]) {
             }
         });
 
-        // 9. Запуск пула потоков
         RunWorkers(num_threads, [&ioc] {
             ioc.run();
         });
