@@ -102,7 +102,6 @@ public:
         SendResponse(std::move(req), send, http::status::ok, boost::json::serialize(res_obj));
     }
 
-    // Совместимость со старым вызовом в request_handler.h
     template <typename Body, typename Allocator, typename Send>
     void HandleGetPlayers(http::request<Body, http::basic_fields<Allocator>>&& req, Send&& send) {
         HandlePlayersList(std::move(req), std::forward<Send>(send));
@@ -331,3 +330,4 @@ private:
 };
 
 } // namespace http_handler
+}

@@ -4,8 +4,6 @@
 #include "api_handler.h"
 #include "logger.h"
 #include <boost/json.hpp>
-#include <boost/asio/strand.hpp>
-#include <boost/asio/io_context.hpp>
 #include <optional>
 #include <filesystem>
 #include <fstream>
@@ -15,19 +13,13 @@ namespace http_handler {
 
 namespace beast = boost::beast;
 namespace http = beast::http;
-namespace net = boost::asio;
 
 class RequestHandler {
 public:
-    explicit RequestHandler(model::Game& game, 
-                            const std::string& static_dir,
-                            net::strand<net::io_context::executor_type>& strand,
-                            bool is_auto_tick)
+    explicit RequestHandler(model::Game& game, const std::string& static_dir = "/app/static")
         : game_{game}
         , api_handler_{game}
-        , static_dir_(static_dir)
-        , strand_{strand}
-        , is_auto_tick_{is_auto_tick} {
+        , static_dir_(static_dir) {
     }
 
     RequestHandler(const RequestHandler&) = delete;
@@ -75,12 +67,6 @@ public:
         }
 
         if (target == "/api/v1/game/tick") {
-            // Если включен режим авто-тика, запрос к этой ручке возвращает ошибку
-            if (is_auto_tick_) {
-                SendError(std::move(req), send, http::status::bad_request,
-                          "badRequest", "Invalid endpoint");
-                return;
-            }
             api_handler_.HandleTick(std::move(req), std::forward<Send>(send));
             return;
         }
@@ -197,7 +183,7 @@ private:
                       std::string_view body) {
         http::response<http::string_body> response(status, req.version());
         response.set(http::field::content_type, content_type);
-        response.set(http::field::cache_control, "no-cache");  
+        response.set(http::field::cache_control, "no-cache");  // Добавьте эту строку
         response.body() = body;
         response.prepare_payload();
         response.keep_alive(req.keep_alive());
@@ -234,8 +220,6 @@ private:
     model::Game& game_;
     ApiHandler api_handler_;
     std::string static_dir_;
-    net::strand<net::io_context::executor_type>& strand_;
-    bool is_auto_tick_;
 };
 
 } // namespace http_handler

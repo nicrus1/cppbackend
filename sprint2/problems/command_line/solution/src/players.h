@@ -55,9 +55,6 @@ public:
         return it->second.get();
     }
 
-    // ИСПРАВЛЕНО
-    // Нельзя считать PlayerId{0} невалидным,
-    // потому что первый игрок имеет id = 0
     Player* FindPlayerByToken(const Token& token) {
         if (!player_tokens_.IsValidToken(token)) {
             return nullptr;

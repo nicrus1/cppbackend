@@ -1,8 +1,6 @@
 #pragma once
-#include <boost/asio/strand.hpp>
-#include <boost/asio/io_context.hpp>
-#include <boost/asio/steady_timer.hpp>
-#include <boost/asio/dispatch.hpp>
+
+#include <boost/asio.hpp>
 #include <chrono>
 #include <functional>
 #include <memory>
@@ -16,45 +14,57 @@ public:
     using Strand = net::strand<net::io_context::executor_type>;
     using Handler = std::function<void(std::chrono::milliseconds delta)>;
 
-    Ticker(Strand strand, std::chrono::milliseconds period, Handler handler)
-        : strand_{strand}
-        , period_{period}
-        , handler_{std::move(handler)} {
+    Ticker(Strand strand,
+           std::chrono::milliseconds period,
+           Handler handler)
+        : strand_(strand)
+        , period_(period)
+        , handler_(std::move(handler)) {
     }
 
     void Start() {
         last_tick_ = Clock::now();
+
         net::dispatch(strand_, [self = shared_from_this()] {
             self->ScheduleTick();
         });
     }
 
 private:
+    using Clock = std::chrono::steady_clock;
+
     void ScheduleTick() {
         assert(strand_.running_in_this_thread());
+
         timer_.expires_after(period_);
-        timer_.async_wait([self = shared_from_this()](sys::error_code ec) {
-            self->OnTick(ec);
-        });
+
+        timer_.async_wait(
+            [self = shared_from_this()](sys::error_code ec) {
+                self->OnTick(ec);
+            });
     }
 
     void OnTick(sys::error_code ec) {
         using namespace std::chrono;
+
         assert(strand_.running_in_this_thread());
 
         if (!ec) {
             auto this_tick = Clock::now();
-            auto delta = duration_cast<milliseconds>(this_tick - last_tick_);
+
+            auto delta = duration_cast<milliseconds>(
+                this_tick - last_tick_);
+
             last_tick_ = this_tick;
+
             try {
                 handler_(delta);
             } catch (...) {
             }
+
             ScheduleTick();
         }
     }
-
-    using Clock = std::chrono::steady_clock;
 
     Strand strand_;
     std::chrono::milliseconds period_;
