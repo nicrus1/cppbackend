@@ -66,7 +66,6 @@ void GameState::MoveDog(model::Dog& dog, const model::Map& map, int64_t time_del
             ry_max = std::max(road.GetStart().y, road.GetEnd().y) + ROAD_HALF_WIDTH;
         }
 
-        // Проверяем, находится ли собака в границах этого прямоугольника
         if (pos.x >= rx_min - EPSILON && pos.x <= rx_max + EPSILON &&
             pos.y >= ry_min - EPSILON && pos.y <= ry_max + EPSILON) {
             
