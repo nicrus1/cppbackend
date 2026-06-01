@@ -6,9 +6,9 @@ set(CMAKE_CXX_STANDARD 20)
 include(${CMAKE_BINARY_DIR}/conanbuildinfo.cmake)
 conan_basic_setup()
 
-# Если при сборке будет ошибка линковки program_options, 
-# можно заменить эту строку на: find_package(Boost 1.78.0 REQUIRED COMPONENTS program_options)
-find_package(Boost 1.78.0 REQUIRED)
+# ГЛАВНОЕ ИЗМЕНЕНИЕ: указываем компоненты
+find_package(Boost 1.78.0 REQUIRED COMPONENTS program_options json)
+
 if(Boost_FOUND)
   include_directories(${Boost_INCLUDE_DIRS})
 endif()
@@ -42,6 +42,11 @@ add_executable(game_server
     src/ticker.h
 )
 
-target_link_libraries(game_server PRIVATE Threads::Threads ${Boost_LIBRARIES})
+# ГЛАВНОЕ ИЗМЕНЕНИЕ: явно указываем библиотеки
+target_link_libraries(game_server PRIVATE 
+    Threads::Threads 
+    ${Boost_PROGRAM_OPTIONS_LIBRARY}
+    ${Boost_JSON_LIBRARY}
+)
 
 target_include_directories(game_server PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
