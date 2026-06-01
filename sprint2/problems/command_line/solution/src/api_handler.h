@@ -22,7 +22,6 @@ public:
     explicit ApiHandler(model::Game& game) 
         : game_state_(std::make_unique<game::GameState>(game)) {}
 
-    // Добавленный метод для внутреннего тика от таймера
     void Tick(std::chrono::milliseconds delta) {
         game_state_->ProcessTick(delta.count());
     }

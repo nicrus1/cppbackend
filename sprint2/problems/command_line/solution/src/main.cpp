@@ -8,8 +8,8 @@
 #include "json_loader.h"
 #include "request_handler.h"
 #include "logger.h"
-#include "command_line.h" // Обязательно подключаем парсинг
-#include "ticker.h"       // Подключаем Ticker
+#include "command_line.h"г
+#include "ticker.h"
 
 using namespace std::literals;
 namespace net = boost::asio;
@@ -39,10 +39,8 @@ int main(int argc, const char* argv[]) {
     std::string exception_msg;
     
     try {
-        // Парсим аргументы командной строки
         auto args = ParseCommandLine(argc, argv);
         if (!args) {
-            // Если вернулся nullopt, значит была вызвана справка (--help)
             return EXIT_SUCCESS;
         }
 
@@ -50,8 +48,6 @@ int main(int argc, const char* argv[]) {
         model::Game game = json_loader::LoadGame(args->config_file);
         std::cerr << "Game config loaded successfully" << std::endl;
 
-        // Примечание: Если у твоей модели Game есть настройка рандомного спавна,
-        // вызови её здесь. Например:
         // if (args->randomize_spawn_points) { game.SetRandomizeSpawnPoints(true); }
 
         const unsigned num_threads = std::thread::hardware_concurrency();
@@ -65,16 +61,13 @@ int main(int argc, const char* argv[]) {
             ioc.stop();
         });
 
-        // Создаем strand для синхронизации вызовов API и тиков таймера
         auto api_strand = net::make_strand(ioc);
 
         std::cerr << "Creating RequestHandler..." << std::endl;
-        // Если tick_period равен 0, значит сервер должен управляться извне (через REST API)
         bool manual_tick_allowed = (args->tick_period == 0);
         http_handler::RequestHandler handler{game, args->www_root, manual_tick_allowed};
         std::cerr << "RequestHandler created" << std::endl;
 
-        // Настраиваем Ticker, если не разрешено ручное управление (т.е. задан --tick-period)
         std::shared_ptr<Ticker> ticker;
         if (!manual_tick_allowed) {
             ticker = std::make_shared<Ticker>(
@@ -95,14 +88,12 @@ int main(int argc, const char* argv[]) {
         
         http_server::ServeHttp(ioc, {address, port}, [&handler, api_strand](auto&& req, auto&& send) {
             std::string target = std::string(req.target());
-            
-            // Запросы к API выполняются в strand для защиты от состояния гонки
+
             if (target.find("/api/") == 0) {
                 net::dispatch(api_strand, [&handler, req = std::move(req), send = std::move(send)]() mutable {
                     handler(std::move(req), std::move(send));
                 });
             } else {
-                // Статические файлы можно отдавать из любого потока без блокировок
                 handler(std::move(req), std::move(send));
             }
         });

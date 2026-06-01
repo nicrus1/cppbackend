@@ -6,7 +6,6 @@ set(CMAKE_CXX_STANDARD 20)
 include(${CMAKE_BINARY_DIR}/conanbuildinfo.cmake)
 conan_basic_setup()
 
-# Находим пакеты
 find_package(Boost 1.78.0 REQUIRED COMPONENTS program_options system)
 
 set(THREADS_PREFER_PTHREAD_FLAG ON)
