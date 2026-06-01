@@ -13,6 +13,9 @@ constexpr double ROAD_HALF_WIDTH = 0.4;
 
 namespace game {
 
+GameState::GameState(model::Game& game)
+    : game_(game) {}
+
 model::Position GameState::GenerateStartPosition(const model::Map& map) {
     const auto& roads = map.GetRoads();
     
@@ -230,8 +233,8 @@ std::unordered_map<std::string, std::string> GameState::GetPlayersOnMapForTest(c
     return result;
 }
 
-std::unordered_map<std::string, std::string> GameState::GetPlayersOnMap(const model::Token& token) {
-    model::Player* player = players_.FindPlayerByToken(token);
+std::unordered_map<std::string, std::string> GameState::GetPlayersOnMap(const model::Token& token) const {
+    const model::Player* player = players_.FindPlayerByToken(token);
     if (!player) {
         return {};
     }
