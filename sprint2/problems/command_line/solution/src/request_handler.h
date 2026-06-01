@@ -27,7 +27,6 @@ public:
     RequestHandler(const RequestHandler&) = delete;
     RequestHandler& operator=(const RequestHandler&) = delete;
 
-    // Метод для автоматического обновления состояния по таймеру
     void Tick(std::chrono::milliseconds delta) {
         api_handler_.Tick(delta);
     }
