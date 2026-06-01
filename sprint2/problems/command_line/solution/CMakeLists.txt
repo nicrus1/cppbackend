@@ -38,7 +38,6 @@ add_executable(game_server
     src/ticker.h
 )
 
-# Ключевое изменение: используем CONAN_LIBS и переменные Boost
 target_link_libraries(game_server PRIVATE 
     Threads::Threads 
     ${CONAN_LIBS}
