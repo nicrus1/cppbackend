@@ -16,7 +16,7 @@ namespace http = beast::http;
 
 class RequestHandler {
 public:
-    explicit RequestHandler(model::Game& game, const std::string& static_dir = "/app/static")
+    explicit RequestHandler(model::Game& game, const std::string& static_dir)
         : game_{game}
         , api_handler_{game}
         , static_dir_(static_dir) {
@@ -24,6 +24,10 @@ public:
 
     RequestHandler(const RequestHandler&) = delete;
     RequestHandler& operator=(const RequestHandler&) = delete;
+
+    void ProcessTick(int64_t time_delta_ms) {
+        api_handler_.ProcessTick(time_delta_ms);
+    }
 
     template <typename Body, typename Allocator, typename Send>
     void operator()(http::request<Body, http::basic_fields<Allocator>>&& req, Send&& send) {
@@ -63,11 +67,6 @@ public:
         
         if (target == "/api/v1/game/player/action") {
             api_handler_.HandlePlayerAction(std::move(req), std::forward<Send>(send));
-            return;
-        }
-
-        if (target == "/api/v1/game/tick") {
-            api_handler_.HandleTick(std::move(req), std::forward<Send>(send));
             return;
         }
 
@@ -111,6 +110,12 @@ public:
 
             std::string body = SerializeMap(*map);
             SendResponse(std::move(req), send, http::status::ok, "application/json", body);
+            return;
+        }
+
+        // Handle tick endpoint only in manual mode
+        if (target == "/api/v1/game/tick") {
+            api_handler_.HandleTick(std::move(req), std::forward<Send>(send));
             return;
         }
 
@@ -183,7 +188,7 @@ private:
                       std::string_view body) {
         http::response<http::string_body> response(status, req.version());
         response.set(http::field::content_type, content_type);
-        response.set(http::field::cache_control, "no-cache");  // Добавьте эту строку
+        response.set(http::field::cache_control, "no-cache");
         response.body() = body;
         response.prepare_payload();
         response.keep_alive(req.keep_alive());

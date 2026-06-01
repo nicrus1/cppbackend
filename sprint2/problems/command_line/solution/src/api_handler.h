@@ -21,6 +21,12 @@ public:
     explicit ApiHandler(model::Game& game) 
         : game_state_(std::make_unique<game::GameState>(game)) {}
 
+    void ProcessTick(int64_t time_delta_ms) {
+        if (time_delta_ms > 0) {
+            game_state_->ProcessTick(time_delta_ms);
+        }
+    }
+
     template <typename Body, typename Allocator, typename Send>
     void HandleJoin(http::request<Body, http::basic_fields<Allocator>>&& req, Send&& send) {
         if (req.method() != http::verb::post) {
@@ -62,7 +68,6 @@ public:
 
             SendResponse(std::move(req), send, http::status::ok, boost::json::serialize(res_obj));
         } catch (const std::exception& e) {
-            // Исправлено: добавлены аргументы code (0) и where ("HandleJoin")
             logger::LogError(0, "Join game error: " + std::string(e.what()), "HandleJoin");
             SendError(std::move(req), send, http::status::bad_request,
                       "invalidArgument", "Join game request parses but misses fields");
@@ -253,7 +258,6 @@ public:
             boost::json::object res_obj;
             SendResponse(std::move(req), send, http::status::ok, boost::json::serialize(res_obj));
         } catch (const std::exception& e) {
-            // Исправлено: добавлены аргументы code (0) и where ("HandleTick")
             logger::LogError(0, "Tick error: " + std::string(e.what()), "HandleTick");
             SendError(std::move(req), send, http::status::bad_request,
                       "invalidArgument", "Failed to parse tick request JSON");
