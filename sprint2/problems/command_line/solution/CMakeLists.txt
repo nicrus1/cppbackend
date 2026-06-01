@@ -6,11 +6,8 @@ set(CMAKE_CXX_STANDARD 20)
 include(${CMAKE_BINARY_DIR}/conanbuildinfo.cmake)
 conan_basic_setup()
 
-# Явно просим CMake найти и подготовить к линковке program_options и system
+# Находим пакеты
 find_package(Boost 1.78.0 REQUIRED COMPONENTS program_options system)
-if(Boost_FOUND)
-  include_directories(${Boost_INCLUDE_DIRS})
-endif()
 
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
@@ -41,11 +38,10 @@ add_executable(game_server
     src/ticker.h
 )
 
-# Прилинковываем найденные компоненты Boost к нашему серверу
+# Ключевое изменение: используем CONAN_LIBS и переменные Boost
 target_link_libraries(game_server PRIVATE 
     Threads::Threads 
-    Boost::program_options 
-    Boost::system 
+    ${CONAN_LIBS}
     ${Boost_LIBRARIES}
 )
 
