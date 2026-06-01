@@ -352,4 +352,3 @@ private:
 };
 
 } // namespace http_handler
-}
