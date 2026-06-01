@@ -8,6 +8,7 @@
 #include <filesystem>
 #include <fstream>
 #include <sstream>
+#include <chrono>
 
 namespace http_handler {
 
@@ -16,14 +17,20 @@ namespace http = beast::http;
 
 class RequestHandler {
 public:
-    explicit RequestHandler(model::Game& game, const std::string& static_dir = "/app/static")
+    explicit RequestHandler(model::Game& game, const std::string& static_dir, bool manual_tick_allowed)
         : game_{game}
         , api_handler_{game}
-        , static_dir_(static_dir) {
+        , static_dir_(static_dir)
+        , manual_tick_allowed_{manual_tick_allowed} {
     }
 
     RequestHandler(const RequestHandler&) = delete;
     RequestHandler& operator=(const RequestHandler&) = delete;
+
+    // Метод для автоматического обновления состояния по таймеру
+    void Tick(std::chrono::milliseconds delta) {
+        api_handler_.Tick(delta);
+    }
 
     template <typename Body, typename Allocator, typename Send>
     void operator()(http::request<Body, http::basic_fields<Allocator>>&& req, Send&& send) {
@@ -67,6 +74,12 @@ public:
         }
 
         if (target == "/api/v1/game/tick") {
+            // Если таймер запущен, ручной тик запрещен
+            if (!manual_tick_allowed_) {
+                SendError(std::move(req), send, http::status::bad_request,
+                          "badRequest", "Invalid endpoint");
+                return;
+            }
             api_handler_.HandleTick(std::move(req), std::forward<Send>(send));
             return;
         }
@@ -183,7 +196,7 @@ private:
                       std::string_view body) {
         http::response<http::string_body> response(status, req.version());
         response.set(http::field::content_type, content_type);
-        response.set(http::field::cache_control, "no-cache");  // Добавьте эту строку
+        response.set(http::field::cache_control, "no-cache");  
         response.body() = body;
         response.prepare_payload();
         response.keep_alive(req.keep_alive());
@@ -220,6 +233,8 @@ private:
     model::Game& game_;
     ApiHandler api_handler_;
     std::string static_dir_;
+    bool manual_tick_allowed_; // Флаг для управления тиками
 };
 
 } // namespace http_handler
+}
