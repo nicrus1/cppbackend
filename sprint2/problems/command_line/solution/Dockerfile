@@ -1,57 +1,48 @@
-# Не просто создаём образ, но даём ему имя build
-FROM gcc:11.3 as build
+# 1. Этап сборки (Build)
+FROM gcc:11.3 AS build
 
 RUN apt update && \
-    apt install -y \
-      python3-pip \
-      cmake \
-    && \
+    apt install -y python3-pip cmake && \
     pip3 install conan==1.*
 
-# Запуск conan как раньше
+# Настраиваем Conan (обязательно для GCC 11, чтобы избежать конфликтов ABI)
+RUN conan profile detect --force && \
+    conan profile update settings.compiler.libcxx=libstdc++11 default
+
+# Копируем файлы конфигурации проекта
 COPY conanfile.txt /app/
-RUN mkdir /app/build && cd /app/build && \
-    conan install .. --build=missing
-
-# Копируем исходники из директории src
-# Добавляем ARG для инвалидации кэша при изменениях
-ARG CACHE_BUST=unknown
-RUN echo "Cache bust: ${CACHE_BUST}"
-
-# Копируем все .cpp файлы
-COPY src/*.cpp /app/src/
-# Копируем все .h файлы
-COPY src/*.h /app/src/
 COPY CMakeLists.txt /app/
+COPY src/ /app/src/
 
-# Создаём директорию для сборки и компилируем
-RUN cd /app/build && \
+# ВАЖНО: Выполняем установку зависимостей и сборку в одном слое RUN, 
+# чтобы сгенерированные Conan файлы были доступны для CMake
+RUN mkdir /app/build && \
+    cd /app/build && \
+    conan install .. --build=missing && \
     cmake -DCMAKE_BUILD_TYPE=Release .. && \
     cmake --build . --target game_server
 
-# Второй контейнер в том же докерфайле
-FROM ubuntu:22.04 as run
+# 2. Финальный этап (Run)
+FROM ubuntu:22.04
 
-# Устанавливаем необходимые runtime библиотеки
+# Устанавливаем runtime-зависимости
 RUN apt update && \
-    apt install -y \
-      libstdc++6 \
-      ca-certificates \
-    && \
+    apt install -y libstdc++6 ca-certificates && \
     rm -rf /var/lib/apt/lists/*
 
-# Создадим пользователя www
+# Создаем пользователя
 RUN groupadd -r www && useradd -r -g www www
 USER www
 
-# Скопируем приложение со сборочного контейнера
+# Копируем бинарник из этапа сборки
 COPY --from=build /app/build/bin/game_server /app/game_server
 
-# Копируем конфигурационные файлы и статику
-COPY data/config.json /app/data/config.json
+# Копируем ресурсы
+COPY data/ /app/data/
 COPY static/ /app/static/
 
 WORKDIR /app
 
-# Запускаем игровой сервер
-ENTRYPOINT ["/app/game_server", "/app/data/config.json"]
+# ENTRYPOINT остается прежним, но помните, что дополнительные 
+# аргументы (типа --tick-period) можно передавать при запуске docker run
+ENTRYPOINT ["/app/game_server"]
