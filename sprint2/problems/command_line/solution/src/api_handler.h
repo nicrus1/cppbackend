@@ -62,7 +62,8 @@ public:
 
             SendResponse(std::move(req), send, http::status::ok, boost::json::serialize(res_obj));
         } catch (const std::exception& e) {
-            logger::LogError("Join game error: " + std::string(e.what()));
+            // Исправлено: добавлены аргументы code (0) и where ("HandleJoin")
+            logger::LogError(0, "Join game error: " + std::string(e.what()), "HandleJoin");
             SendError(std::move(req), send, http::status::bad_request,
                       "invalidArgument", "Join game request parses but misses fields");
         } catch (...) {
@@ -252,7 +253,8 @@ public:
             boost::json::object res_obj;
             SendResponse(std::move(req), send, http::status::ok, boost::json::serialize(res_obj));
         } catch (const std::exception& e) {
-            logger::LogError("Tick error: " + std::string(e.what()));
+            // Исправлено: добавлены аргументы code (0) и where ("HandleTick")
+            logger::LogError(0, "Tick error: " + std::string(e.what()), "HandleTick");
             SendError(std::move(req), send, http::status::bad_request,
                       "invalidArgument", "Failed to parse tick request JSON");
         } catch (...) {
