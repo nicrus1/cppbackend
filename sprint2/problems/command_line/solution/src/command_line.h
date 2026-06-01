@@ -15,14 +15,14 @@ struct Args {
 [[nodiscard]] inline std::optional<Args> ParseCommandLine(int argc, const char* const argv[]) {
     namespace po = boost::program_options;
 
-    po::options_description desc{"Allowed options"};
+    po::options_description desc("Allowed options");
     Args args;
 
     desc.add_options()
         ("help,h", "produce help message")
-        ("tick-period,t", po::value(&args.tick_period)->value_name("milliseconds"), "set tick period")
-        ("config-file,c", po::value(&args.config_file)->value_name("file")->required(), "set config file path")
-        ("www-root,w", po::value(&args.www_root)->value_name("dir")->required(), "set static files root")
+        ("tick-period,t", po::value<int>(&args.tick_period)->value_name("milliseconds"), "set tick period")
+        ("config-file,c", po::value<std::string>(&args.config_file)->value_name("file")->required(), "set config file path")
+        ("www-root,w", po::value<std::string>(&args.www_root)->value_name("dir")->required(), "set static files root")
         ("randomize-spawn-points", po::bool_switch(&args.randomize_spawn_points), "spawn dogs at random positions");
 
     po::variables_map vm;
@@ -30,7 +30,7 @@ struct Args {
     try {
         po::store(po::parse_command_line(argc, argv, desc), vm);
         
-        if (vm.contains("help")) {
+        if (vm.count("help")) {
             std::cout << desc << std::endl;
             return std::nullopt;
         }
