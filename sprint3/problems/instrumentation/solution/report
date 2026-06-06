@@ -1,1 +1,1 @@
-{"slowest_func_v0": "CompareNodes", "slowest_func_v1": "MergeStrings", "slowest_func_v2": "HashString"}
+{"slowest_func_v0": "addAnnotatedEdge", "slowest_func_v1": "MergeStrings", "slowest_func_v2": "HashString"}
