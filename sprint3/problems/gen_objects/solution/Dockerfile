@@ -4,20 +4,22 @@ RUN apt-get update && apt-get install -y \
     g++ \
     cmake \
     make \
-    libboost-all-dev \
-    python3-pip \
     git \
     && rm -rf /var/lib/apt/lists/*
 
-RUN pip3 install conan
+# Устанавливаем Catch2 из исходников
+RUN git clone https://github.com/catchorg/Catch2.git && \
+    cd Catch2 && \
+    cmake -Bbuild -H. -DBUILD_TESTING=OFF && \
+    cmake --build build/ --target install && \
+    cd .. && \
+    rm -rf Catch2
 
 WORKDIR /app
 
-# Копируем все файлы из текущей директории (solution)
 COPY . .
 
 RUN mkdir -p build && cd build && \
-    conan install .. --build=missing && \
     cmake .. && \
     make
 
