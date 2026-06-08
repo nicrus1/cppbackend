@@ -12,6 +12,8 @@ RUN apt-get update && apt-get install -y \
 RUN pip3 install conan
 
 WORKDIR /app
+
+# Копируем все файлы из текущей директории (solution)
 COPY . .
 
 RUN mkdir -p build && cd build && \
