@@ -19,7 +19,6 @@ SHOOT_COUNT = 100
 COOLDOWN = 0.1
 
 PERF_DATA_FILE = 'perf.data'
-PERF_SCRIPT_OUTPUT = 'perf.script'
 FLAMEGRAPH_SVG = 'graph.svg'
 FLAMEGRAPH_DIR = './FlameGraph'
 
@@ -38,10 +37,12 @@ def run(command, output=None, input_data=None):
     return process
 
 
-def stop(process, wait=False):
+def stop(process, wait=False, kill=False):
     """Останавливает процесс"""
     if process.poll() is None:
-        if wait:
+        if kill:
+            process.kill()
+        elif wait:
             process.wait()
         else:
             process.terminate()
@@ -60,7 +61,7 @@ def shoot(ammo):
 
 def make_shots():
     """Выполняет серию запросов к серверу"""
-    for i in range(SHOOT_COUNT):
+    for _ in range(SHOOT_COUNT):
         ammo_number = random.randrange(RANDOM_LIMIT) % len(AMMUNITION)
         shoot(AMMUNITION[ammo_number])
     print('Shooting complete')
@@ -77,66 +78,44 @@ def build_flamegraph():
             print(f"FlameGraph scripts not found in {FLAMEGRAPH_DIR}")
             return False
         
-        # Сначала запускаем perf script и сохраняем вывод во временный файл
-        with open(PERF_SCRIPT_OUTPUT, 'w') as f:
-            perf_script = subprocess.run(
-                ['perf', 'script', '-i', PERF_DATA_FILE],
-                stdout=f,
-                stderr=subprocess.DEVNULL
+        # Запускаем perf script и передаем через пайп
+        # Используем -f для принудительного вывода даже если данные неполные
+        perf_script = subprocess.Popen(
+            ['perf', 'script', '-i', PERF_DATA_FILE, '-f'],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+        
+        stackcollapse = subprocess.Popen(
+            [stackcollapse_path],
+            stdin=perf_script.stdout,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+        perf_script.stdout.close()
+        
+        with open(FLAMEGRAPH_SVG, 'w') as output_file:
+            flamegraph = subprocess.Popen(
+                [flamegraph_path],
+                stdin=stackcollapse.stdout,
+                stdout=output_file,
+                stderr=subprocess.PIPE,
+                text=True
             )
-        
-        if perf_script.returncode != 0:
-            print('perf script failed')
-            return False
-        
-        # Проверяем, что файл не пустой
-        if os.path.getsize(PERF_SCRIPT_OUTPUT) == 0:
-            print('perf script output is empty')
-            return False
-        
-        # Теперь обрабатываем через stackcollapse и flamegraph
-        with open(PERF_SCRIPT_OUTPUT, 'r') as input_file:
-            stackcollapse = subprocess.Popen(
-                [stackcollapse_path],
-                stdin=input_file,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.DEVNULL
-            )
+            stackcollapse.stdout.close()
             
-            with open(FLAMEGRAPH_SVG, 'w') as output_file:
-                flamegraph = subprocess.Popen(
-                    [flamegraph_path],
-                    stdin=stackcollapse.stdout,
-                    stdout=output_file,
-                    stderr=subprocess.DEVNULL
-                )
-                
-                # Закрываем pipe в родительском процессе
-                stackcollapse.stdout.close()
-                
-                # Ждем завершения
-                flamegraph.communicate()
-        
-        # Очищаем временный файл
-        if os.path.exists(PERF_SCRIPT_OUTPUT):
-            os.remove(PERF_SCRIPT_OUTPUT)
+            # Ждем завершения
+            flamegraph.communicate()
+            
+            # Проверяем, не было ли ошибок
+            if flamegraph.returncode != 0:
+                print(f'flamegraph.pl failed with return code {flamegraph.returncode}')
+                return False
         
         print(f'Flamegraph saved to {FLAMEGRAPH_SVG}')
-        
-        # Проверяем размер результирующего файла
-        if os.path.exists(FLAMEGRAPH_SVG) and os.path.getsize(FLAMEGRAPH_SVG) > 0:
-            with open(FLAMEGRAPH_SVG, 'r') as f:
-                content = f.read()
-                if 'ERROR: No valid input' in content:
-                    print('Error: flamegraph.pl did not receive valid input')
-                    return False
-                if 'RequestHandler' in content:
-                    print('Flamegraph contains RequestHandler methods')
-                else:
-                    print('Warning: Flamegraph does not contain RequestHandler methods')
-            return True
-        
-        return False
+        return True
         
     except Exception as e:
         print(f'Error building flamegraph: {e}')
@@ -145,7 +124,7 @@ def build_flamegraph():
 
 def main():
     # Удаляем старые файлы, если они существуют
-    for f in [PERF_DATA_FILE, PERF_SCRIPT_OUTPUT, FLAMEGRAPH_SVG]:
+    for f in [PERF_DATA_FILE, FLAMEGRAPH_SVG]:
         if os.path.exists(f):
             os.remove(f)
     
@@ -161,48 +140,73 @@ def main():
     server_pid = server.pid
     print(f'Server PID: {server_pid}')
     
-    # Расчет времени записи
-    record_duration = SHOOT_COUNT * COOLDOWN + 5
-    
-    # Запускаем perf record в фоновом режиме
+    # Запускаем perf record для сбора данных в течение 5 секунд после завершения запросов
+    # и отправляем его в фон
     perf_cmd = [
         'perf', 'record',
         '-o', PERF_DATA_FILE,
         '-g',  # Записываем информацию о стеке вызовов
         '-F', '99',  # Частота семплирования 99 Гц
         '-p', str(server_pid),
-        '--', 'sleep', str(record_duration)
+        '-e', 'cpu-clock',  # Явно указываем событие
+        '--', 'sleep', '30'  # Записываем 30 секунд
     ]
     
     print(f'Starting perf record with command: {" ".join(perf_cmd)}')
     perf_process = run(perf_cmd)
     
     # Даем perf record время на инициализацию
-    time.sleep(1)
+    time.sleep(2)
     
     # Выполняем обстрел сервера запросами
     make_shots()
     
-    # Ждем завершения perf record
-    print('Waiting for perf record to finish...')
-    stop(perf_process, wait=True)
+    # Даем perf record еще немного времени после завершения запросов
+    print('Waiting for perf record to collect samples...')
+    time.sleep(3)
+    
+    # Останавливаем perf record
+    print('Stopping perf record...')
+    stop(perf_process)
+    
+    # Ждем завершения perf record и сохранения данных
+    time.sleep(2)
     
     # Останавливаем сервер
     print('Stopping server...')
     stop(server)
     
-    # Даем время на завершение
     time.sleep(1)
     
     # Проверяем, что perf.data создан и не пуст
     if os.path.exists(PERF_DATA_FILE) and os.path.getsize(PERF_DATA_FILE) > 0:
         print(f'Perf data collected successfully ({os.path.getsize(PERF_DATA_FILE)} bytes)')
         
+        # Проверяем, есть ли данные через perf report
+        check_result = subprocess.run(
+            ['perf', 'report', '-i', PERF_DATA_FILE, '--stdio', '--sort=comm', '-n'],
+            capture_output=True,
+            text=True
+        )
+        print(f'Perf report sample: {check_result.stdout[:500]}')
+        
         # Строим флеймграф
         print('Building flamegraph...')
-        build_flamegraph()
+        if build_flamegraph():
+            # Проверяем результат
+            if os.path.exists(FLAMEGRAPH_SVG) and os.path.getsize(FLAMEGRAPH_SVG) > 0:
+                with open(FLAMEGRAPH_SVG, 'r') as f:
+                    content = f.read()
+                    if 'ERROR: No valid input' in content:
+                        print('Error: flamegraph.pl did not receive valid input')
+                    elif 'RequestHandler' in content or 'http_handler::RequestHandler' in content:
+                        print('Flamegraph contains RequestHandler methods')
+                    else:
+                        print('Warning: Flamegraph may not contain RequestHandler methods')
+            else:
+                print('Flamegraph file not created or empty')
     else:
-        print('Error: perf.data not created or empty')
+        print(f'Error: perf.data not created or empty. Size: {os.path.getsize(PERF_DATA_FILE) if os.path.exists(PERF_DATA_FILE) else 0}')
     
     print('Job done')
 
