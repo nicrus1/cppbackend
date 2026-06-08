@@ -1,0 +1,21 @@
+overload:
+  enabled: false
+
+phantom:
+  address: cppserver:8080
+  ammofile: /var/loadtest/ammo_local.txt
+  ammo_type: uri
+  load_profile:
+    load_type: rps
+    schedule: const(100000, 1m)
+  ssl: false
+
+autostop:
+  autostop:
+    - http(5xx,10%,5s)
+
+console:
+  enabled: true
+
+telegraf:
+  enabled: false
