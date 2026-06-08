@@ -3,9 +3,6 @@
 #include "model.h"
 #include <boost/json.hpp>
 #include <boost/json/serialize.hpp>
-#include <iostream>
-#include <chrono>
-#include <thread>
 
 namespace http_handler {
 namespace beast = boost::beast;
@@ -28,8 +25,6 @@ public:
 private:
     template <typename Body, typename Allocator, typename Send>
     void HandleRequest(http::request<Body, http::basic_fields<Allocator>>&& req, Send&& send) {
-        auto start = std::chrono::steady_clock::now();
-        
         std::string target = std::string(req.target());
         std::string method = std::string(req.method_string());
         
@@ -53,12 +48,6 @@ private:
         
         // Обработка /api/v1/maps
         if (target == "/api/v1/maps" || target == "api/v1/maps") {
-            // Имитация небольшой нагрузки для профилирования
-            volatile int dummy = 0;
-            for (int i = 0; i < 1000; ++i) {
-                dummy += i;
-            }
-            
             std::string body = SerializeMaps();
             auto response = MakeResponse(std::move(req), 
                                         http::status::ok, 
@@ -69,6 +58,7 @@ private:
         }
         
         // Обработка /api/v1/maps/{id}
+        // Проверяем разные варианты путей
         std::string prefix1 = "/api/v1/maps/";
         std::string prefix2 = "api/v1/maps/";
         
@@ -99,12 +89,6 @@ private:
                                          "badRequest",
                                          "Not found");
         send(std::move(response));
-        
-        auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(
-            std::chrono::steady_clock::now() - start);
-        if (elapsed.count() > 1000) {
-            std::cout << "Slow request: " << elapsed.count() << " microseconds" << std::endl;
-        }
     }
     
     template <typename Body, typename Allocator, typename Send>
@@ -178,7 +162,7 @@ private:
         boost::json::array maps_array;
         for (const auto& map : game_.GetMaps()) {
             maps_array.push_back(boost::json::object{
-                {"id", std::string(*map.GetId())},
+                {"id", *map.GetId()},
                 {"name", map.GetName()}
             });
         }
@@ -187,7 +171,7 @@ private:
     
     std::string SerializeMap(const model::Map& map) const {
         boost::json::object map_obj;
-        map_obj["id"] = std::string(*map.GetId());
+        map_obj["id"] = *map.GetId();
         map_obj["name"] = map.GetName();
         
         // Сериализуем дороги
@@ -227,7 +211,7 @@ private:
         boost::json::array offices_array;
         for (const auto& office : map.GetOffices()) {
             offices_array.push_back(boost::json::object{
-                {"id", std::string(*office.GetId())},
+                {"id", *office.GetId()},
                 {"x", office.GetPosition().x},
                 {"y", office.GetPosition().y},
                 {"offsetX", office.GetOffset().dx},
