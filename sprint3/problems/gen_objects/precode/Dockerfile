@@ -6,29 +6,24 @@ RUN apt-get update && apt-get install -y \
     g++ \
     make \
     libboost-all-dev \
+    python3-pip \
+    git \
     && rm -rf /var/lib/apt/lists/*
 
-# Устанавливаем Catch2 из исходников
-RUN git clone https://github.com/catchorg/Catch2.git && \
-    cd Catch2 && \
-    cmake -Bbuild -H. -DBUILD_TESTING=OFF && \
-    cmake --build build/ --target install && \
-    cd .. && \
-    rm -rf Catch2
+# Устанавливаем conan
+RUN pip3 install conan
 
 # Устанавливаем рабочую директорию
 WORKDIR /app
 
-# Копируем файлы проекта
-COPY CMakeLists.txt .
-COPY config.json .
-COPY src/ src/
-COPY tests/ tests/
+# Копируем содержимое папки precode (ваш проект)
+COPY precode/ .
 
-# Собираем проект
+# Устанавливаем зависимости через conan
 RUN mkdir build && cd build && \
+    conan install .. --build=missing && \
     cmake .. && \
     make
 
-# Запуск тестов по умолчанию
+# Запуск тестов
 CMD ["./build/game_server_tests"]
