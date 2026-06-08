@@ -1,8 +1,8 @@
 FROM ubuntu:22.04
 
 RUN apt-get update && apt-get install -y \
-    cmake \
     g++ \
+    cmake \
     make \
     libboost-all-dev \
     python3-pip \
@@ -12,14 +12,9 @@ RUN apt-get update && apt-get install -y \
 RUN pip3 install conan
 
 WORKDIR /app
+COPY . .
 
-# Копируем проект из папки precode (поднимаемся на 2 уровня вверх и заходим в precode)
-COPY ../../precode/ .
-
-# Показываем содержимое для отладки
-RUN ls -la
-
-RUN mkdir build && cd build && \
+RUN mkdir -p build && cd build && \
     conan install .. --build=missing && \
     cmake .. && \
     make
