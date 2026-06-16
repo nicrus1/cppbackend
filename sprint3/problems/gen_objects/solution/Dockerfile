@@ -1,26 +1,36 @@
 FROM ubuntu:22.04
 
+# Установка системных зависимостей
 RUN apt-get update && apt-get install -y \
-    g++ \
+    build-essential \
     cmake \
-    make \
     git \
+    python3 \
+    python3-pip \
+    libboost-all-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Устанавливаем Catch2 из исходников
-RUN git clone https://github.com/catchorg/Catch2.git && \
-    cd Catch2 && \
-    cmake -Bbuild -H. -DBUILD_TESTING=OFF && \
-    cmake --build build/ --target install && \
-    cd .. && \
-    rm -rf Catch2
+# Установка Conan
+RUN pip3 install conan
 
 WORKDIR /app
 
+# Копируем conanfile.txt первым для кэширования Docker
+COPY conanfile.txt .
+
+# Запускаем Conan для генерации файлов сборки
+RUN conan install . --build=missing
+
+# Копируем остальной исходный код
 COPY . .
 
+# Создаем директорию сборки и собираем проект
 RUN mkdir -p build && cd build && \
     cmake .. && \
     make
 
-CMD ["./build/game_server_tests"]
+# Запускаем тесты
+RUN cd build && ctest --output-on-failure
+
+# Точка входа
+CMD ["./build/game_server", "config.json"]
