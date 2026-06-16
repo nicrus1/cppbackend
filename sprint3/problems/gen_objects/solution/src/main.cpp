@@ -2,6 +2,7 @@
 #include <fstream>
 #include <chrono>
 #include <thread>
+#include <cstdint>
 
 #include <boost/json.hpp>
 #include <boost/asio.hpp>
@@ -19,7 +20,7 @@ public:
     }
     
     void Run() {
-        std::cout << "Server running. Press Ctrl+C to stop.\n";
+        std::cout << "Server running. Press Ctrl+C to stop.\\n";
         
         auto last_time = std::chrono::steady_clock::now();
         
@@ -42,174 +43,125 @@ public:
             return json::value{nullptr};
         }
         
-        json::object result;
-        result["id"] = map->GetId().GetUnderlying();
-        result["name"] = map->GetName();
+        json::object map_json;
+        map_json["id"] = map->GetId().GetUnderlying();
+        map_json["name"] = map->GetName();
         
-        // Add roads
-        json::array roads;
+        // Roads
+        json::array roads_json;
         for (const auto& road : map->GetRoads()) {
-            json::object r;
-            r["x0"] = road.start.x;
-            r["y0"] = road.start.y;
+            json::object road_obj;
+            road_obj["x0"] = road.start.x;
+            road_obj["y0"] = road.start.y;
             if (road.start.x != road.end.x) {
-                r["x1"] = road.end.x;
+                road_obj["x1"] = road.end.x;
             } else {
-                r["y1"] = road.end.y;
+                road_obj["y1"] = road.end.y;
             }
-            roads.push_back(std::move(r));
+            roads_json.push_back(road_obj);
         }
-        result["roads"] = std::move(roads);
+        map_json["roads"] = roads_json;
         
-        // Add buildings
-        json::array buildings;
-        for (const auto& building : map->GetBuildings()) {
-            json::object b;
-            b["x"] = building.bounds.position.x;
-            b["y"] = building.bounds.position.y;
-            b["w"] = building.bounds.size.width;
-            b["h"] = building.bounds.size.height;
-            buildings.push_back(std::move(b));
-        }
-        result["buildings"] = std::move(buildings);
-        
-        // Add offices
-        json::array offices;
-        for (const auto& office : map->GetOffices()) {
-            json::object o;
-            o["id"] = office.id.GetUnderlying();
-            o["x"] = office.position.x;
-            o["y"] = office.position.y;
-            o["offsetX"] = office.offset.dx;
-            o["offsetY"] = office.offset.dy;
-            offices.push_back(std::move(o));
-        }
-        result["offices"] = std::move(offices);
-        
-        // Add loot types from extra data
-        auto extra = extra_data_.GetMapExtraData(map_id);
-        if (extra) {
-            auto loot_json = extra->ToJson();
-            for (const auto& [key, value] : loot_json) {
-                result[key] = value;
-            }
+        // Добавляем lootTypes из extra_data слоя
+        auto extra_data = extra_data_.GetMapExtraData(map_id);
+        if (extra_data) {
+            map_json["lootTypes"] = extra_data->ToJson()["lootTypes"];
+        } else {
+            map_json["lootTypes"] = json::array{};
         }
         
-        return result;
+        return map_json;
     }
     
     json::value HandleGameStateRequest() {
-        json::object result;
+        json::object state_json;
         
-        // Players (simplified for now)
-        json::object players;
-        result["players"] = std::move(players);
+        // В рамках этого задания отдаем пустой список игроков, либо базовую структуру
+        state_json["players"] = json::object{};
         
-        // Lost objects
         json::object lost_objects;
         for (const auto& [session_id, session] : game_.GetSessions()) {
             for (const auto& [obj_id, obj] : session->GetLostObjects()) {
                 json::object obj_json;
-                obj_json["type"] = static_cast<json::int64>(obj.type);
-                obj_json["pos"] = json::array{obj.position.x, obj.position.y};
-                lost_objects[std::to_string(*obj_id)] = std::move(obj_json);
+                obj_json["type"] = static_cast<std::int64_t>(obj.type);
+                
+                json::array pos;
+                pos.push_back(obj.position.x);
+                pos.push_back(obj.position.y);
+                obj_json["pos"] = pos;
+                
+                lost_objects[std::to_string(obj_id.GetUnderlying())] = std::move(obj_json);
             }
         }
-        result["lostObjects"] = std::move(lost_objects);
+        state_json["lostObjects"] = lost_objects;
         
-        return result;
+        return state_json;
     }
 
 private:
     void LoadConfig(const std::string& config_path) {
-        std::ifstream file(config_path);
-        if (!file.is_open()) {
-            throw std::runtime_error("Cannot open config file: " + config_path);
+        std::ifstream f(config_path);
+        if (!f.is_open()) {
+            throw std::runtime_error("Failed to open config file");
         }
         
-        std::string content((std::istreambuf_iterator<char>(file)),
-                            std::istreambuf_iterator<char>());
+        std::string str((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+        auto config = json::parse(str);
         
-        auto config = json::parse(content).as_object();
-        
-        // Load loot generator config
-        if (config.contains("lootGeneratorConfig")) {
-            auto& loot_config = config["lootGeneratorConfig"].as_object();
-            double period = loot_config["period"].as_double();
-            double probability = loot_config["probability"].as_double();
-            extra_data_.SetLootGeneratorConfig(period, probability);
+        // Parse global loot generator config
+        if (config.as_object().contains("lootGeneratorConfig")) {
+            auto loot_config = config.at("lootGeneratorConfig").as_object();
+            extra_data_.SetLootGeneratorConfig(
+                loot_config.at("period").as_double(),
+                loot_config.at("probability").as_double()
+            );
+        } else {
+            // Default fallback
+            extra_data_.SetLootGeneratorConfig(1.0, 1.0);
         }
         
-        // Load maps
-        if (config.contains("maps")) {
-            auto& maps_array = config["maps"].as_array();
-            for (const auto& map_json : maps_array) {
-                auto map_obj = map_json.as_object();
+        // Parse maps
+        if (config.as_object().contains("maps")) {
+            for (const auto& map_val : config.at("maps").as_array()) {
+                auto map_obj = map_val.as_object();
+                std::string id = map_obj.at("id").as_string().c_str();
+                std::string name = map_obj.at("name").as_string().c_str();
                 
-                std::string id = map_obj["id"].as_string().c_str();
-                std::string name = map_obj["name"].as_string().c_str();
-                
-                // Count loot types
                 size_t loot_types_count = 0;
                 extra_data::MapExtraData map_extra;
-                
                 if (map_obj.contains("lootTypes")) {
-                    auto& loot_array = map_obj["lootTypes"].as_array();
-                    loot_types_count = loot_array.size();
+                    auto loot_types_arr = map_obj.at("lootTypes").as_array();
+                    loot_types_count = loot_types_arr.size();
                     
-                    // Store extra data
                     extra_data::MapExtraData::LootTypes loot_types;
-                    for (const auto& loot : loot_array) {
-                        extra_data::LootTypeInfo info;
-                        info.data = loot.as_object();
-                        loot_types.push_back(std::move(info));
+                    for (const auto& loot_val : loot_types_arr) {
+                        loot_types.push_back({loot_val.as_object()});
                     }
                     map_extra.SetLootTypes(std::move(loot_types));
                 }
                 
-                auto map = std::make_shared<model::Map>(
-                    model::Map::Id(id), name, loot_types_count
-                );
+                auto map = std::make_shared<model::Map>(model::Map::Id(id), name, loot_types_count);
                 
                 // Load roads
                 if (map_obj.contains("roads")) {
-                    for (const auto& road_json : map_obj["roads"].as_array()) {
-                        auto road_obj = road_json.as_object();
-                        model::Point start, end;
-                        start.x = road_obj["x0"].as_double();
-                        start.y = road_obj["y0"].as_double();
-                        
-                        if (road_obj.contains("x1")) {
-                            end.x = road_obj["x1"].as_double();
-                            end.y = start.y;
-                        } else {
-                            end.x = start.x;
-                            end.y = road_obj["y1"].as_double();
-                        }
-                        map->AddRoad({start, end});
-                    }
-                }
-                
-                // Load buildings
-                if (map_obj.contains("buildings")) {
-                    for (const auto& building_json : map_obj["buildings"].as_array()) {
-                        auto building_obj = building_json.as_object();
-                        model::Rectangle bounds{
-                            {building_obj["x"].as_double(), building_obj["y"].as_double()},
-                            {building_obj["w"].as_double(), building_obj["h"].as_double()}
-                        };
-                        map->AddBuilding({bounds});
+                    for (const auto& road_val : map_obj.at("roads").as_array()) {
+                        auto road_obj = road_val.as_object();
+                        double x0 = road_obj.at("x0").as_double();
+                        double y0 = road_obj.at("y0").as_double();
+                        double x1 = road_obj.contains("x1") ? road_obj.at("x1").as_double() : x0;
+                        double y1 = road_obj.contains("y1") ? road_obj.at("y1").as_double() : y0;
+                        map->AddRoad({{x0, y0}, {x1, y1}});
                     }
                 }
                 
                 // Load offices
                 if (map_obj.contains("offices")) {
-                    for (const auto& office_json : map_obj["offices"].as_array()) {
-                        auto office_obj = office_json.as_object();
+                    for (const auto& office_val : map_obj.at("offices").as_array()) {
+                        auto office_obj = office_val.as_object();
                         model::Office office{
-                            model::Office::Id(office_obj["id"].as_string().c_str()),
-                            {office_obj["x"].as_double(), office_obj["y"].as_double()},
-                            {office_obj["offsetX"].as_double(), office_obj["offsetY"].as_double()}
+                            model::Office::Id(office_obj.at("id").as_string().c_str()),
+                            {office_obj.at("x").as_double(), office_obj.at("y").as_double()},
+                            {office_obj.at("offsetX").as_double(), office_obj.at("offsetY").as_double()}
                         };
                         map->AddOffice(std::move(office));
                     }
@@ -222,7 +174,7 @@ private:
                 auto period_ms = std::chrono::milliseconds(
                     static_cast<long long>(extra_data_.GetLootGeneratorPeriod() * 1000)
                 );
-                auto session = std::make_shared<model::GameSession>(
+                auto session = std::make_shared<model::GameSession>(\
                     model::GameSession::Id(next_session_id_++),
                     map,
                     period_ms,
@@ -241,15 +193,15 @@ private:
 
 int main(int argc, char* argv[]) {
     if (argc < 2) {
-        std::cerr << "Usage: " << argv[0] << " <config.json>\n";
+        std::cerr << "Usage: " << argv[0] << " <config.json>\\n";
         return 1;
     }
     
     try {
         GameServer server(argv[1]);
         server.Run();
-    } catch (const std::exception& e) {
-        std::cerr << "Error: " << e.what() << std::endl;
+    } catch (const std::exception& ex) {
+        std::cerr << "Error: " << ex.what() << "\\n";
         return 1;
     }
     

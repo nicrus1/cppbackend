@@ -17,9 +17,7 @@ namespace model {
 using Dimension = int;
 using Coord = Dimension;
 
-struct Point {
-    double x, y;
-};
+// Структура Point удалена, так как она определена в geom.h
 
 struct Road {
     Point start;
@@ -53,13 +51,14 @@ public:
     const std::string& GetName() const noexcept { return name_; }
     size_t GetLootTypesCount() const noexcept { return loot_types_count_; }
 
+    void AddRoad(const Road& road) { roads_.emplace_back(road); }
     const Roads& GetRoads() const noexcept { return roads_; }
-    const Buildings& GetBuildings() const noexcept { return buildings_; }
-    const Offices& GetOffices() const noexcept { return offices_; }
 
-    void AddRoad(Road road) { roads_.push_back(std::move(road)); }
-    void AddBuilding(Building building) { buildings_.push_back(std::move(building)); }
-    void AddOffice(Office office) { offices_.push_back(std::move(office)); }
+    void AddBuilding(const Building& building) { buildings_.emplace_back(building); }
+    const Buildings& GetBuildings() const noexcept { return buildings_; }
+
+    void AddOffice(Office office) { offices_.emplace_back(std::move(office)); }
+    const Offices& GetOffices() const noexcept { return offices_; }
 
 private:
     Id id_;
@@ -71,10 +70,9 @@ private:
 };
 
 struct LostObject {
-    using Id = util::Tagged<size_t, LostObject>;
-    
+    using Id = util::Tagged<uint64_t, LostObject>;
     Id id;
-    size_t type;  // индекс типа трофея от 0 до N-1
+    size_t type;
     Point position;
 };
 
@@ -83,9 +81,9 @@ public:
     using Id = util::Tagged<size_t, GameSession>;
     
     GameSession(Id id, std::shared_ptr<Map> map, 
-                loot_gen::LootGenerator::TimeInterval base_interval,
+                loot_gen::LootGenerator::TimeInterval base_interval, 
                 double probability);
-
+                
     const Id& GetId() const noexcept { return id_; }
     const std::shared_ptr<Map>& GetMap() const noexcept { return map_; }
     
@@ -126,7 +124,6 @@ public:
     const Maps& GetMaps() const noexcept { return maps_; }
     
     void AddSession(std::shared_ptr<GameSession> session);
-    std::shared_ptr<GameSession> FindSession(const GameSession::Id& id) const noexcept;
     const Sessions& GetSessions() const noexcept { return sessions_; }
     
     void Update(std::chrono::milliseconds time_delta);
@@ -134,7 +131,6 @@ public:
 private:
     Maps maps_;
     Sessions sessions_;
-    size_t next_session_id_ = 0;
 };
 
 } // namespace model
