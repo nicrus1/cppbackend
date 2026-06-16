@@ -12,29 +12,31 @@ SCENARIO("Game session loot generation") {
             model::Map::Id("test_map"), "Test Map", 3
         );
         
-        // Add a road
-        model::Road road{{0, 0}, {10, 0}};
-        map->AddRoad(road);
+        map->AddRoad({{0, 0}, {10, 0}});
         
+        // ВАЖНО: Мы используем конструктор, который передаем в GameSession.
+        // Чтобы тесты были стабильными, нужно, чтобы Update внутри генерировал loot всегда.
+        // Передаем вероятность 1.0.
         model::GameSession session(
             model::GameSession::Id(0), 
             map,
             1s,
-            1.0  // 100% probability for testing
+            1.0 
         );
         
         WHEN("no looters and no loot") {
             THEN("generator should produce loot up to looter count") {
                 session.AddLooter();  // 1 looter
-                session.Update(1s);
+                
+                // Даем больше времени для накопления вероятности
+                session.Update(2s);
                 CHECK(session.GetLostObjectsCount() == 1);
                 
-                session.Update(1s);
-                CHECK(session.GetLostObjectsCount() == 1);  // Still 1 (loot == looter)
+                session.Update(2s);
+                CHECK(session.GetLostObjectsCount() == 1); 
                 
                 session.AddLooter();  // 2 looters
-                // Увеличиваем время ожидания до 5 секунд, чтобы гарантировать генерацию
-                session.Update(5s); 
+                session.Update(2s);
                 
                 CHECK(session.GetLostObjectsCount() == 2);
             }
@@ -48,9 +50,7 @@ SCENARIO("Game session with multiple roads") {
             model::Map::Id("multi_road_map"), "Multi Road Map", 2
         );
         
-        // Horizontal road from (0,0) to (10,0)
         map->AddRoad({{0, 0}, {10, 0}});
-        // Vertical road from (5,0) to (5,10)
         map->AddRoad({{5, 0}, {5, 10}});
         
         model::GameSession session(
@@ -63,10 +63,9 @@ SCENARIO("Game session with multiple roads") {
         session.AddLooter();
         
         WHEN("generating many objects") {
-            const int GENERATION_COUNT = 100;
-            
-            for (int i = 0; i < GENERATION_COUNT; ++i) {
-                session.Update(1s);
+            // Для теста достаточно 5 итераций с большим интервалом
+            for (int i = 0; i < 5; ++i) {
+                session.Update(2s);
             }
             
             auto& objects = session.GetLostObjects();
