@@ -14,7 +14,7 @@ SCENARIO("Game session loot generation") {
         WHEN("no looters and no loot") {
             THEN("generator should produce loot after update") {
                 session.AddLooter();
-                session.Update(2s); // Увеличен интервал для надежности
+                session.Update(2s);
                 CHECK(session.GetLostObjectsCount() == 1);
             }
         }
