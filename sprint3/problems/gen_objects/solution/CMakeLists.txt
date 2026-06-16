@@ -23,8 +23,10 @@ add_executable(game_server_tests
 
 target_include_directories(game_server_tests PRIVATE src)
 
-# Подключаем Catch2 через find_package (работает благодаря CMakeDeps от Conan)
+# Подключаем зависимости
 find_package(Catch2 REQUIRED)
+find_package(Threads REQUIRED) # <- Добавлено для явного поиска Threads
+
 target_link_libraries(game_server_tests PRIVATE Catch2::Catch2 Threads::Threads)
 
 # Включаем тесты
