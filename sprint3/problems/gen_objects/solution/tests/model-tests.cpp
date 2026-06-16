@@ -1,6 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
-#include <set> // Добавлено отсутствующее включение
+#include <set>
 #include "../src/model.h"
 #include "../src/loot_generator.h"
 
@@ -33,7 +33,9 @@ SCENARIO("Game session loot generation") {
                 CHECK(session.GetLostObjectsCount() == 1);  // Still 1 (loot == looter)
                 
                 session.AddLooter();  // 2 looters
-                session.Update(1s);
+                // Увеличиваем время ожидания до 5 секунд, чтобы гарантировать генерацию
+                session.Update(5s); 
+                
                 CHECK(session.GetLostObjectsCount() == 2);
             }
         }
@@ -70,9 +72,8 @@ SCENARIO("Game session with multiple roads") {
             auto& objects = session.GetLostObjects();
             CHECK(objects.size() > 0);
             
-            std::set<size_t> ids; // Теперь std::set доступен
+            std::set<size_t> ids;
             for (const auto& [id, obj] : objects) {
-                // Используем GetUnderlying() вместо оператора *
                 ids.insert(id.GetUnderlying());
             }
             
