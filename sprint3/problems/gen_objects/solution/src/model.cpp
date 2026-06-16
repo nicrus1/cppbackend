@@ -1,5 +1,4 @@
 #include "model.h"
-
 #include <cmath>
 #include <random>
 
@@ -28,8 +27,6 @@ void GameSession::Update(std::chrono::milliseconds time_delta) {
 
 void GameSession::GenerateLostObject() {
     LostObject::Id id(next_lost_object_id_++);
-    
-    // Случайный тип от 0 до N-1
     size_t type = uniform_dist_(rng_) * (map_->GetLootTypesCount() - 1e-9);
     
     LostObject obj{
@@ -41,62 +38,34 @@ void GameSession::GenerateLostObject() {
     lost_objects_.emplace(id, std::move(obj));
 }
 
-// Убран const
-Point GameSession::GetRandomRoadPoint() {
+Point GameSession::GetRandomRoadPoint() const {
     const auto& roads = map_->GetRoads();
-    if (roads.empty()) {
-        return {0, 0};
-    }
+    if (roads.empty()) return {0, 0};
     
-    // Выбираем случайную дорогу
     size_t road_index = uniform_dist_(rng_) * (roads.size() - 1e-9);
     const auto& road = roads[road_index];
-    
-    // Генерируем точку на дороге
     double t = uniform_dist_(rng_);
     
-    double x, y;
     if (road.start.x != road.end.x) {
-        // Горизонтальная дорога
-        x = road.start.x + t * (road.end.x - road.start.x);
-        y = road.start.y;
+        return {road.start.x + t * (road.end.x - road.start.x), road.start.y};
     } else {
-        // Вертикальная дорога
-        x = road.start.x;
-        y = road.start.y + t * (road.end.y - road.start.y);
+        return {road.start.x, road.start.y + t * (road.end.y - road.start.y)};
     }
-    
-    return {x, y};
 }
 
-void Game::AddMap(std::shared_ptr<Map> map) {
-    maps_.emplace(map->GetId(), std::move(map));
-}
-
+// Методы Game без изменений
+void Game::AddMap(std::shared_ptr<Map> map) { maps_.emplace(map->GetId(), std::move(map)); }
 std::shared_ptr<Map> Game::FindMap(const Map::Id& id) const noexcept {
     auto it = maps_.find(id);
-    if (it != maps_.end()) {
-        return it->second;
-    }
-    return nullptr;
+    return (it != maps_.end()) ? it->second : nullptr;
 }
-
-void Game::AddSession(std::shared_ptr<GameSession> session) {
-    sessions_.emplace(session->GetId(), std::move(session));
-}
-
+void Game::AddSession(std::shared_ptr<GameSession> session) { sessions_.emplace(session->GetId(), std::move(session)); }
 std::shared_ptr<GameSession> Game::FindSession(const GameSession::Id& id) const noexcept {
     auto it = sessions_.find(id);
-    if (it != sessions_.end()) {
-        return it->second;
-    }
-    return nullptr;
+    return (it != sessions_.end()) ? it->second : nullptr;
 }
-
 void Game::Update(std::chrono::milliseconds time_delta) {
-    for (auto& [id, session] : sessions_) {
-        session->Update(time_delta);
-    }
+    for (auto& [id, session] : sessions_) session->Update(time_delta);
 }
 
 } // namespace model
