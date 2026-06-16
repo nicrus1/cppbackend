@@ -10,7 +10,7 @@ RUN apt-get update && apt-get install -y \
     libboost-all-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Установка Conan
+# Установка Conan (установится актуальная версия 2.x)
 RUN pip3 install conan
 
 WORKDIR /app
@@ -18,16 +18,17 @@ WORKDIR /app
 # Копируем conanfile.txt первым для кэширования Docker
 COPY conanfile.txt .
 
-# Создаем профиль Conan и устанавливаем зависимости
-RUN conan profile detect && \
-    conan install . --build=missing
+# Создаем профиль по умолчанию и устанавливаем зависимости
+# Явно указываем стандарт C++20, чтобы избежать конфликтов ABI
+RUN conan profile detect --force && \
+    conan install . --build=missing -s build_type=Release -s compiler.cppstd=20
 
 # Копируем остальной исходный код
 COPY . .
 
-# Создаем директорию сборки и собираем проект
+# Создаем директорию сборки, передаем тулчейн от Conan и собираем проект
 RUN mkdir -p build && cd build && \
-    cmake .. && \
+    cmake .. -DCMAKE_TOOLCHAIN_FILE=../conan_toolchain.cmake -DCMAKE_BUILD_TYPE=Release && \
     make
 
 # Запускаем тесты
