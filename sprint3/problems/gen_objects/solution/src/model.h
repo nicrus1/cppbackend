@@ -17,8 +17,6 @@ namespace model {
 using Dimension = int;
 using Coord = Dimension;
 
-// Структура Point удалена, так как она определена в geom.h
-
 struct Road {
     Point start;
     Point end;
@@ -81,9 +79,9 @@ public:
     using Id = util::Tagged<size_t, GameSession>;
     
     GameSession(Id id, std::shared_ptr<Map> map, 
-                loot_gen::LootGenerator::TimeInterval base_interval, 
+                loot_gen::LootGenerator::TimeInterval base_interval,
                 double probability);
-                
+
     const Id& GetId() const noexcept { return id_; }
     const std::shared_ptr<Map>& GetMap() const noexcept { return map_; }
     
@@ -101,7 +99,9 @@ public:
 
 private:
     void GenerateLostObject();
-    Point GetRandomRoadPoint() const;
+    
+    // Убран const, так как генерация случайных чисел изменяет состояние rng_
+    Point GetRandomRoadPoint();
 
     Id id_;
     std::shared_ptr<Map> map_;
@@ -124,6 +124,10 @@ public:
     const Maps& GetMaps() const noexcept { return maps_; }
     
     void AddSession(std::shared_ptr<GameSession> session);
+    
+    // Возвращено потерянное объявление метода FindSession!
+    std::shared_ptr<GameSession> FindSession(const GameSession::Id& id) const noexcept;
+    
     const Sessions& GetSessions() const noexcept { return sessions_; }
     
     void Update(std::chrono::milliseconds time_delta);

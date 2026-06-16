@@ -41,7 +41,8 @@ void GameSession::GenerateLostObject() {
     lost_objects_.emplace(id, std::move(obj));
 }
 
-Point GameSession::GetRandomRoadPoint() const {
+// Убран const
+Point GameSession::GetRandomRoadPoint() {
     const auto& roads = map_->GetRoads();
     if (roads.empty()) {
         return {0, 0};
