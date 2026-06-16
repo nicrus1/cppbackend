@@ -18,8 +18,9 @@ WORKDIR /app
 # Копируем conanfile.txt первым для кэширования Docker
 COPY conanfile.txt .
 
-# Запускаем Conan для генерации файлов сборки
-RUN conan install . --build=missing
+# Создаем профиль Conan и устанавливаем зависимости
+RUN conan profile detect && \
+    conan install . --build=missing
 
 # Копируем остальной исходный код
 COPY . .
