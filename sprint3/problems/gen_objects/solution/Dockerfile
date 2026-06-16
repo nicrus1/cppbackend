@@ -7,7 +7,6 @@ RUN apt-get update && apt-get install -y \
     git \
     python3 \
     python3-pip \
-    libboost-all-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Установка Conan (установится актуальная версия 2.x)
