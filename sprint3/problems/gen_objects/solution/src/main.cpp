@@ -215,8 +215,8 @@ private:
         res.set(http::field::content_type, "application/json");
         
         try {
-            // Parse path
-            std::string path = req.target().to_string();
+            // Convert target to string properly
+            std::string path(req.target().data(), req.target().size());
             
             // Handle /api/v1/maps
             if (path == "/api/v1/maps") {
@@ -323,8 +323,6 @@ private:
                     return res;
                 }
             }
-            
-            // Handle /api/v1/maps (GET all)
             
             res.result(http::status::not_found);
             return res;
