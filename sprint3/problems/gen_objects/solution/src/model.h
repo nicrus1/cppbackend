@@ -1,44 +1,212 @@
 #pragma once
-
-#include <chrono>
-#include <functional>
-#include <memory>
 #include <string>
 #include <unordered_map>
 #include <vector>
-#include <random>
+#include <optional>
 
-#include "geom.h"
 #include "tagged.h"
-#include "loot_generator.h"
 
 namespace model {
 
 using Dimension = int;
 using Coord = Dimension;
 
-struct Player {
-    size_t id;
-    std::string name;
+struct Point {
+    Coord x, y;
+};
+
+struct Size {
+    Dimension width, height;
+};
+
+struct Rectangle {
     Point position;
-    std::vector<double> speed = {0.0, 0.0};
-    std::string dir = "U"; // 'U', 'D', 'L', 'R'
+    Size size;
 };
 
-struct Road {
-    Point start;
-    Point end;
+struct Offset {
+    Dimension dx, dy;
 };
 
-struct Building {
-    Rectangle bounds;
+struct Position {
+    double x = 0.0;
+    double y = 0.0;
 };
 
-struct Office {
+struct Speed {
+    double vx = 0.0;
+    double vy = 0.0;
+};
+
+enum class Direction {
+    NORTH,
+    SOUTH,
+    WEST,
+    EAST
+};
+
+inline std::string DirectionToString(Direction dir) {
+    switch (dir) {
+        case Direction::NORTH: return "U";
+        case Direction::SOUTH: return "D";
+        case Direction::WEST:  return "L";
+        case Direction::EAST:  return "R";
+    }
+    return "U";
+}
+
+inline Direction StringToDirection(const std::string& str) {
+    if (str == "U") return Direction::NORTH;
+    if (str == "D") return Direction::SOUTH;
+    if (str == "L") return Direction::WEST;
+    if (str == "R") return Direction::EAST;
+    return Direction::NORTH;
+}
+
+class Dog {
+public:
+    using Id = uint64_t;
+
+    Dog(Id id, Point pos, double speed)
+        : id_(id)
+        , pos_{static_cast<double>(pos.x), static_cast<double>(pos.y)}
+        , default_speed_(speed) {
+    }
+
+    Dog(Id id, Position pos, double speed)
+        : id_(id)
+        , pos_(pos)
+        , default_speed_(speed) {
+    }
+
+    Id GetId() const {
+        return id_;
+    }
+
+    const Position& GetPosition() const {
+        return pos_;
+    }
+
+    void SetPosition(Position pos) {
+        pos_ = pos;
+    }
+    
+    void SetPosition(double x, double y) {
+        pos_ = {x, y};
+    }
+
+    const Speed& GetSpeed() const {
+        return speed_;
+    }
+
+    void SetSpeed(Speed speed) {
+        speed_ = speed;
+    }
+
+    Direction GetDirection() const {
+        return direction_;
+    }
+
+    void SetDirection(Direction dir) {
+        direction_ = dir;
+    }
+
+    double GetDefaultSpeed() const {
+        return default_speed_;
+    }
+
+private:
+    Id id_;
+    Position pos_;
+    Speed speed_{0.0, 0.0};
+    Direction direction_ = Direction::NORTH;
+    double default_speed_;
+};
+
+class Road {
+    struct HorizontalTag {
+        explicit HorizontalTag() = default;
+    };
+
+    struct VerticalTag {
+        explicit VerticalTag() = default;
+    };
+
+public:
+    constexpr static HorizontalTag HORIZONTAL{};
+    constexpr static VerticalTag VERTICAL{};
+
+    Road(HorizontalTag, Point start, Coord end_x) noexcept
+        : start_{start}
+        , end_{end_x, start.y} {
+    }
+
+    Road(VerticalTag, Point start, Coord end_y) noexcept
+        : start_{start}
+        , end_{start.x, end_y} {
+    }
+
+    bool IsHorizontal() const noexcept {
+        return start_.y == end_.y;
+    }
+
+    bool IsVertical() const noexcept {
+        return start_.x == end_.x;
+    }
+
+    Point GetStart() const noexcept {
+        return start_;
+    }
+
+    Point GetEnd() const noexcept {
+        return end_;
+    }
+
+private:
+    Point start_;
+    Point end_;
+};
+
+class Building {
+public:
+    explicit Building(Rectangle bounds) noexcept
+        : bounds_{bounds} {
+    }
+
+    const Rectangle& GetBounds() const noexcept {
+        return bounds_;
+    }
+
+private:
+    Rectangle bounds_;
+};
+
+class Office {
+public:
     using Id = util::Tagged<std::string, Office>;
-    Id id;
-    Point position;
-    Offset offset;
+
+    Office(Id id, Point position, Offset offset) noexcept
+        : id_{std::move(id)}
+        , position_{position}
+        , offset_{offset} {
+    }
+
+    const Id& GetId() const noexcept {
+        return id_;
+    }
+
+    Point GetPosition() const noexcept {
+        return position_;
+    }
+
+    Offset GetOffset() const noexcept {
+        return offset_;
+    }
+
+private:
+    Id id_;
+    Point position_;
+    Offset offset_;
 };
 
 class Map {
@@ -48,98 +216,100 @@ public:
     using Buildings = std::vector<Building>;
     using Offices = std::vector<Office>;
 
-    Map(Id id, std::string name, size_t loot_types_count)
+    Map(Id id, std::string name) noexcept
         : id_(std::move(id))
-        , name_(std::move(name))
-        , loot_types_count_(loot_types_count) {}
+        , name_(std::move(name)) {
+    }
 
-    const Id& GetId() const noexcept { return id_; }
-    const std::string& GetName() const noexcept { return name_; }
-    size_t GetLootTypesCount() const noexcept { return loot_types_count_; }
+    const Id& GetId() const noexcept {
+        return id_;
+    }
 
-    void AddRoad(const Road& road) { roads_.push_back(road); }
-    void AddBuilding(const Building& building) { buildings_.push_back(building); }
-    void AddOffice(const Office& office) { offices_.push_back(office); }
+    const std::string& GetName() const noexcept {
+        return name_;
+    }
 
-    const Roads& GetRoads() const noexcept { return roads_; }
-    const Buildings& GetBuildings() const noexcept { return buildings_; }
-    const Offices& GetOffices() const noexcept { return offices_; }
+    const Buildings& GetBuildings() const noexcept {
+        return buildings_;
+    }
 
- private:
-    Id id_;
-    std::string name_;
-    size_t loot_types_count_;
-    Roads roads_;
-    Buildings buildings_;
-    Offices offices_;
-};
+    const Roads& GetRoads() const noexcept {
+        return roads_;
+    }
 
-struct LostObject {
-    using Id = util::Tagged<size_t, LostObject>;
-    Id id;
-    size_t type;
-    Point position;
-};
+    const Offices& GetOffices() const noexcept {
+        return offices_;
+    }
 
-class GameSession {
-public:
-    using Id = util::Tagged<size_t, GameSession>;
+    void AddRoad(const Road& road) {
+        roads_.emplace_back(road);
+    }
 
-    // Добавлен опциональный параметр random_gen для детерминированного тестирования
-    GameSession(Id id, std::shared_ptr<Map> map,
-                loot_gen::LootGenerator::TimeInterval base_interval,
-                double probability,
-                loot_gen::LootGenerator::RandomGenerator random_gen = nullptr);
+    void AddBuilding(const Building& building) {
+        buildings_.emplace_back(building);
+    }
 
-    const Id& GetId() const noexcept { return id_; }
-    std::shared_ptr<Map> GetMap() const noexcept { return map_; }
+    void AddOffice(Office office);
     
-    void Update(std::chrono::milliseconds time_delta);
-
-    void AddLooter() { looter_count_++; }
-    void RemoveLooter() { if (looter_count_ > 0) looter_count_--; }
+    double GetDogSpeed() const noexcept {
+        return dog_speed_.has_value() ? *dog_speed_ : default_dog_speed_;
+    }
     
-    size_t GetLooterCount() const noexcept { return looter_count_; }
-    size_t GetLostObjectsCount() const noexcept { return lost_objects_.size(); }
-    const std::unordered_map<LostObject::Id, LostObject>& GetLostObjects() const noexcept { return lost_objects_; }
-    Player* AddPlayer(const std::string& name);
-    const std::unordered_map<size_t, Player>& GetPlayers() const noexcept { return players_; }
+    void SetDogSpeed(double speed) {
+        dog_speed_ = speed;
+    }
+    
+    void SetDefaultDogSpeed(double speed) {
+        default_dog_speed_ = speed;
+    }
+    
+    void SetLootTypesCount(size_t count) noexcept {
+        loot_types_count_ = count;
+    }
+    
+    size_t GetLootTypesCount() const noexcept {
+        return loot_types_count_;
+    }
 
 private:
-    void GenerateLostObject();
-    Point GetRandomRoadPoint();
+    using OfficeIdToIndex = std::unordered_map<Office::Id, size_t, util::TaggedHasher<Office::Id>>;
 
     Id id_;
-    std::shared_ptr<Map> map_;
-    loot_gen::LootGenerator loot_generator_;
-    std::unordered_map<LostObject::Id, LostObject> lost_objects_;
-    size_t next_lost_object_id_ = 0;
-    size_t looter_count_ = 0;
-    
-    std::mt19937 rng_;
-    std::uniform_real_distribution<double> uniform_dist_;
+    std::string name_;
+    Roads roads_;
+    Buildings buildings_;
 
-    std::unordered_map<size_t, Player> players_;
-    size_t next_player_id_ = 0;
+    OfficeIdToIndex warehouse_id_to_index_;
+    Offices offices_;
+    
+    double default_dog_speed_ = 1.0;
+    std::optional<double> dog_speed_;
+    size_t loot_types_count_ = 0;
 };
 
 class Game {
 public:
-    using Maps = std::unordered_map<Map::Id, std::shared_ptr<Map>>;
-    using Sessions = std::unordered_map<GameSession::Id, std::shared_ptr<GameSession>>;
+    using Maps = std::vector<Map>;
 
-    void AddMap(std::shared_ptr<Map> map);
-    std::shared_ptr<Map> FindMap(const Map::Id& id) const noexcept;
-    const Maps& GetMaps() const noexcept { return maps_; }
-    
-    void AddSession(std::shared_ptr<GameSession> session);
-    const Sessions& GetSessions() const noexcept { return sessions_; }
-    
-    void Update(std::chrono::milliseconds time_delta);
+    void AddMap(Map map);
+
+    const Maps& GetMaps() const noexcept {
+        return maps_;
+    }
+
+    const Map* FindMap(const Map::Id& id) const noexcept {
+        if (auto it = map_id_to_index_.find(id); it != map_id_to_index_.end()) {
+            return &maps_.at(it->second);
+        }
+        return nullptr;
+    }
 
 private:
-    Maps maps_;
-    Sessions sessions_;
+    using MapIdHasher = util::TaggedHasher<Map::Id>;
+    using MapIdToIndex = std::unordered_map<Map::Id, size_t, MapIdHasher>;
+
+    std::vector<Map> maps_;
+    MapIdToIndex map_id_to_index_;
 };
 
-} // namespace model
+}  // namespace model

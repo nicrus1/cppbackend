@@ -4,43 +4,57 @@ project(game_server CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# Находим зависимости
-find_package(Catch2 REQUIRED)
-find_package(Threads REQUIRED)
-find_package(Boost REQUIRED COMPONENTS json system) # Добавляем system
+include(${CMAKE_BINARY_DIR}/conanbuildinfo_multi.cmake)
+conan_basic_setup(TARGETS)
 
-# Основное приложение
+# Main game server executable
 add_executable(game_server
     src/main.cpp
     src/model.cpp
+    src/json_loader.cpp
+    src/request_handler.cpp
+    src/game_state.cpp
+    src/loot_manager.cpp
     src/loot_generator.cpp
-    src/extra_data.cpp
+    src/http_server.cpp
+    src/logger.cpp
+    src/htmldecode.cpp
+    src/boost_json.cpp
 )
 
-# Линкуем Boost
+target_include_directories(game_server PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_link_libraries(game_server PRIVATE 
-    Boost::json 
-    Boost::system
+    CONAN_PKG::boost
     Threads::Threads
 )
 
-# Тестовое приложение
+# Tests executable
 add_executable(game_server_tests
-    tests/catch_test_main.cpp
-    tests/model-tests.cpp
-    tests/loot_generator_tests.cpp
     src/model.cpp
+    src/game_state.cpp
+    src/loot_manager.cpp
     src/loot_generator.cpp
+    tests/tests.cpp
+    tests/loot_tests.cpp
+    tests/loot_generator_tests.cpp
 )
 
-target_include_directories(game_server_tests PRIVATE src)
+target_include_directories(game_server_tests PRIVATE 
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests
+)
 
 target_link_libraries(game_server_tests PRIVATE 
-    Catch2::Catch2 
-    Threads::Threads 
-    Boost::json
-    Boost::system
+    CONAN_PKG::catch2
+    CONAN_PKG::boost
+    Threads::Threads
 )
 
+# Set properties for tests
+set_target_properties(game_server_tests PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
+)
+
+# Enable testing
 enable_testing()
 add_test(NAME game_server_tests COMMAND game_server_tests)
