@@ -49,16 +49,15 @@ public:
     const std::string& GetName() const noexcept { return name_; }
     size_t GetLootTypesCount() const noexcept { return loot_types_count_; }
 
-    void AddRoad(const Road& road) { roads_.emplace_back(road); }
+    void AddRoad(const Road& road) { roads_.push_back(road); }
+    void AddBuilding(const Building& building) { buildings_.push_back(building); }
+    void AddOffice(const Office& office) { offices_.push_back(office); }
+
     const Roads& GetRoads() const noexcept { return roads_; }
-
-    void AddBuilding(const Building& building) { buildings_.emplace_back(building); }
     const Buildings& GetBuildings() const noexcept { return buildings_; }
-
-    void AddOffice(Office office) { offices_.emplace_back(std::move(office)); }
     const Offices& GetOffices() const noexcept { return offices_; }
 
-private:
+ private:
     Id id_;
     std::string name_;
     size_t loot_types_count_;
@@ -68,7 +67,7 @@ private:
 };
 
 struct LostObject {
-    using Id = util::Tagged<uint64_t, LostObject>;
+    using Id = util::Tagged<size_t, LostObject>;
     Id id;
     size_t type;
     Point position;
@@ -77,30 +76,27 @@ struct LostObject {
 class GameSession {
 public:
     using Id = util::Tagged<size_t, GameSession>;
-    
-    GameSession(Id id, std::shared_ptr<Map> map, 
+
+    // Добавлен опциональный параметр random_gen для детерминированного тестирования
+    GameSession(Id id, std::shared_ptr<Map> map,
                 loot_gen::LootGenerator::TimeInterval base_interval,
-                double probability);
+                double probability,
+                loot_gen::LootGenerator::RandomGenerator random_gen = nullptr);
 
     const Id& GetId() const noexcept { return id_; }
-    const std::shared_ptr<Map>& GetMap() const noexcept { return map_; }
+    std::shared_ptr<Map> GetMap() const noexcept { return map_; }
     
     void Update(std::chrono::milliseconds time_delta);
-    
-    const std::unordered_map<LostObject::Id, LostObject>& GetLostObjects() const noexcept {
-        return lost_objects_;
-    }
-    
+
     void AddLooter() { looter_count_++; }
     void RemoveLooter() { if (looter_count_ > 0) looter_count_--; }
     
     size_t GetLooterCount() const noexcept { return looter_count_; }
     size_t GetLostObjectsCount() const noexcept { return lost_objects_.size(); }
+    const std::unordered_map<LostObject::Id, LostObject>& GetLostObjects() const noexcept { return lost_objects_; }
 
 private:
     void GenerateLostObject();
-    
-    // Убран const, так как генерация случайных чисел изменяет состояние rng_
     Point GetRandomRoadPoint();
 
     Id id_;
@@ -124,10 +120,6 @@ public:
     const Maps& GetMaps() const noexcept { return maps_; }
     
     void AddSession(std::shared_ptr<GameSession> session);
-    
-    // Возвращено потерянное объявление метода FindSession!
-    std::shared_ptr<GameSession> FindSession(const GameSession::Id& id) const noexcept;
-    
     const Sessions& GetSessions() const noexcept { return sessions_; }
     
     void Update(std::chrono::milliseconds time_delta);

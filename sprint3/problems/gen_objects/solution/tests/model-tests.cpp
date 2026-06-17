@@ -14,21 +14,19 @@ SCENARIO("Game session loot generation") {
         
         map->AddRoad({{0, 0}, {10, 0}});
         
-        // ВАЖНО: Мы используем конструктор, который передаем в GameSession.
-        // Чтобы тесты были стабильными, нужно, чтобы Update внутри генерировал loot всегда.
-        // Передаем вероятность 1.0.
+        // Передаем детерминированную лямбду []{ return 1.0; }, чтобы тест не зависел от случайности
         model::GameSession session(
             model::GameSession::Id(0), 
             map,
             1s,
-            1.0 
+            1.0,
+            []() { return 1.0; }
         );
         
         WHEN("no looters and no loot") {
             THEN("generator should produce loot up to looter count") {
                 session.AddLooter();  // 1 looter
                 
-                // Даем больше времени для накопления вероятности
                 session.Update(2s);
                 CHECK(session.GetLostObjectsCount() == 1);
                 
@@ -53,17 +51,18 @@ SCENARIO("Game session with multiple roads") {
         map->AddRoad({{0, 0}, {10, 0}});
         map->AddRoad({{5, 0}, {5, 10}});
         
+        // Здесь также фиксируем генератор случайных чисел для стабильности
         model::GameSession session(
             model::GameSession::Id(0),
             map,
             1s,
-            1.0
+            1.0,
+            []() { return 1.0; }
         );
         
         session.AddLooter();
         
         WHEN("generating many objects") {
-            // Для теста достаточно 5 итераций с большим интервалом
             for (int i = 0; i < 5; ++i) {
                 session.Update(2s);
             }
@@ -71,12 +70,14 @@ SCENARIO("Game session with multiple roads") {
             auto& objects = session.GetLostObjects();
             CHECK(objects.size() > 0);
             
-            std::set<size_t> ids;
+            std::set<size_t> types;
             for (const auto& [id, obj] : objects) {
-                ids.insert(id.GetUnderlying());
+                types.insert(obj.type);
             }
             
-            CHECK(ids.size() == objects.size());
+            for (auto type : types) {
+                CHECK(type < map->GetLootTypesCount());
+            }
         }
     }
 }
