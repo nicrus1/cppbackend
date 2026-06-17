@@ -7,7 +7,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # Находим зависимости
 find_package(Catch2 REQUIRED)
 find_package(Threads REQUIRED)
-find_package(Boost REQUIRED COMPONENTS json) # Ищем Boost и нужный компонент
+find_package(Boost REQUIRED COMPONENTS json system) # Добавляем system
 
 # Основное приложение
 add_executable(game_server
@@ -17,8 +17,12 @@ add_executable(game_server
     src/extra_data.cpp
 )
 
-# Явно линкуем Boost и потоки к основному приложению
-target_link_libraries(game_server PRIVATE Boost::json Threads::Threads)
+# Линкуем Boost
+target_link_libraries(game_server PRIVATE 
+    Boost::json 
+    Boost::system
+    Threads::Threads
+)
 
 # Тестовое приложение
 add_executable(game_server_tests
@@ -31,9 +35,12 @@ add_executable(game_server_tests
 
 target_include_directories(game_server_tests PRIVATE src)
 
-# Линкуем Catch2, потоки и Boost (если в тестах используются модели с JSON)
-target_link_libraries(game_server_tests PRIVATE Catch2::Catch2 Threads::Threads Boost::json)
+target_link_libraries(game_server_tests PRIVATE 
+    Catch2::Catch2 
+    Threads::Threads 
+    Boost::json
+    Boost::system
+)
 
-# Включаем тесты
 enable_testing()
 add_test(NAME game_server_tests COMMAND game_server_tests)
