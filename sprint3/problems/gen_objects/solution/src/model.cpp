@@ -24,7 +24,6 @@ GameSession::GameSession(Id id, std::shared_ptr<Map> map,
                         loot_gen::LootGenerator::RandomGenerator random_gen)
     : id_(std::move(id))
     , map_(std::move(map))
-    // Если передан внешний генератор (для тестов), используем его. Иначе берем лямбду со случайными числами
     , loot_generator_(base_interval, probability, random_gen ? std::move(random_gen) : [this]() { return uniform_dist_(rng_); })
     , rng_(std::random_device{}())
     , uniform_dist_(0.0, 1.0) {}
@@ -42,13 +41,17 @@ void GameSession::Update(std::chrono::milliseconds time_delta) {
 }
 
 void GameSession::GenerateLostObject() {
+    // ЗАЩИТА ОТ КРАША: Если на карте нет типов лута, ничего не генерируем
+    if (map_->GetLootTypesCount() == 0) {
+        return;
+    }
+    
     LostObject::Id id(next_lost_object_id_++);
     
-    // Безопасный выбор случайного типа объекта через uniform_int_distribution
     std::uniform_int_distribution<size_t> type_dist(0, map_->GetLootTypesCount() - 1);
     size_t type = type_dist(rng_);
     
-    LostObject obj{\
+    LostObject obj{
         .id = id,
         .type = type,
         .position = GetRandomRoadPoint()
@@ -62,21 +65,17 @@ Point GameSession::GetRandomRoadPoint() {
         return {0, 0};
     }
     
-    // Выбираем случайную дорогу без риска погрешностей double
     std::uniform_int_distribution<size_t> road_dist(0, roads.size() - 1);
     size_t road_index = road_dist(rng_);
     const auto& road = roads[road_index];
     
-    // Генерируем точку на дороге
     double t = uniform_dist_(rng_);
     
     double x, y;
     if (road.start.x != road.end.x) {
-        // Горизонтальная дорога
         x = road.start.x + t * (road.end.x - road.start.x);
         y = road.start.y;
     } else {
-        // Вертикальная дорога
         x = road.start.x;
         y = road.start.y + t * (road.end.y - road.start.y);
     }

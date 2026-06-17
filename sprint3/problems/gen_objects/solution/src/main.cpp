@@ -23,7 +23,6 @@ namespace http = beast::http;
 namespace net = boost::asio;
 using tcp = net::ip::tcp;
 
-// Функция для безопасного парсинга чисел из JSON
 double AsDouble(const boost::json::value& val) {
     if (val.is_double()) return val.as_double();
     if (val.is_int64()) return static_cast<double>(val.as_int64());
@@ -38,7 +37,6 @@ std::string MakeErrorJson(const std::string& code, const std::string& message) {
     return boost::json::serialize(obj);
 }
 
-// Генерация случайного 32-значного токена авторизации
 std::string GenerateToken() {
     static std::mt19937_64 rng(std::random_device{}());
     std::uniform_int_distribution<uint64_t> dist;
@@ -57,40 +55,48 @@ class GameServer {
 public:
     GameServer(const std::string& config_path, unsigned short port = 8080)
         : port_(port)
-        , acceptor_(io_context_, tcp::endpoint(net::ip::make_address("0.0.0.0"), port_)) {
+        , acceptor_(io_context_, tcp::endpoint(net::ip::make_address("0.0.0.0"), port_))
+        , ticker_(io_context_) {
         LoadConfig(config_path);
     }
     
     void Run() {
         std::cout << "Server running on port " << port_ << "...\n";
         DoAccept();
-        
-        // Таймер для обновления состояния игры в главном потоке ASIO (устраняет Data Race)
-        auto timer = std::make_shared<net::steady_timer>(io_context_, std::chrono::milliseconds(50));
-        std::function<void(boost::system::error_code)> timer_handler;
-        auto last_time = std::chrono::steady_clock::now();
-        
-        timer_handler = [this, timer, &last_time, &timer_handler](boost::system::error_code ec) {
-            if (!ec && running_) {
-                auto now = std::chrono::steady_clock::now();
-                auto delta = std::chrono::duration_cast<std::chrono::milliseconds>(now - last_time);
-                if (delta.count() > 0) {
-                    game_.Update(delta);
-                    last_time = now;
-                }
-                timer->expires_after(std::chrono::milliseconds(50));
-                timer->async_wait(timer_handler);
-            }
-        };
-        timer->async_wait(timer_handler);
-
-        // Блокирующий запуск цикла (один поток)
+        StartTick(); // Запуск безопасного таймера
         io_context_.run();
     }
     
-    void Stop() { running_ = false; }
+    void Stop() { 
+        running_ = false; 
+        ticker_.cancel();
+    }
 
 private:
+    void StartTick() {
+        last_tick_time_ = std::chrono::steady_clock::now();
+        DoTick();
+    }
+    
+    void DoTick() {
+        ticker_.expires_after(std::chrono::milliseconds(50));
+        ticker_.async_wait([this](beast::error_code ec) {
+            if (!ec && running_) {
+                auto now = std::chrono::steady_clock::now();
+                auto delta = std::chrono::duration_cast<std::chrono::milliseconds>(now - last_tick_time_);
+                if (delta.count() > 0) {
+                    try {
+                        game_.Update(delta);
+                    } catch (const std::exception& e) {
+                        std::cerr << "Game Update Error: " << e.what() << "\n";
+                    }
+                    last_tick_time_ = now;
+                }
+                DoTick();
+            }
+        });
+    }
+
     void DoAccept() {
         acceptor_.async_accept(
             [this](boost::system::error_code ec, tcp::socket socket) {
@@ -167,7 +173,6 @@ private:
                 );
                 game_.AddSession(session);
                 
-                // Удаляем dogSpeed для клиента и кэшируем оригинальную структуру
                 map_obj.erase("dogSpeed");
                 map_json_cache_[id] = map_obj;
             }
@@ -193,7 +198,7 @@ private:
         
         void HandleRequest() {
             response_ = server_.HandleHttpRequest(request_);
-            response_.keep_alive(request_.keep_alive()); // Поддержка Keep-Alive для pytest/requests
+            response_.keep_alive(request_.keep_alive()); 
             response_.prepare_payload(); 
             
             auto self = shared_from_this();
@@ -203,7 +208,9 @@ private:
                         self->request_ = {};
                         self->DoRead();
                     } else {
-                        self->socket_.shutdown(tcp::socket::shutdown_send, ec);
+                        // Безопасное отключение без генерации исключений
+                        beast::error_code shutdown_ec;
+                        self->socket_.shutdown(tcp::socket::shutdown_both, shutdown_ec);
                     }
                 });
         }
@@ -211,7 +218,7 @@ private:
         tcp::socket socket_;
         beast::flat_buffer buffer_;
         http::request<http::string_body> request_;
-        http::response<http::string_body> response_; // Теперь response живёт до конца отправки!
+        http::response<http::string_body> response_;
         GameServer& server_;
     };
     
@@ -223,7 +230,6 @@ private:
         try {
             std::string path(req.target().data(), req.target().size());
             
-            // Список карт
             if (path == "/api/v1/maps") {
                 if (req.method() == http::verb::get || req.method() == http::verb::head) {
                     res.body() = maps_list_json_;
@@ -238,7 +244,6 @@ private:
                 }
             }
             
-            // Конкретная карта
             if (path.find("/api/v1/maps/") == 0) {
                 std::string map_id = path.substr(14);
                 if (req.method() == http::verb::get || req.method() == http::verb::head) {
@@ -261,7 +266,6 @@ private:
                 }
             }
             
-            // Присоединение к игре
             if (path == "/api/v1/game/join") {
                 if (req.method() == http::verb::post) {
                     try {
@@ -299,6 +303,11 @@ private:
                             }
                         }
                         
+                        if (!target_session) {
+                            res.result(http::status::internal_server_error);
+                            return res;
+                        }
+                        
                         auto player = target_session->AddPlayer(user_name);
                         std::string token = GenerateToken();
                         tokens_[token] = {target_session, player};
@@ -325,7 +334,6 @@ private:
                 }
             }
             
-            // Игровое состояние
             if (path == "/api/v1/game/state") {
                 if (req.method() == http::verb::get || req.method() == http::verb::head) {
                     auto auth_it = req.find(http::field::authorization);
@@ -380,13 +388,12 @@ private:
                 }
             }
 
-            // Перемещение времени в игре (Tick API)
             if (path == "/api/v1/game/tick") {
                 if (req.method() == http::verb::post) {
                     try {
                         auto body = json::parse(req.body());
                         if (body.as_object().contains("timeDelta")) {
-                            auto delta_ms = body.as_object().at("timeDelta").as_int64();
+                            auto delta_ms = static_cast<int64_t>(AsDouble(body.as_object().at("timeDelta")));
                             game_.Update(std::chrono::milliseconds(delta_ms));
                         } else {
                             res.result(http::status::bad_request);
@@ -436,6 +443,8 @@ private:
     unsigned short port_;
     net::io_context io_context_;
     tcp::acceptor acceptor_;
+    net::steady_timer ticker_;
+    std::chrono::steady_clock::time_point last_tick_time_;
 };
 
 int main(int argc, char* argv[]) {
