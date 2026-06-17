@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <string>
 #include <sstream>
+#include <stdexcept>
 
 #include <boost/json.hpp>
 #include <boost/asio.hpp>
@@ -19,6 +20,14 @@ namespace beast = boost::beast;
 namespace http = beast::http;
 namespace net = boost::asio;
 using tcp = net::ip::tcp;
+
+// Вспомогательная функция для безопасного парсинга чисел из JSON
+double AsDouble(const boost::json::value& val) {
+    if (val.is_double()) return val.as_double();
+    if (val.is_int64()) return static_cast<double>(val.as_int64());
+    if (val.is_uint64()) return static_cast<double>(val.as_uint64());
+    throw std::runtime_error("Value is not a number");
+}
 
 class GameServer {
 public:
@@ -90,8 +99,8 @@ private:
         if (config.as_object().contains("lootGeneratorConfig")) {
             auto loot_config = config.at("lootGeneratorConfig").as_object();
             extra_data_.SetLootGeneratorConfig(
-                loot_config.at("period").as_double(),
-                loot_config.at("probability").as_double()
+                AsDouble(loot_config.at("period")),
+                AsDouble(loot_config.at("probability"))
             );
         } else {
             extra_data_.SetLootGeneratorConfig(1.0, 1.0);
@@ -125,10 +134,10 @@ private:
                 if (map_obj.contains("roads")) {
                     for (const auto& road_val : map_obj.at("roads").as_array()) {
                         auto road_obj = road_val.as_object();
-                        double x0 = road_obj.at("x0").as_double();
-                        double y0 = road_obj.at("y0").as_double();
-                        double x1 = road_obj.contains("x1") ? road_obj.at("x1").as_double() : x0;
-                        double y1 = road_obj.contains("y1") ? road_obj.at("y1").as_double() : y0;
+                        double x0 = AsDouble(road_obj.at("x0"));
+                        double y0 = AsDouble(road_obj.at("y0"));
+                        double x1 = road_obj.contains("x1") ? AsDouble(road_obj.at("x1")) : x0;
+                        double y1 = road_obj.contains("y1") ? AsDouble(road_obj.at("y1")) : y0;
                         map->AddRoad({{x0, y0}, {x1, y1}});
                     }
                 }
@@ -139,8 +148,8 @@ private:
                         auto office_obj = office_val.as_object();
                         model::Office office{
                             model::Office::Id(office_obj.at("id").as_string().c_str()),
-                            {office_obj.at("x").as_double(), office_obj.at("y").as_double()},
-                            {office_obj.at("offsetX").as_double(), office_obj.at("offsetY").as_double()}
+                            {AsDouble(office_obj.at("x")), AsDouble(office_obj.at("y"))},
+                            {AsDouble(office_obj.at("offsetX")), AsDouble(office_obj.at("offsetY"))}
                         };
                         map->AddOffice(std::move(office));
                     }
@@ -192,8 +201,11 @@ private:
         
         void HandleRequest() {
             auto response = server_.HandleHttpRequest(request_);
-            auto self = shared_from_this();
             
+            // Обязательный расчет Content-Length
+            response.prepare_payload(); 
+            
+            auto self = shared_from_this();
             http::async_write(
                 socket_,
                 response,
@@ -215,7 +227,6 @@ private:
         res.set(http::field::content_type, "application/json");
         
         try {
-            // Convert target to string properly
             std::string path(req.target().data(), req.target().size());
             
             // Handle /api/v1/maps
@@ -232,6 +243,7 @@ private:
                     return res;
                 } else {
                     res.result(http::status::method_not_allowed);
+                    res.set(http::field::allow, "GET, HEAD");
                     return res;
                 }
             }
@@ -276,6 +288,7 @@ private:
                     return res;
                 } else {
                     res.result(http::status::method_not_allowed);
+                    res.set(http::field::allow, "GET, HEAD");
                     return res;
                 }
             }
@@ -308,6 +321,7 @@ private:
                     return res;
                 } else {
                     res.result(http::status::method_not_allowed);
+                    res.set(http::field::allow, "POST");
                     return res;
                 }
             }
@@ -320,6 +334,7 @@ private:
                     return res;
                 } else {
                     res.result(http::status::method_not_allowed);
+                    res.set(http::field::allow, "GET, HEAD");
                     return res;
                 }
             }
