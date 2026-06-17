@@ -29,6 +29,14 @@ double AsDouble(const boost::json::value& val) {
     throw std::runtime_error("Value is not a number");
 }
 
+// Вспомогательная функция для генерации ошибок
+std::string MakeErrorJson(const std::string& code, const std::string& message) {
+    boost::json::object obj;
+    obj["code"] = code;
+    obj["message"] = message;
+    return boost::json::serialize(obj);
+}
+
 class GameServer {
 public:
     GameServer(const std::string& config_path, unsigned short port = 8080)
@@ -243,7 +251,9 @@ private:
                     return res;
                 } else {
                     res.result(http::status::method_not_allowed);
+                    res.set(http::field::cache_control, "no-cache");
                     res.set(http::field::allow, "GET, HEAD");
+                    res.body() = MakeErrorJson("invalidMethod", "Only GET and HEAD are allowed");
                     return res;
                 }
             }
@@ -256,6 +266,8 @@ private:
                     auto map = game_.FindMap(model::Map::Id(map_id));
                     if (!map) {
                         res.result(http::status::not_found);
+                        res.set(http::field::cache_control, "no-cache");
+                        res.body() = MakeErrorJson("mapNotFound", "Map not found");
                         return res;
                     }
                     
@@ -288,7 +300,9 @@ private:
                     return res;
                 } else {
                     res.result(http::status::method_not_allowed);
+                    res.set(http::field::cache_control, "no-cache");
                     res.set(http::field::allow, "GET, HEAD");
+                    res.body() = MakeErrorJson("invalidMethod", "Only GET and HEAD are allowed");
                     return res;
                 }
             }
@@ -303,6 +317,8 @@ private:
                     auto map = game_.FindMap(model::Map::Id(map_id));
                     if (!map) {
                         res.result(http::status::not_found);
+                        res.set(http::field::cache_control, "no-cache");
+                        res.body() = MakeErrorJson("mapNotFound", "Map not found");
                         return res;
                     }
                     
@@ -321,7 +337,9 @@ private:
                     return res;
                 } else {
                     res.result(http::status::method_not_allowed);
+                    res.set(http::field::cache_control, "no-cache");
                     res.set(http::field::allow, "POST");
+                    res.body() = MakeErrorJson("invalidMethod", "Only POST is allowed");
                     return res;
                 }
             }
@@ -334,12 +352,16 @@ private:
                     return res;
                 } else {
                     res.result(http::status::method_not_allowed);
+                    res.set(http::field::cache_control, "no-cache");
                     res.set(http::field::allow, "GET, HEAD");
+                    res.body() = MakeErrorJson("invalidMethod", "Only GET and HEAD are allowed");
                     return res;
                 }
             }
             
             res.result(http::status::not_found);
+            res.set(http::field::cache_control, "no-cache");
+            res.body() = MakeErrorJson("notFound", "Endpoint not found");
             return res;
             
         } catch (const std::exception& e) {
@@ -385,24 +407,27 @@ private:
     
     json::value HandleGameStateRequest() {
         json::object state_json;
-        state_json["players"] = json::object{};
-        
+        json::object players_json;
         json::object lost_objects;
+        
         for (const auto& [session_id, session] : game_.GetSessions()) {
+            for (const auto& [player_id, player] : session->GetPlayers()) {
+                json::object p_json;
+                p_json["pos"] = json::array{player.position.x, player.position.y};
+                p_json["speed"] = json::array{player.speed[0], player.speed[1]};
+                p_json["dir"] = player.dir;
+                players_json[std::to_string(player_id)] = std::move(p_json);
+            }
+            
             for (const auto& [obj_id, obj] : session->GetLostObjects()) {
                 json::object obj_json;
                 obj_json["type"] = static_cast<std::int64_t>(obj.type);
-                
-                json::array pos;
-                pos.push_back(obj.position.x);
-                pos.push_back(obj.position.y);
-                obj_json["pos"] = pos;
-                
+                obj_json["pos"] = json::array{obj.position.x, obj.position.y};
                 lost_objects[std::to_string(obj_id.GetUnderlying())] = std::move(obj_json);
             }
         }
-        state_json["lostObjects"] = lost_objects;
-        
+        state_json["players"] = std::move(players_json);
+        state_json["lostObjects"] = std::move(lost_objects);
         return state_json;
     }
     

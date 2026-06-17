@@ -17,6 +17,14 @@ namespace model {
 using Dimension = int;
 using Coord = Dimension;
 
+struct Player {
+    size_t id;
+    std::string name;
+    Point position;
+    std::vector<double> speed = {0.0, 0.0};
+    std::string dir = "U"; // 'U', 'D', 'L', 'R'
+};
+
 struct Road {
     Point start;
     Point end;
@@ -94,6 +102,8 @@ public:
     size_t GetLooterCount() const noexcept { return looter_count_; }
     size_t GetLostObjectsCount() const noexcept { return lost_objects_.size(); }
     const std::unordered_map<LostObject::Id, LostObject>& GetLostObjects() const noexcept { return lost_objects_; }
+    Player* AddPlayer(const std::string& name);
+    const std::unordered_map<size_t, Player>& GetPlayers() const noexcept { return players_; }
 
 private:
     void GenerateLostObject();
@@ -108,6 +118,9 @@ private:
     
     std::mt19937 rng_;
     std::uniform_real_distribution<double> uniform_dist_;
+
+    std::unordered_map<size_t, Player> players_;
+    size_t next_player_id_ = 0;
 };
 
 class Game {

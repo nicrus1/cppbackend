@@ -5,6 +5,19 @@
 
 namespace model {
 
+Player* GameSession::AddPlayer(const std::string& name) {
+    size_t player_id = next_player_id_++;
+    Player player{
+        .id = player_id,
+        .name = name,
+        .position = GetRandomRoadPoint()
+    };
+    
+    auto [it, inserted] = players_.emplace(player_id, std::move(player));
+    AddLooter(); 
+    return &it->second;
+}
+
 GameSession::GameSession(Id id, std::shared_ptr<Map> map,
                         loot_gen::LootGenerator::TimeInterval base_interval,
                         double probability,
