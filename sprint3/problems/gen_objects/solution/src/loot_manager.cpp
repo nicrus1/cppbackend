@@ -51,7 +51,7 @@ int LootManager::GenerateRandomType() const {
     if (types_count == 0) {
         return 0;
     }
-    std::uniform_int_distribution<int> type_dist(0, types_count - 1);
+    std::uniform_int_distribution<int> type_dist(0, static_cast<int>(types_count) - 1);
     return type_dist(rng_);
 }
 

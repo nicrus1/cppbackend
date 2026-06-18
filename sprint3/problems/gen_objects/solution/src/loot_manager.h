@@ -6,6 +6,7 @@
 #include <vector>
 #include <random>
 #include <chrono>
+#include <memory>
 
 namespace game {
 

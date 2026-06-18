@@ -7,6 +7,7 @@ namespace http_handler {
 void RequestHandler::LoadExtraData(const std::filesystem::path& config_path) {
     std::ifstream file(config_path);
     if (!file.is_open()) {
+        logger::LogError(0, "Failed to open config file: " + config_path.string(), "LoadExtraData");
         return;
     }
     
@@ -24,7 +25,9 @@ void RequestHandler::LoadExtraData(const std::filesystem::path& config_path) {
             double period = config.at("period").as_double();
             double probability = config.at("probability").as_double();
             extra_data_.SetLootGeneratorConfig(period, probability);
-            SetLootGeneratorConfig(period, probability);
+            api_handler_.SetLootGeneratorConfig(period, probability);
+            logger::LogDebug("Loot generator config loaded: period=" + std::to_string(period) + 
+                           ", probability=" + std::to_string(probability));
         }
         
         // Load loot types for each map
@@ -47,9 +50,9 @@ void RequestHandler::LoadExtraData(const std::filesystem::path& config_path) {
                     // Set loot types count in model
                     const model::Map* map = game_.FindMap(model::Map::Id{map_id});
                     if (map) {
-                        // Need const_cast because we need to modify the map
-                        // Better approach: store this info separately
                         const_cast<model::Map*>(map)->SetLootTypesCount(loot_array.size());
+                        logger::LogDebug("Map " + map_id + " has " + std::to_string(loot_array.size()) + 
+                                       " loot types");
                     }
                 }
             }

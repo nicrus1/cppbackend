@@ -7,7 +7,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 include(${CMAKE_BINARY_DIR}/conanbuildinfo_multi.cmake)
 conan_basic_setup(TARGETS)
 
-# Main game server executable
+# Основной исполняемый файл сервера
 add_executable(game_server
     src/main.cpp
     src/model.cpp
@@ -28,7 +28,7 @@ target_link_libraries(game_server PRIVATE
     Threads::Threads
 )
 
-# Tests executable
+# Тесты
 add_executable(game_server_tests
     src/model.cpp
     src/game_state.cpp
@@ -50,11 +50,11 @@ target_link_libraries(game_server_tests PRIVATE
     Threads::Threads
 )
 
-# Set properties for tests
-set_target_properties(game_server_tests PROPERTIES
+# Настройка выходных директорий
+set_target_properties(game_server game_server_tests PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
 )
 
-# Enable testing
+# Включение тестирования
 enable_testing()
 add_test(NAME game_server_tests COMMAND game_server_tests)
