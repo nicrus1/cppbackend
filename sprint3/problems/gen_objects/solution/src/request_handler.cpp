@@ -19,11 +19,18 @@ void RequestHandler::LoadExtraData(const std::filesystem::path& config_path) {
         boost::json::value json_value = boost::json::parse(json_str);
         boost::json::object json_obj = json_value.as_object();
         
+        auto get_double = [](const boost::json::value& val) -> double {
+            if (val.is_double()) return val.as_double();
+            if (val.is_int64()) return static_cast<double>(val.as_int64());
+            if (val.is_uint64()) return static_cast<double>(val.as_uint64());
+            throw std::runtime_error("Not a number");
+        };
+
         // Load loot generator config
         if (json_obj.contains("lootGeneratorConfig")) {
             const auto& config = json_obj.at("lootGeneratorConfig").as_object();
-            double period = config.at("period").as_double();
-            double probability = config.at("probability").as_double();
+            double period = get_double(config.at("period"));
+            double probability = get_double(config.at("probability"));
             extra_data_.SetLootGeneratorConfig(period, probability);
             api_handler_.SetLootGeneratorConfig(period, probability);
             logger::LogDebug("Loot generator config loaded: period=" + std::to_string(period) + 

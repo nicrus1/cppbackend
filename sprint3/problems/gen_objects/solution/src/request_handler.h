@@ -90,9 +90,13 @@ public:
         }
 
         if (target == "/api/v1/maps") {
-            if (method != "GET") {
-                SendError(std::move(req), send, http::status::method_not_allowed,
-                          "badRequest", "Method not allowed");
+            if (method != "GET" && method != "HEAD") {
+                SendErrorWithAllow(std::move(req), send, http::status::method_not_allowed,
+                          "invalidMethod", "Method not allowed", "GET, HEAD");
+                return;
+            }
+            if (method == "HEAD") {
+                SendResponse(std::move(req), send, http::status::ok, "application/json", "");
                 return;
             }
             std::string body = SerializeMaps();
@@ -102,9 +106,9 @@ public:
 
         const std::string prefix = "/api/v1/maps/";
         if (target.find(prefix) == 0) {
-            if (method != "GET") {
-                SendError(std::move(req), send, http::status::method_not_allowed,
-                          "badRequest", "Method not allowed");
+            if (method != "GET" && method != "HEAD") {
+                SendErrorWithAllow(std::move(req), send, http::status::method_not_allowed,
+                          "invalidMethod", "Method not allowed", "GET, HEAD");
                 return;
             }
             std::string map_id_str = target.substr(prefix.length());
@@ -113,17 +117,17 @@ public:
                 map_id_str.pop_back();
             }
 
-            query_pos = map_id_str.find('?');
-            if (query_pos != std::string::npos) {
-                map_id_str = map_id_str.substr(0, query_pos);
-            }
-
             model::Map::Id map_id{std::move(map_id_str)};
             const model::Map* map = game_.FindMap(map_id);
 
             if (!map) {
                 SendError(std::move(req), send, http::status::not_found,
                           "mapNotFound", "Map not found");
+                return;
+            }
+
+            if (method == "HEAD") {
+                SendResponse(std::move(req), send, http::status::ok, "application/json", "");
                 return;
             }
 
@@ -223,6 +227,29 @@ private:
         http::response<http::string_body> response(status, req.version());
         response.set(http::field::content_type, "application/json");
         response.set(http::field::cache_control, "no-cache");
+        response.body() = body;
+        response.prepare_payload();
+        response.keep_alive(req.keep_alive());
+        send(std::move(response));
+    }
+
+    template <typename Body, typename Allocator, typename Send>
+    void SendErrorWithAllow(http::request<Body, http::basic_fields<Allocator>>&& req,
+                            Send&& send,
+                            http::status status,
+                            std::string_view code,
+                            std::string_view message,
+                            std::string_view allow_methods) {
+        std::string body = boost::json::serialize(
+            boost::json::object{
+                {"code", code},
+                {"message", message}
+            });
+        
+        http::response<http::string_body> response(status, req.version());
+        response.set(http::field::content_type, "application/json");
+        response.set(http::field::cache_control, "no-cache");
+        response.set(http::field::allow, allow_methods);
         response.body() = body;
         response.prepare_payload();
         response.keep_alive(req.keep_alive());
