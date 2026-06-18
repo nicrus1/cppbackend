@@ -18,7 +18,7 @@ LootManager::LootManager(const model::Map& map, double period, double probabilit
     , rng_(std::random_device{}()) {
 }
 
-model::Position LootManager::GenerateRandomPosition() const {
+model::Position LootManager::GenerateRandomPosition() {
     const auto& roads = map_.GetRoads();
     if (roads.empty()) {
         return {0.0, 0.0};
@@ -46,7 +46,7 @@ model::Position LootManager::GenerateRandomPosition() const {
     return result;
 }
 
-int LootManager::GenerateRandomType() const {
+int LootManager::GenerateRandomType() {
     size_t types_count = map_.GetLootTypesCount();
     if (types_count == 0) {
         return 0;

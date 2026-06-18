@@ -31,8 +31,8 @@ private:
     uint64_t next_id_ = 0;
     std::mt19937 rng_;
     
-    model::Position GenerateRandomPosition() const;
-    int GenerateRandomType() const;
+    model::Position GenerateRandomPosition();
+    int GenerateRandomType();
     void AddLootItems(size_t count);
 };
 
