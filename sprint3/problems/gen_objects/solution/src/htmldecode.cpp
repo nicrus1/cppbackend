@@ -9,7 +9,7 @@ std::string HtmlDecode(std::string_view str) {
         {"lt", '<'},
         {"gt", '>'},
         {"amp", '&'},
-        {"apos', '\''},
+        {"apos", '\''},
         {"quot", '\"'}
     };
 
