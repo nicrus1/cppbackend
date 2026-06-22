@@ -53,7 +53,6 @@ TEST_CASE("Integration - full game flow with bag") {
 }
 
 TEST_CASE("Integration - request handler loads bag capacity") {
-    // Создаем тестовый конфигурационный файл
     std::string config_json = R"({
         "defaultDogSpeed": 3.0,
         "defaultBagCapacity": 3,
