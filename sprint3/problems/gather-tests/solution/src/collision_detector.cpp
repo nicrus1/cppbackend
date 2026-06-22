@@ -37,7 +37,6 @@ std::vector<GatheringEvent> FindGatherEvents(const ItemGathererProvider& provide
             
             CollectionResult result = TryCollectPoint(gatherer.start_pos, gatherer.end_pos, item.position);
             
-            // Расстояние взаимодействия — это сумма радиусов/ширин собирателя и предмета
             double collect_radius = gatherer.width + item.width;
 
             if (result.IsCollected(collect_radius)) {
