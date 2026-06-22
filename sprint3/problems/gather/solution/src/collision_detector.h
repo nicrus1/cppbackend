@@ -1,7 +1,5 @@
 #pragma once
 
-#include "geom.h"
-
 #include <algorithm>
 #include <vector>
 
