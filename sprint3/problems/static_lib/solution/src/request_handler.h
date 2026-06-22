@@ -36,6 +36,10 @@ public:
         api_handler_.SetLootGeneratorConfig(period, probability);
     }
     
+    void SetLootTypesCount(const model::Map::Id& map_id, size_t count) {
+        api_handler_.SetLootTypesCount(map_id, count);
+    }
+    
     void LoadExtraData(const std::filesystem::path& config_path);
 
     template <typename Body, typename Allocator, typename Send>

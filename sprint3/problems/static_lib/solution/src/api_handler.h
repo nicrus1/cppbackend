@@ -30,6 +30,10 @@ public:
     void SetLootGeneratorConfig(double period, double probability) {
         game_state_->SetLootGeneratorConfig(period, probability);
     }
+    
+    void SetLootTypesCount(const model::Map::Id& map_id, size_t count) {
+        game_state_->SetLootTypesCount(map_id, count);
+    }
 
     void InitializeLootManagers() {
         game_state_->InitializeLootManagers();

@@ -209,10 +209,22 @@ void GameState::SetLootGeneratorConfig(double period, double probability) {
     
     // Обновляем существующие менеджеры лута
     for (auto& [map_id, manager] : loot_managers_) {
-        // Пересоздаем менеджер с новыми параметрами
         const model::Map* map = game_.FindMap(map_id);
         if (map) {
             manager = std::make_unique<LootManager>(*map, period, probability);
+        }
+    }
+}
+
+void GameState::SetLootTypesCount(const model::Map::Id& map_id, size_t count) {
+    const model::Map* map = game_.FindMap(map_id);
+    if (map) {
+        const_cast<model::Map*>(map)->SetLootTypesCount(count);
+        
+        // Пересоздаем менеджер лута, чтобы он знал о типах
+        auto it = loot_managers_.find(map_id);
+        if (it != loot_managers_.end()) {
+            it->second = std::make_unique<LootManager>(*map, loot_period_, loot_probability_);
         }
     }
 }
@@ -251,7 +263,9 @@ void GameState::ProcessTick(int64_t time_delta_ms) {
             }
         }
         
-        it->second->Update(delta, dog_count);
+        if (it != loot_managers_.end()) {
+            it->second->Update(delta, dog_count);
+        }
     }
 }
 

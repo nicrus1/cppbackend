@@ -78,6 +78,8 @@ public:
 
     void SetLootGeneratorConfig(double period, double probability);
     
+    void SetLootTypesCount(const model::Map::Id& map_id, size_t count);
+    
     std::unordered_map<uint64_t, std::pair<int, model::Position>>
     GetLootState(const model::Token& token) const;
 
