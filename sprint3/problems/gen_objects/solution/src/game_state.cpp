@@ -122,6 +122,15 @@ GameState::JoinResult GameState::JoinGame(const std::string& user_name, const mo
     dogs_.emplace(player.GetId(), std::move(dog));
     player.SetDogId(dog_id);
 
+    // Создаем менеджер трофеев для карты если его нет
+    auto it = loot_managers_.find(map_id);
+    if (it == loot_managers_.end()) {
+        auto manager = std::make_unique<LootManager>(
+            *map, loot_period_, loot_probability_
+        );
+        loot_managers_[map_id] = std::move(manager);
+    }
+
     return {token, player.GetId()};
 }
 

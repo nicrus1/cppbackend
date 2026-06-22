@@ -53,6 +53,7 @@ public:
             path = path.substr(1);
         }
 
+        // Исправленная проверка API версии
         if (target.find("/api/v") == 0 && target.find("/api/v1/") != 0) {
             SendError(std::move(req), send, http::status::bad_request,
                       "badRequest", "Invalid API version");
