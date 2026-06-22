@@ -23,7 +23,6 @@ struct StringMaker<collision_detector::GatheringEvent> {
 
 using namespace collision_detector;
 
-// Вспомогательный класс-провайдер для тестов
 class TestProvider : public ItemGathererProvider {
 public:
     std::vector<Item> items_;
