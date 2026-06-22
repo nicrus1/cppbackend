@@ -40,6 +40,7 @@ add_executable(game_server_tests
     tests/tests.cpp
     tests/loot_tests.cpp
     tests/loot_generator_tests.cpp
+    tests/collision_tests.cpp
 )
 
 target_include_directories(game_server_tests PRIVATE 
