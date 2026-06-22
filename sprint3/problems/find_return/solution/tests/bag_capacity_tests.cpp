@@ -35,7 +35,6 @@ TEST_CASE("Dog bag - adding items") {
     REQUIRE(dog.GetBagSize() == 2);
     REQUIRE(dog.IsBagFull() == true);
     
-    // Попытка добавить в полный рюкзак
     dog.AddToBag(3, 2);
     REQUIRE(dog.GetBagSize() == 2); // Не добавился
 }
