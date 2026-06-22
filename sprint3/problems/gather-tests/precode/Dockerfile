@@ -1,4 +1,4 @@
-# Исправлено 'as' на 'AS'
+# Не забудь про AS большими буквами, чтобы убрать ворнинг
 FROM gcc:11.3 AS build
 
 RUN apt update && \
@@ -6,11 +6,11 @@ RUN apt update && \
       python3-pip \
       cmake \
     && \
-    pip3 install conan==1.53.0
+    pip3 install conan==1.59.0
 
 COPY conanfile.txt /app/
 
-# Добавлена инициализация дефолтного профиля Conan
+# Инициализируем дефолтный профиль и собираем
 RUN mkdir -p /app/build && cd /app/build && \
     conan profile new default --detect && \
     conan profile update settings.compiler.libcxx=libstdc++11 default && \
