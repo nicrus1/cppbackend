@@ -22,44 +22,11 @@ CollectionResult TryCollectPoint(geom::Point2D a, geom::Point2D b, geom::Point2D
     return CollectionResult(sq_distance, proj_ratio);
 }
 
+// В задании на разработку тестов реализовывать следующую функцию не нужно -
+// она будет линковаться извне.
+/*
 std::vector<GatheringEvent> FindGatherEvents(const ItemGathererProvider& provider) {
-    std::vector<GatheringEvent> events;
-
-    // Перебираем всех собирателей
-    for (size_t g = 0; g < provider.GatherersCount(); ++g) {
-        Gatherer gatherer = provider.GetGatherer(g);
-
-        // Проверяем, было ли перемещение. Если нет - пропускаем (по условию).
-        if (gatherer.start_pos.x == gatherer.end_pos.x &&
-            gatherer.start_pos.y == gatherer.end_pos.y) {
-            continue;
-        }
-
-        // Перебираем все предметы
-        for (size_t i = 0; i < provider.ItemsCount(); ++i) {
-            Item item = provider.GetItem(i);
-
-            // Пытаемся собрать предмет
-            CollectionResult result = TryCollectPoint(gatherer.start_pos, gatherer.end_pos, item.position);
-
-            // Радиус сбора — это сумма радиуса собирателя и предмета
-            if (result.IsCollected(gatherer.width + item.width)) {
-                events.push_back(GatheringEvent{
-                    .item_id = i,
-                    .gatherer_id = g,
-                    .sq_distance = result.sq_distance,
-                    .time = result.proj_ratio
-                });
-            }
-        }
-    }
-
-    // Сортируем все собранные события в хронологическом порядке (по параметру time)
-    std::sort(events.begin(), events.end(), [](const GatheringEvent& a, const GatheringEvent& b) {
-        return a.time < b.time;
-    });
-
-    return events;
 }
+*/
 
 }  // namespace collision_detector
