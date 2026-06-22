@@ -121,9 +121,6 @@ std::string RequestHandler::SerializeMap(const model::Map& map) const {
         map_obj["lootTypes"] = boost::json::array();
     }
     
-    // Add bag capacity
-    map_obj["bagCapacity"] = static_cast<std::int64_t>(map.GetBagCapacity());
-    
     return boost::json::serialize(map_obj);
 }
 
