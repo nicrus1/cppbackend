@@ -1,4 +1,3 @@
-# Не просто создаём образ, но даём ему имя build
 FROM gcc:11.3 as build
 
 RUN apt update && \
