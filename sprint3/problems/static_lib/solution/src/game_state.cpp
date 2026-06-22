@@ -14,7 +14,8 @@ constexpr double ROAD_HALF_WIDTH = 0.4;
 namespace game {
 
 GameState::GameState(model::Game& game)
-    : game_(game) {}
+    : game_(game)
+    , rng_(std::random_device{}()) {}
 
 model::Position GameState::GenerateStartPosition(const model::Map& map) {
     const auto& roads = map.GetRoads();
@@ -104,11 +105,36 @@ void GameState::MoveDog(model::Dog& dog, const model::Map& map, int64_t time_del
     }
 }
 
+void GameState::EnsureLootManager(const model::Map& map) {
+    auto it = loot_managers_.find(map.GetId());
+    if (it == loot_managers_.end()) {
+        auto manager = std::make_unique<LootManager>(
+            map, loot_period_, loot_probability_
+        );
+        loot_managers_[map.GetId()] = std::move(manager);
+    }
+}
+
+void GameState::InitializeLootManagers() {
+    if (loot_managers_initialized_) {
+        return;
+    }
+    
+    for (const auto& map : game_.GetMaps()) {
+        EnsureLootManager(map);
+    }
+    
+    loot_managers_initialized_ = true;
+}
+
 GameState::JoinResult GameState::JoinGame(const std::string& user_name, const model::Map::Id& map_id) {
     const model::Map* map = game_.FindMap(map_id);
     if (!map) {
         throw std::invalid_argument("Map not found");
     }
+
+    // Убеждаемся, что менеджер лута для этой карты создан
+    EnsureLootManager(*map);
 
     model::Player& player = players_.AddPlayer(user_name, map_id);
     model::Token token = players_.GenerateToken(player);
@@ -180,12 +206,24 @@ const model::Map* GameState::GetPlayerMap(const model::Token& token) const {
 void GameState::SetLootGeneratorConfig(double period, double probability) {
     loot_period_ = period;
     loot_probability_ = probability;
+    
+    // Обновляем существующие менеджеры лута
+    for (auto& [map_id, manager] : loot_managers_) {
+        // Пересоздаем менеджер с новыми параметрами
+        const model::Map* map = game_.FindMap(map_id);
+        if (map) {
+            manager = std::make_unique<LootManager>(*map, period, probability);
+        }
+    }
 }
 
 void GameState::ProcessTick(int64_t time_delta_ms) {
     auto delta = std::chrono::milliseconds(time_delta_ms);
     
-    // Move dogs
+    // Инициализируем менеджеры лута для всех карт
+    InitializeLootManagers();
+    
+    // Двигаем собак
     for (auto& [player_id, dog] : dogs_) {
         model::Player* player = players_.FindPlayer(player_id);
         if (!player) continue;
@@ -196,18 +234,15 @@ void GameState::ProcessTick(int64_t time_delta_ms) {
         MoveDog(dog, *map, time_delta_ms);
     }
     
-    // Update loot for each map
+    // Обновляем лут для каждой карты
     for (const auto& map : game_.GetMaps()) {
         auto it = loot_managers_.find(map.GetId());
         if (it == loot_managers_.end()) {
-            auto manager = std::make_unique<LootManager>(
-                map, loot_period_, loot_probability_
-            );
-            loot_managers_[map.GetId()] = std::move(manager);
+            EnsureLootManager(map);
             it = loot_managers_.find(map.GetId());
         }
         
-        // Count dogs on this map
+        // Считаем собак на этой карте
         size_t dog_count = 0;
         for (const auto& [player_id, dog] : dogs_) {
             model::Player* player = players_.FindPlayer(player_id);

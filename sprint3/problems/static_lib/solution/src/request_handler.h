@@ -139,6 +139,10 @@ public:
         HandleStaticFile(std::move(req), std::forward<Send>(send), path);
     }
 
+    void InitializeLootManagers() {
+        api_handler_.InitializeLootManagers();
+    }
+
 private:
     template <typename Body, typename Allocator, typename Send>
     void HandleStaticFile(http::request<Body, http::basic_fields<Allocator>>&& req,

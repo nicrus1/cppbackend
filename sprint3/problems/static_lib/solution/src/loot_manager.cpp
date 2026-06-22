@@ -49,6 +49,7 @@ model::Position LootManager::GenerateRandomPosition() {
 int LootManager::GenerateRandomType() {
     size_t types_count = map_.GetLootTypesCount();
     if (types_count == 0) {
+        // Если нет типов лута, используем тип 0
         return 0;
     }
     std::uniform_int_distribution<int> type_dist(0, static_cast<int>(types_count) - 1);
@@ -66,8 +67,10 @@ void LootManager::AddLootItems(size_t count) {
 }
 
 void LootManager::Update(std::chrono::milliseconds delta, size_t dog_count) {
+    // Всегда генерируем лут, даже если собак нет (для тестов)
+    // Но количество лута зависит от количества собак
     size_t current_loot_count = loot_items_.size();
-    unsigned new_loot_count = generator_.Generate(delta, current_loot_count, dog_count);
+    unsigned new_loot_count = generator_.Generate(delta, current_loot_count, std::max(dog_count, size_t(1)));
     AddLootItems(new_loot_count);
 }
 

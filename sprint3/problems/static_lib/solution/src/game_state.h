@@ -81,6 +81,9 @@ public:
     std::unordered_map<uint64_t, std::pair<int, model::Position>>
     GetLootState(const model::Token& token) const;
 
+    // Инициализация менеджеров лута для всех карт
+    void InitializeLootManagers();
+
 private:
     model::Position GenerateStartPosition(
         const model::Map& map);
@@ -89,6 +92,8 @@ private:
         model::Dog& dog,
         const model::Map& map,
         int64_t time_delta_ms);
+
+    void EnsureLootManager(const model::Map& map);
 
 private:
     model::Game& game_;
@@ -99,6 +104,7 @@ private:
     double loot_period_ = 5.0;
     double loot_probability_ = 0.5;
     std::unordered_map<model::Map::Id, std::unique_ptr<LootManager>, util::TaggedHasher<model::Map::Id>> loot_managers_;
+    bool loot_managers_initialized_ = false;
 };
 
 } // namespace game

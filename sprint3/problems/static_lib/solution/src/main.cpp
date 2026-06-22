@@ -67,6 +67,10 @@ int main(int argc, const char* argv[]) {
         
         // Load extra data (loot types, loot generator config)
         handler.LoadExtraData(args->config_file);
+        
+        // Initialize loot managers for all maps
+        handler.InitializeLootManagers();
+        
         std::cerr << "RequestHandler created" << std::endl;
 
         std::shared_ptr<Ticker> ticker;

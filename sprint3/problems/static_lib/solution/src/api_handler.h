@@ -31,6 +31,10 @@ public:
         game_state_->SetLootGeneratorConfig(period, probability);
     }
 
+    void InitializeLootManagers() {
+        game_state_->InitializeLootManagers();
+    }
+
     template <typename Body, typename Allocator, typename Send>
     void HandleJoin(http::request<Body, http::basic_fields<Allocator>>&& req, Send&& send) {
         if (req.method() != http::verb::post) {
