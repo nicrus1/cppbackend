@@ -3,6 +3,14 @@
 #include <algorithm>
 #include <vector>
 
+// Добавляем определение пространства имен geom и структуры Point2D
+namespace geom {
+    struct Point2D {
+        double x;
+        double y;
+    };
+}
+
 namespace collision_detector {
 
 struct CollectionResult {
@@ -18,7 +26,6 @@ struct CollectionResult {
 };
 
 // Движемся из точки a в точку b и пытаемся подобрать точку c.
-// Эта функция реализована в уроке.
 CollectionResult TryCollectPoint(geom::Point2D a, geom::Point2D b, geom::Point2D c);
 
 struct Item {
@@ -50,8 +57,6 @@ struct GatheringEvent {
     double time;
 };
 
-// Эту функцию вам нужно будет реализовать в соответствующем задании.
-// При проверке ваших тестов она не нужна - функция будет линковаться снаружи.
 std::vector<GatheringEvent> FindGatherEvents(const ItemGathererProvider& provider);
 
 }  // namespace collision_detector
