@@ -118,6 +118,6 @@ TEST_CASE("FindGatherEvents correctly detects collisions", "[collision_detector]
         provider.items_.push_back({geom::Point2D{5, 0}, 0.5}); // Идеальное совпадение, но нет перемещения
 
         auto events = FindGatherEvents(provider);
-        REQUIRE(events.empty()); // Если объект не переместился, он не совершил столкновений
+        REQUIRE(events.empty());
     }
 }
