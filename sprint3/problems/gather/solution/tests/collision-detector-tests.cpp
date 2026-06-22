@@ -34,7 +34,6 @@ public:
     Gatherer GetGatherer(size_t idx) const override { return gatherers_[idx]; }
 };
 
-// Компаратор для событий с учетом погрешности 10^-10
 class CompareEventsMatcher : public Catch::Matchers::MatcherBase<std::vector<GatheringEvent>> {
     std::vector<GatheringEvent> expected_;
 public:
