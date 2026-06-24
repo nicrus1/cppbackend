@@ -24,6 +24,9 @@ public:
     std::unordered_map<uint64_t, std::pair<int, model::Position>> GetLootItems() const;
     size_t GetLootCount() const;
     
+    // Публичный метод для добавления трофеев
+    void AddLootItems(size_t count);
+    
 private:
     const model::Map& map_;
     loot_gen::LootGenerator generator_;
@@ -33,7 +36,6 @@ private:
     
     model::Position GenerateRandomPosition();
     int GenerateRandomType();
-    void AddLootItems(size_t count);
 };
 
 } // namespace game

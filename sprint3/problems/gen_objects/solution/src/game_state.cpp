@@ -129,7 +129,11 @@ GameState::JoinResult GameState::JoinGame(const std::string& user_name, const mo
             *map, loot_period_, loot_probability_
         );
         loot_managers_[map_id] = std::move(manager);
+        it = loot_managers_.find(map_id);
     }
+    
+    // Генерируем один трофей для нового игрока
+    it->second->AddLootItems(1);
 
     return {token, player.GetId()};
 }
