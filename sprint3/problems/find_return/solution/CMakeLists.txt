@@ -58,6 +58,5 @@ set_target_properties(game_server game_server_tests PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
 )
 
-# Включение тестирования
 enable_testing()
 add_test(NAME game_server_tests COMMAND game_server_tests)
