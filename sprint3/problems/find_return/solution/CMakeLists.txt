@@ -31,7 +31,6 @@ target_link_libraries(game_server PRIVATE
     Threads::Threads
 )
 
-# Тесты
 add_executable(game_server_tests
     src/model.cpp
     src/game_state.cpp
