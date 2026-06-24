@@ -109,6 +109,9 @@ std::string RequestHandler::SerializeMap(const model::Map& map) const {
     map_obj["buildings"] = SerializeBuildings(map);
     map_obj["offices"] = SerializeOffices(map);
     
+    // ДОБАВИТЬ ЭТУ СТРОКУ (убедитесь, что метод в классе Map называется GetBagCapacity)
+    map_obj["bagCapacity"] = map.GetBagCapacity(); 
+
     // Add lootTypes from extra data
     const auto* map_data = extra_data_.GetMapExtraData(*map.GetId());
     if (map_data) {
