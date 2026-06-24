@@ -54,7 +54,6 @@ target_link_libraries(game_server_tests PRIVATE
     Threads::Threads
 )
 
-# Настройка выходных директорий
 set_target_properties(game_server game_server_tests PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
 )
