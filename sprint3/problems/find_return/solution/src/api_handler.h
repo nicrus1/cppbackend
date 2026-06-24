@@ -31,6 +31,18 @@ public:
         game_state_->SetLootGeneratorConfig(period, probability);
     }
 
+    // --- ДОБАВЛЕННЫЕ МЕТОДЫ ---
+    void SetLootTypesCount([[maybe_unused]] const model::Map::Id& map_id, [[maybe_unused]] size_t count) {
+        // Оставляем пустым. Значение уже сохранено в саму карту (model::Map) 
+        // внутри RequestHandler::LoadExtraData, поэтому пробрасывать его в GameState не обязательно.
+    }
+
+    void InitializeLootManagers() {
+        // Оставляем пустым. В вашем GameState менеджеры лута инициализируются 
+        // автоматически при первом вызове ProcessTick.
+    }
+    // --------------------------
+
     template <typename Body, typename Allocator, typename Send>
     void HandleJoin(http::request<Body, http::basic_fields<Allocator>>&& req, Send&& send) {
         if (req.method() != http::verb::post) {
