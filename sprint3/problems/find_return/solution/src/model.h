@@ -38,7 +38,6 @@ struct Speed {
     double vy = 0.0;
 };
 
-// ВАЖНО: Структура для предмета в инвентаре
 struct BagItem {
     uint64_t id;
     int type;
@@ -121,12 +120,45 @@ public:
         return default_speed_;
     }
 
+    // Методы для работы с рюкзаком
+    void SetBagCapacity(int capacity) noexcept {
+        bag_capacity_ = capacity;
+    }
+    
+    int GetBagCapacity() const noexcept {
+        return bag_capacity_;
+    }
+    
+    bool IsBagFull() const noexcept {
+        return bag_.size() >= static_cast<size_t>(bag_capacity_);
+    }
+    
+    size_t GetBagSize() const noexcept {
+        return bag_.size();
+    }
+    
+    void AddToBag(uint64_t id, int type) {
+        if (!IsBagFull()) {
+            bag_.push_back({id, type});
+        }
+    }
+    
+    void ClearBag() noexcept {
+        bag_.clear();
+    }
+    
+    const std::vector<BagItem>& GetBag() const noexcept {
+        return bag_;
+    }
+
 private:
     Id id_;
     Position pos_;
     Speed speed_{0.0, 0.0};
     Direction direction_ = Direction::NORTH;
     double default_speed_;
+    int bag_capacity_ = 3;
+    std::vector<BagItem> bag_;
 };
 
 class Road {
@@ -277,13 +309,19 @@ public:
         return loot_types_count_;
     }
 
-    // ВАЖНО: Вместимость рюкзака
+    void SetDefaultBagCapacity(int capacity) noexcept {
+        default_bag_capacity_ = capacity;
+        if (!bag_capacity_.has_value()) {
+            bag_capacity_ = capacity;
+        }
+    }
+    
     void SetBagCapacity(int capacity) noexcept {
         bag_capacity_ = capacity;
     }
-
+    
     int GetBagCapacity() const noexcept {
-        return bag_capacity_;
+        return bag_capacity_.value_or(default_bag_capacity_);
     }
 
 private:
@@ -300,7 +338,8 @@ private:
     double default_dog_speed_ = 1.0;
     std::optional<double> dog_speed_;
     size_t loot_types_count_ = 0;
-    int bag_capacity_ = 3;
+    int default_bag_capacity_ = 3;
+    std::optional<int> bag_capacity_;
 };
 
 class Game {

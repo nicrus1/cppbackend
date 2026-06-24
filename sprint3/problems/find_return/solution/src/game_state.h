@@ -29,17 +29,14 @@ public:
         model::Position pos;
         model::Speed speed;
         model::Direction dir;
-        // ВАЖНО: Добавлено содержимое рюкзака
         std::vector<model::BagItem> bag;
     };
 
     explicit GameState(model::Game& game);
 
-    // Запрещаем копирование
     GameState(const GameState&) = delete;
     GameState& operator=(const GameState&) = delete;
 
-    // Разрешаем перемещение
     GameState(GameState&&) = default;
     GameState& operator=(GameState&&) = default;
 
@@ -85,7 +82,6 @@ public:
     std::unordered_map<uint64_t, std::pair<int, model::Position>>
     GetLootState(const model::Token& token) const;
 
-    // Инициализация менеджеров лута для всех карт
     void InitializeLootManagers();
 
 private:
@@ -98,6 +94,28 @@ private:
         int64_t time_delta_ms);
 
     void EnsureLootManager(const model::Map& map);
+
+    // Приватные методы для обработки коллизий
+    bool CheckLootCollision(
+        const model::Position& pos,
+        const model::Position& loot_pos);
+    
+    bool CheckOfficeCollision(
+        const model::Position& pos,
+        const model::Position& office_pos);
+    
+    std::vector<std::pair<double, uint64_t>> FindLootCollisions(
+        const model::Position& start,
+        const model::Position& end,
+        const std::unordered_map<uint64_t, std::pair<int, model::Position>>& loot_items,
+        const std::unordered_map<uint64_t, model::Dog*>& dogs_on_map);
+    
+    void ProcessCollisions(
+        model::Dog& dog,
+        const model::Map& map,
+        const model::Position& start_pos,
+        const model::Position& end_pos,
+        uint64_t dog_id);
 
 private:
     model::Game& game_;

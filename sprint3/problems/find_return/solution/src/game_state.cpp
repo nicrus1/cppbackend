@@ -1,4 +1,5 @@
 #include "game_state.h"
+#include "loot_manager.h"
 
 #include <algorithm>
 #include <cmath>
@@ -113,7 +114,6 @@ void GameState::MoveDog(model::Dog& dog, const model::Map& map, int64_t time_del
     }
     
     // Обработка коллизий после перемещения
-    // Находим ID собаки
     uint64_t dog_id = 0;
     for (const auto& [id, d] : dogs_) {
         if (&d == &dog) {
@@ -151,25 +151,20 @@ std::vector<std::pair<double, uint64_t>> GameState::FindLootCollisions(
     
     std::vector<std::pair<double, uint64_t>> collisions;
     
-    // Проверяем каждый предмет
     for (const auto& [loot_id, loot_info] : loot_items) {
         const auto& loot_pos = loot_info.second;
         
-        // Проверяем, находится ли предмет на отрезке пути
-        // Используем параметрическое представление отрезка: P(t) = start + t * (end - start), t in [0, 1]
         double dx = end.x - start.x;
         double dy = end.y - start.y;
         double len_sq = dx * dx + dy * dy;
         
         if (len_sq < 1e-9) {
-            // Если игрок не двигался, проверяем только начальную позицию
             if (CheckLootCollision(start, loot_pos)) {
                 collisions.push_back({0.0, loot_id});
             }
             continue;
         }
         
-        // Находим проекцию точки loot_pos на отрезок
         double t = ((loot_pos.x - start.x) * dx + (loot_pos.y - start.y) * dy) / len_sq;
         t = std::clamp(t, 0.0, 1.0);
         
@@ -178,13 +173,11 @@ std::vector<std::pair<double, uint64_t>> GameState::FindLootCollisions(
             start.y + t * dy
         };
         
-        // Проверяем коллизию с ближайшей точкой на отрезке
         if (CheckLootCollision(closest_point, loot_pos)) {
             collisions.push_back({t, loot_id});
         }
     }
     
-    // Сортируем по времени достижения
     std::sort(collisions.begin(), collisions.end(), 
               [](const auto& a, const auto& b) { return a.first < b.first; });
     
@@ -198,7 +191,6 @@ void GameState::ProcessCollisions(
     const model::Position& end_pos,
     uint64_t dog_id) {
     
-    // Получаем менеджер лута для карты
     auto it = loot_managers_.find(map.GetId());
     if (it == loot_managers_.end()) {
         return;
@@ -207,7 +199,6 @@ void GameState::ProcessCollisions(
     auto& loot_manager = *it->second;
     auto loot_items = loot_manager.GetLootItems();
     
-    // Создаем карту собак на этой карте для проверки конкуренции
     std::unordered_map<uint64_t, model::Dog*> dogs_on_map;
     for (auto& [id, d] : dogs_) {
         model::Player* player = players_.FindPlayer(id);
@@ -216,29 +207,22 @@ void GameState::ProcessCollisions(
         }
     }
     
-    // Находим коллизии с предметами
     auto collisions = FindLootCollisions(start_pos, end_pos, loot_items, dogs_on_map);
     
-    // Обрабатываем коллизии в хронологическом порядке
     for (const auto& [t, loot_id] : collisions) {
-        // Проверяем, существует ли еще предмет
         auto loot_it = loot_items.find(loot_id);
         if (loot_it == loot_items.end()) {
             continue;
         }
         
-        // Проверяем, не полон ли рюкзак
         if (dog.IsBagFull()) {
             continue;
         }
         
-        // Проверяем, не взял ли другой игрок этот предмет раньше
         bool taken_by_other = false;
         for (const auto& [other_id, other_dog] : dogs_on_map) {
             if (other_id == dog_id) continue;
             
-            // Проверяем, достиг ли другой игрок предмета раньше
-            // Для простоты проверяем, находится ли другой игрок ближе к предмету
             double dist_other = std::sqrt(
                 std::pow(other_dog->GetPosition().x - loot_it->second.second.x, 2) +
                 std::pow(other_dog->GetPosition().y - loot_it->second.second.y, 2)
@@ -254,23 +238,17 @@ void GameState::ProcessCollisions(
             continue;
         }
         
-        // Добавляем предмет в рюкзак
         dog.AddToBag(loot_id, loot_it->second.first);
         
-        // Удаляем предмет с карты
         loot_manager.RemoveLootItem(loot_id);
         
-        // Обновляем список предметов
         loot_items = loot_manager.GetLootItems();
     }
     
-    // Проверяем коллизию с офисами (базами)
     for (const auto& office : map.GetOffices()) {
         model::Position office_pos = office.GetEntryPoint();
         
-        // Проверяем, находится ли игрок рядом с офисом
         if (CheckOfficeCollision(end_pos, office_pos)) {
-            // Сдаем все предметы на базу
             if (!dog.GetBag().empty()) {
                 dog.ClearBag();
             }
@@ -294,7 +272,6 @@ GameState::JoinResult GameState::JoinGame(const std::string& user_name, const mo
     
     model::Dog dog(dog_id, start_pos, dog_speed);
     
-    // Устанавливаем вместимость рюкзака для собаки
     dog.SetBagCapacity(map->GetBagCapacity());
     
     dogs_.emplace(player.GetId(), std::move(dog));
@@ -363,7 +340,6 @@ void GameState::SetLootGeneratorConfig(double period, double probability) {
 void GameState::ProcessTick(int64_t time_delta_ms) {
     auto delta = std::chrono::milliseconds(time_delta_ms);
     
-    // Сначала обновляем лут для каждой карты
     for (const auto& map : game_.GetMaps()) {
         auto it = loot_managers_.find(map.GetId());
         if (it == loot_managers_.end()) {
@@ -374,7 +350,6 @@ void GameState::ProcessTick(int64_t time_delta_ms) {
             it = loot_managers_.find(map.GetId());
         }
         
-        // Count dogs on this map
         size_t dog_count = 0;
         for (const auto& [player_id, dog] : dogs_) {
             model::Player* player = players_.FindPlayer(player_id);
@@ -386,7 +361,6 @@ void GameState::ProcessTick(int64_t time_delta_ms) {
         it->second->Update(delta, dog_count);
     }
     
-    // Затем двигаем собак и обрабатываем коллизии
     for (auto& [player_id, dog] : dogs_) {
         model::Player* player = players_.FindPlayer(player_id);
         if (!player) continue;
@@ -416,7 +390,7 @@ std::vector<GameState::PlayerState> GameState::GetGameState(const model::Token& 
             d.GetPosition(),
             d.GetSpeed(),
             d.GetDirection(),
-            d.GetBag()  // Добавляем содержимое рюкзака
+            d.GetBag()
         };
         result.push_back(std::move(state));
     }
@@ -460,6 +434,14 @@ GameState::GetLootState(const model::Token& token) const {
     }
     
     return it->second->GetLootItems();
+}
+
+void GameState::SetLootTypesCount(const model::Map::Id& map_id, size_t count) {
+    // Метод оставлен пустым, так как значение хранится в model::Map
+}
+
+void GameState::InitializeLootManagers() {
+    // Метод оставлен пустым, инициализация происходит в ProcessTick
 }
 
 } // namespace game
