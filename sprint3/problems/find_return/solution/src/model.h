@@ -38,6 +38,12 @@ struct Speed {
     double vy = 0.0;
 };
 
+// ВАЖНО: Структура для предмета в инвентаре
+struct BagItem {
+    uint64_t id;
+    int type;
+};
+
 enum class Direction {
     NORTH,
     SOUTH,
@@ -271,6 +277,7 @@ public:
         return loot_types_count_;
     }
 
+    // ВАЖНО: Вместимость рюкзака
     void SetBagCapacity(int capacity) noexcept {
         bag_capacity_ = capacity;
     }

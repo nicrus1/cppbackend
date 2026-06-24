@@ -78,7 +78,8 @@ private:
 // Хешер для Tagged-типа
 template <typename TaggedValue>
 struct TaggedHasher {
-    size_t operator()(const TaggedValue& value) const {
+    // ВАЖНО: добавлен noexcept для совместимости с GCC 11
+    size_t operator()(const TaggedValue& value) const noexcept {
         return std::hash<typename TaggedValue::ValueType>{}(*value);
     }
 };
