@@ -241,6 +241,14 @@ public:
         return offset_;
     }
 
+    // Добавляем метод GetEntryPoint
+    Position GetEntryPoint() const noexcept {
+        return {
+            static_cast<double>(position_.x + offset_.dx),
+            static_cast<double>(position_.y + offset_.dy)
+        };
+    }
+
 private:
     Id id_;
     Point position_;
