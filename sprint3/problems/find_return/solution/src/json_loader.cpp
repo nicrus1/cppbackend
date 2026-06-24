@@ -31,8 +31,8 @@ model::Game LoadGame(const std::filesystem::path& json_path) {
         default_dog_speed = json_obj.at("defaultDogSpeed").as_double();
     }
     
-    // Загрузка вместимости рюкзака по умолчанию
-    size_t default_bag_capacity = 3;
+    // Чтение дефолтной вместимости рюкзака (по умолчанию 3)
+    int default_bag_capacity = 3;
     if (json_obj.contains("defaultBagCapacity")) {
         default_bag_capacity = json_obj.at("defaultBagCapacity").as_int64();
     }
@@ -43,40 +43,40 @@ model::Game LoadGame(const std::filesystem::path& json_path) {
         std::string id = std::string(map_obj.at("id").as_string());
         std::string name = std::string(map_obj.at("name").as_string());
         
-        model::Map map(model::Map::Id{std::move(id)}, std::move(name));
+        model::Map map(model::Map::Id{id}, name);
         
-        map.SetDefaultDogSpeed(default_dog_speed);
-        map.SetDefaultBagCapacity(default_bag_capacity);
-        
+        // Установка скорости собаки
         if (map_obj.contains("dogSpeed")) {
             map.SetDogSpeed(map_obj.at("dogSpeed").as_double());
+        } else {
+            map.SetDogSpeed(default_dog_speed);
         }
-        
-        // Загрузка вместимости рюкзака для карты
+
+        // Установка вместимости рюкзака (карта переопределяет дефолтное значение)
         if (map_obj.contains("bagCapacity")) {
             map.SetBagCapacity(map_obj.at("bagCapacity").as_int64());
+        } else {
+            map.SetBagCapacity(default_bag_capacity);
         }
         
+        // Парсинг дорог
         if (map_obj.contains("roads")) {
             const auto& roads_array = map_obj.at("roads").as_array();
             for (const auto& road_value : roads_array) {
                 const auto& road_obj = road_value.as_object();
-                
                 int x0 = road_obj.at("x0").as_int64();
                 int y0 = road_obj.at("y0").as_int64();
-                
                 if (road_obj.contains("x1")) {
                     int x1 = road_obj.at("x1").as_int64();
-                    map.AddRoad(model::Road(model::Road::HORIZONTAL, 
-                                            model::Point{x0, y0}, x1));
-                } else if (road_obj.contains("y1")) {
+                    map.AddRoad(model::Road(model::Road::Horizontal, model::Point{x0, y0}, x1));
+                } else {
                     int y1 = road_obj.at("y1").as_int64();
-                    map.AddRoad(model::Road(model::Road::VERTICAL,
-                                            model::Point{x0, y0}, y1));
+                    map.AddRoad(model::Road(model::Road::Vertical, model::Point{x0, y0}, y1));
                 }
             }
         }
         
+        // Парсинг зданий
         if (map_obj.contains("buildings")) {
             const auto& buildings_array = map_obj.at("buildings").as_array();
             for (const auto& building_value : buildings_array) {
@@ -92,6 +92,7 @@ model::Game LoadGame(const std::filesystem::path& json_path) {
             }
         }
         
+        // Парсинг офисов
         if (map_obj.contains("offices")) {
             const auto& offices_array = map_obj.at("offices").as_array();
             for (const auto& office_value : offices_array) {

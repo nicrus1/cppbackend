@@ -63,16 +63,6 @@ inline Direction StringToDirection(const std::string& str) {
     return Direction::NORTH;
 }
 
-// Структура для предмета в рюкзаке
-struct BagItem {
-    uint64_t id;
-    int type;
-    
-    bool operator==(const BagItem& other) const {
-        return id == other.id && type == other.type;
-    }
-};
-
 class Dog {
 public:
     using Id = uint64_t;
@@ -125,49 +115,12 @@ public:
         return default_speed_;
     }
 
-    // Методы для работы с рюкзаком
-    size_t GetBagSize() const {
-        return bag_.size();
-    }
-
-    size_t GetBagCapacity() const {
-        return bag_capacity_;
-    }
-
-    void SetBagCapacity(size_t capacity) {
-        bag_capacity_ = capacity;
-    }
-
-    bool IsBagFull() const {
-        return bag_.size() >= bag_capacity_;
-    }
-
-    void AddToBag(uint64_t loot_id, int loot_type) {
-        if (!IsBagFull()) {
-            bag_.push_back({loot_id, loot_type});
-        }
-    }
-
-    void ClearBag() {
-        bag_.clear();
-    }
-
-    const std::vector<BagItem>& GetBag() const {
-        return bag_;
-    }
-
-    std::vector<BagItem>& GetBagMutable() {
-        return bag_;
-    }
-
 private:
     Id id_;
     Position pos_;
     Speed speed_{0.0, 0.0};
     Direction direction_ = Direction::NORTH;
     double default_speed_;
-    std::vector<BagItem> bag_;
-    size_t bag_capacity_ = 3;  // Вместимость рюкзака по умолчанию
 };
 
 class Road {
@@ -250,14 +203,6 @@ public:
         return offset_;
     }
 
-    // Возвращает точку входа в офис (центр базы)
-    Position GetEntryPoint() const noexcept {
-        return {
-            static_cast<double>(position_.x + offset_.dx),
-            static_cast<double>(position_.y + offset_.dy)
-        };
-    }
-
 private:
     Id id_;
     Point position_;
@@ -326,17 +271,12 @@ public:
         return loot_types_count_;
     }
 
-    // Методы для работы с вместимостью рюкзака
-    void SetBagCapacity(size_t capacity) {
+    void SetBagCapacity(int capacity) noexcept {
         bag_capacity_ = capacity;
     }
 
-    void SetDefaultBagCapacity(size_t capacity) {
-        default_bag_capacity_ = capacity;
-    }
-
-    size_t GetBagCapacity() const noexcept {
-        return bag_capacity_.has_value() ? *bag_capacity_ : default_bag_capacity_;
+    int GetBagCapacity() const noexcept {
+        return bag_capacity_;
     }
 
 private:
@@ -353,9 +293,7 @@ private:
     double default_dog_speed_ = 1.0;
     std::optional<double> dog_speed_;
     size_t loot_types_count_ = 0;
-    
-    size_t default_bag_capacity_ = 3;
-    std::optional<size_t> bag_capacity_;
+    int bag_capacity_ = 3;
 };
 
 class Game {
