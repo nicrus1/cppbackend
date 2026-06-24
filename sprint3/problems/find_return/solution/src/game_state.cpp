@@ -1,19 +1,14 @@
 #include "game_state.h"
-#include "loot_manager.h"
+#include "collision.h"
 
 #include <algorithm>
 #include <cmath>
 #include <iostream>
 #include <random>
-#include <limits>
 
 namespace {
 
 constexpr double ROAD_HALF_WIDTH = 0.4;
-constexpr double DOG_HALF_WIDTH = 0.3;
-constexpr double OFFICE_HALF_WIDTH = 0.25;
-constexpr double LOOT_COLLISION_DIST = DOG_HALF_WIDTH;  // 0.3
-constexpr double OFFICE_COLLISION_DIST = DOG_HALF_WIDTH + OFFICE_HALF_WIDTH;  // 0.55
 
 } // namespace
 
@@ -40,15 +35,15 @@ model::Position GameState::GenerateStartPosition(const model::Map& map) {
 
 void GameState::MoveDog(model::Dog& dog, const model::Map& map, int64_t time_delta_ms) {
     const double dt = time_delta_ms / 1000.0;
-    auto start_pos = dog.GetPosition();
+    auto pos = dog.GetPosition();
     auto speed = dog.GetSpeed();
 
     if (speed.vx == 0 && speed.vy == 0) {
         return;
     }
 
-    double target_x = start_pos.x + speed.vx * dt;
-    double target_y = start_pos.y + speed.vy * dt;
+    double target_x = pos.x + speed.vx * dt;
+    double target_y = pos.y + speed.vy * dt;
 
     double min_bound = 0.0;
     double max_bound = 0.0;
@@ -70,8 +65,8 @@ void GameState::MoveDog(model::Dog& dog, const model::Map& map, int64_t time_del
             ry_max = std::max(road.GetStart().y, road.GetEnd().y) + ROAD_HALF_WIDTH;
         }
 
-        if (start_pos.x >= rx_min - EPSILON && start_pos.x <= rx_max + EPSILON &&
-            start_pos.y >= ry_min - EPSILON && start_pos.y <= ry_max + EPSILON) {
+        if (pos.x >= rx_min - EPSILON && pos.x <= rx_max + EPSILON &&
+            pos.y >= ry_min - EPSILON && pos.y <= ry_max + EPSILON) {
             
             if (speed.vx != 0) {
                 min_bound = on_road ? std::min(min_bound, rx_min) : rx_min;
@@ -89,8 +84,6 @@ void GameState::MoveDog(model::Dog& dog, const model::Map& map, int64_t time_del
         return;
     }
 
-    model::Position end_pos = start_pos;
-    
     if (speed.vx != 0) {
         if (target_x < min_bound) {
             target_x = min_bound;
@@ -99,8 +92,7 @@ void GameState::MoveDog(model::Dog& dog, const model::Map& map, int64_t time_del
             target_x = max_bound;
             dog.SetSpeed({0.0, 0.0});
         }
-        end_pos = {target_x, start_pos.y};
-        dog.SetPosition(target_x, start_pos.y);
+        dog.SetPosition(target_x, pos.y);
     } else if (speed.vy != 0) {
         if (target_y < min_bound) {
             target_y = min_bound;
@@ -109,149 +101,62 @@ void GameState::MoveDog(model::Dog& dog, const model::Map& map, int64_t time_del
             target_y = max_bound;
             dog.SetSpeed({0.0, 0.0});
         }
-        end_pos = {start_pos.x, target_y};
-        dog.SetPosition(start_pos.x, target_y);
-    }
-    
-    // Обработка коллизий после перемещения
-    uint64_t dog_id = 0;
-    for (const auto& [id, d] : dogs_) {
-        if (&d == &dog) {
-            dog_id = *id;
-            break;
-        }
-    }
-    
-    if (dog_id != 0) {
-        ProcessCollisions(dog, map, start_pos, end_pos, dog_id);
+        dog.SetPosition(pos.x, target_y);
     }
 }
 
-bool GameState::CheckLootCollision(
-    const model::Position& pos,
-    const model::Position& loot_pos) {
-    double dx = pos.x - loot_pos.x;
-    double dy = pos.y - loot_pos.y;
-    return (dx * dx + dy * dy) <= (LOOT_COLLISION_DIST * LOOT_COLLISION_DIST);
-}
-
-bool GameState::CheckOfficeCollision(
-    const model::Position& pos,
-    const model::Position& office_pos) {
-    double dx = pos.x - office_pos.x;
-    double dy = pos.y - office_pos.y;
-    return (dx * dx + dy * dy) <= (OFFICE_COLLISION_DIST * OFFICE_COLLISION_DIST);
-}
-
-std::vector<std::pair<double, uint64_t>> GameState::FindLootCollisions(
-    const model::Position& start,
-    const model::Position& end,
-    const std::unordered_map<uint64_t, std::pair<int, model::Position>>& loot_items,
-    const std::unordered_map<uint64_t, model::Dog*>& dogs_on_map) {
-    
-    std::vector<std::pair<double, uint64_t>> collisions;
-    
-    for (const auto& [loot_id, loot_info] : loot_items) {
-        const auto& loot_pos = loot_info.second;
-        
-        double dx = end.x - start.x;
-        double dy = end.y - start.y;
-        double len_sq = dx * dx + dy * dy;
-        
-        if (len_sq < 1e-9) {
-            if (CheckLootCollision(start, loot_pos)) {
-                collisions.push_back({0.0, loot_id});
-            }
-            continue;
-        }
-        
-        double t = ((loot_pos.x - start.x) * dx + (loot_pos.y - start.y) * dy) / len_sq;
-        t = std::clamp(t, 0.0, 1.0);
-        
-        model::Position closest_point{
-            start.x + t * dx,
-            start.y + t * dy
-        };
-        
-        if (CheckLootCollision(closest_point, loot_pos)) {
-            collisions.push_back({t, loot_id});
-        }
-    }
-    
-    std::sort(collisions.begin(), collisions.end(), 
-              [](const auto& a, const auto& b) { return a.first < b.first; });
-    
-    return collisions;
-}
-
-void GameState::ProcessCollisions(
-    model::Dog& dog,
-    const model::Map& map,
-    const model::Position& start_pos,
-    const model::Position& end_pos,
-    uint64_t dog_id) {
-    
+void GameState::ProcessDogCollisions(model::Dog& dog, 
+                                    model::Player& player,
+                                    const model::Map& map,
+                                    const model::Position& start_pos,
+                                    const model::Position& end_pos) {
     auto it = loot_managers_.find(map.GetId());
-    if (it == loot_managers_.end()) {
-        return;
-    }
+    if (it == loot_managers_.end()) return;
     
-    auto& loot_manager = *it->second;
-    auto loot_items = loot_manager.GetLootItems();
+    auto& manager = *it->second;
     
-    std::unordered_map<uint64_t, model::Dog*> dogs_on_map;
-    for (auto& [id, d] : dogs_) {
-        model::Player* player = players_.FindPlayer(id);
-        if (player && player->GetMapId() == map.GetId()) {
-            dogs_on_map[*id] = &d;
-        }
-    }
+    // Get loot items for this map
+    auto loot_items = manager.GetLootItems();
+    if (loot_items.empty()) return;
     
-    auto collisions = FindLootCollisions(start_pos, end_pos, loot_items, dogs_on_map);
+    // Find collisions with loot along the path
+    auto events = collision::FindLootCollisions(start_pos, end_pos, loot_items);
     
-    for (const auto& [t, loot_id] : collisions) {
-        auto loot_it = loot_items.find(loot_id);
-        if (loot_it == loot_items.end()) {
-            continue;
-        }
-        
-        if (dog.IsBagFull()) {
-            continue;
-        }
-        
-        bool taken_by_other = false;
-        for (const auto& [other_id, other_dog] : dogs_on_map) {
-            if (other_id == dog_id) continue;
-            
-            double dist_other = std::sqrt(
-                std::pow(other_dog->GetPosition().x - loot_it->second.second.x, 2) +
-                std::pow(other_dog->GetPosition().y - loot_it->second.second.y, 2)
-            );
-            
-            if (dist_other <= LOOT_COLLISION_DIST) {
-                taken_by_other = true;
-                break;
+    // Track which loot IDs have been collected
+    std::set<uint64_t> collected_loot_ids;
+    
+    // Process events in chronological order
+    for (const auto& event : events) {
+        if (event.type == collision::CollisionEvent::LOOT_PICKUP) {
+            // Skip if already collected (by another player or earlier in this tick)
+            if (collected_loot_ids.find(event.loot_id) != collected_loot_ids.end()) {
+                continue;
             }
+            
+            // Check if there's still loot (might have been removed)
+            auto loot_it = loot_items.find(event.loot_id);
+            if (loot_it == loot_items.end()) continue;
+            
+            // Check if bag is full
+            if (dog.IsBagFull()) {
+                continue; // Skip this loot, bag is full
+            }
+            
+            // Pick up the loot
+            int loot_type = loot_it->second.first;
+            dog.AddBagItem(event.loot_id, loot_type);
+            
+            // Remove loot from the map
+            manager.RemoveLootItem(event.loot_id);
+            collected_loot_ids.insert(event.loot_id);
         }
-        
-        if (taken_by_other) {
-            continue;
-        }
-        
-        dog.AddToBag(loot_id, loot_it->second.first);
-        
-        loot_manager.RemoveLootItem(loot_id);
-        
-        loot_items = loot_manager.GetLootItems();
     }
     
+    // Check if dog is near any office - deliver all bag items
     for (const auto& office : map.GetOffices()) {
-        model::Position office_pos = office.GetEntryPoint();
-        
-        if (CheckOfficeCollision(end_pos, office_pos)) {
-            if (!dog.GetBag().empty()) {
-                dog.ClearBag();
-            }
+        if (collision::IsNearOffice(end_pos, office)) {
+            // Deliver all bag items
+            dog.ClearBag();
             break;
         }
     }
@@ -271,11 +176,23 @@ GameState::JoinResult GameState::JoinGame(const std::string& user_name, const mo
     double dog_speed = map->GetDogSpeed();
     
     model::Dog dog(dog_id, start_pos, dog_speed);
-    
     dog.SetBagCapacity(map->GetBagCapacity());
     
     dogs_.emplace(player.GetId(), std::move(dog));
     player.SetDogId(dog_id);
+
+    // Создаем менеджер трофеев для карты если его нет
+    auto it = loot_managers_.find(map_id);
+    if (it == loot_managers_.end()) {
+        auto manager = std::make_unique<LootManager>(
+            *map, loot_period_, loot_probability_
+        );
+        loot_managers_[map_id] = std::move(manager);
+        it = loot_managers_.find(map_id);
+    }
+    
+    // Генерируем один трофей для нового игрока
+    it->second->AddLootItems(1);
 
     return {token, player.GetId()};
 }
@@ -340,6 +257,25 @@ void GameState::SetLootGeneratorConfig(double period, double probability) {
 void GameState::ProcessTick(int64_t time_delta_ms) {
     auto delta = std::chrono::milliseconds(time_delta_ms);
     
+    // First, move all dogs and process collisions
+    for (auto& [player_id, dog] : dogs_) {
+        model::Player* player = players_.FindPlayer(player_id);
+        if (!player) continue;
+
+        const model::Map* map = game_.FindMap(player->GetMapId());
+        if (!map) continue;
+
+        // Store start position before moving
+        model::Position start_pos = dog.GetPosition();
+        
+        // Move the dog
+        MoveDog(dog, *map, time_delta_ms);
+        
+        // Process collisions for this dog
+        ProcessDogCollisions(dog, *player, *map, start_pos, dog.GetPosition());
+    }
+    
+    // Update loot for each map
     for (const auto& map : game_.GetMaps()) {
         auto it = loot_managers_.find(map.GetId());
         if (it == loot_managers_.end()) {
@@ -350,6 +286,7 @@ void GameState::ProcessTick(int64_t time_delta_ms) {
             it = loot_managers_.find(map.GetId());
         }
         
+        // Count dogs on this map
         size_t dog_count = 0;
         for (const auto& [player_id, dog] : dogs_) {
             model::Player* player = players_.FindPlayer(player_id);
@@ -359,16 +296,6 @@ void GameState::ProcessTick(int64_t time_delta_ms) {
         }
         
         it->second->Update(delta, dog_count);
-    }
-    
-    for (auto& [player_id, dog] : dogs_) {
-        model::Player* player = players_.FindPlayer(player_id);
-        if (!player) continue;
-
-        const model::Map* map = game_.FindMap(player->GetMapId());
-        if (!map) continue;
-
-        MoveDog(dog, *map, time_delta_ms);
     }
 }
 
@@ -389,9 +316,14 @@ std::vector<GameState::PlayerState> GameState::GetGameState(const model::Token& 
             std::to_string(*p->GetId()),
             d.GetPosition(),
             d.GetSpeed(),
-            d.GetDirection(),
-            d.GetBag()
+            d.GetDirection()
         };
+        
+        // Add bag contents
+        for (const auto& item : d.GetBag()) {
+            state.bag.push_back({item.id, item.type});
+        }
+        
         result.push_back(std::move(state));
     }
 
@@ -434,14 +366,6 @@ GameState::GetLootState(const model::Token& token) const {
     }
     
     return it->second->GetLootItems();
-}
-
-void GameState::SetLootTypesCount(const model::Map::Id& map_id, size_t count) {
-    // Метод оставлен пустым, так как значение хранится в model::Map
-}
-
-void GameState::InitializeLootManagers() {
-    // Метод оставлен пустым, инициализация происходит в ProcessTick
 }
 
 } // namespace game

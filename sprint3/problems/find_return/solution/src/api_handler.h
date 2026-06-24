@@ -31,18 +31,6 @@ public:
         game_state_->SetLootGeneratorConfig(period, probability);
     }
 
-    // --- ДОБАВЛЕННЫЕ МЕТОДЫ ---
-    void SetLootTypesCount([[maybe_unused]] const model::Map::Id& map_id, [[maybe_unused]] size_t count) {
-        // Оставляем пустым. Значение уже сохранено в саму карту (model::Map) 
-        // внутри RequestHandler::LoadExtraData, поэтому пробрасывать его в GameState не обязательно.
-    }
-
-    void InitializeLootManagers() {
-        // Оставляем пустым. В вашем GameState менеджеры лута инициализируются 
-        // автоматически при первом вызове ProcessTick.
-    }
-    // --------------------------
-
     template <typename Body, typename Allocator, typename Send>
     void HandleJoin(http::request<Body, http::basic_fields<Allocator>>&& req, Send&& send) {
         if (req.method() != http::verb::post) {
@@ -179,13 +167,13 @@ public:
 
             player_info["dir"] = model::DirectionToString(ps.dir);
             
-            // Добавляем рюкзак
+            // Add bag contents
             boost::json::array bag_arr;
             for (const auto& item : ps.bag) {
-                boost::json::object item_obj;
-                item_obj["id"] = static_cast<std::int64_t>(item.id);
-                item_obj["type"] = item.type;
-                bag_arr.push_back(item_obj);
+                boost::json::object bag_item;
+                bag_item["id"] = item.id;
+                bag_item["type"] = item.type;
+                bag_arr.push_back(bag_item);
             }
             player_info["bag"] = bag_arr;
 

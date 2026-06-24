@@ -44,27 +44,23 @@ void RequestHandler::LoadExtraData(const std::filesystem::path& config_path) {
                 const auto& map_obj = map_value.as_object();
                 std::string map_id = std::string(map_obj.at("id").as_string());
                 
-                size_t loot_types_count = 0;
                 if (map_obj.contains("lootTypes")) {
-                    const auto& loot_array = map_obj.at("lootTypes").as_array();
-                    loot_types_count = loot_array.size();
-                    
                     extra_data::MapExtraData map_data;
+                    const auto& loot_array = map_obj.at("lootTypes").as_array();
                     extra_data::MapExtraData::LootTypes loot_types;
                     for (const auto& loot_value : loot_array) {
                         loot_types.push_back({loot_value.as_object()});
                     }
                     map_data.SetLootTypes(std::move(loot_types));
                     extra_data_.SetMapExtraData(map_id, std::move(map_data));
-                }
-                
-                // Устанавливаем количество типов лута в модели
-                const model::Map* map = game_.FindMap(model::Map::Id{map_id});
-                if (map) {
-                    const_cast<model::Map*>(map)->SetLootTypesCount(loot_types_count);
-                    api_handler_.SetLootTypesCount(model::Map::Id{map_id}, loot_types_count);
-                    logger::LogDebug("Map " + map_id + " has " + std::to_string(loot_types_count) + 
-                                   " loot types");
+                    
+                    // Set loot types count in model
+                    const model::Map* map = game_.FindMap(model::Map::Id{map_id});
+                    if (map) {
+                        const_cast<model::Map*>(map)->SetLootTypesCount(loot_array.size());
+                        logger::LogDebug("Map " + map_id + " has " + std::to_string(loot_array.size()) + 
+                                       " loot types");
+                    }
                 }
             }
         }
@@ -88,15 +84,11 @@ std::string RequestHandler::SerializeMap(const model::Map& map) const {
     boost::json::object map_obj;
     map_obj["id"] = *map.GetId();
     map_obj["name"] = map.GetName();
-    
-    // ВАЖНО: Добавлена сериализация вместимости рюкзака
-    map_obj["bagCapacity"] = map.GetBagCapacity();
-    
     map_obj["roads"] = SerializeRoads(map);
     map_obj["buildings"] = SerializeBuildings(map);
     map_obj["offices"] = SerializeOffices(map);
     
-    // Ваша оригинальная и правильная логика для lootTypes
+    // Add lootTypes from extra data
     const auto* map_data = extra_data_.GetMapExtraData(*map.GetId());
     if (map_data) {
         boost::json::array loot_array;

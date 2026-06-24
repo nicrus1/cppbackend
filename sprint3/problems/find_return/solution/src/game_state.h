@@ -12,6 +12,7 @@
 #include <string>
 #include <optional>
 #include <random>
+#include <set>
 
 namespace game {
 
@@ -29,14 +30,20 @@ public:
         model::Position pos;
         model::Speed speed;
         model::Direction dir;
-        std::vector<model::BagItem> bag;
+        struct BagItem {
+            uint64_t id;
+            int type;
+        };
+        std::vector<BagItem> bag;
     };
 
     explicit GameState(model::Game& game);
 
+    // Запрещаем копирование
     GameState(const GameState&) = delete;
     GameState& operator=(const GameState&) = delete;
 
+    // Разрешаем перемещение
     GameState(GameState&&) = default;
     GameState& operator=(GameState&&) = default;
 
@@ -77,12 +84,8 @@ public:
 
     void SetLootGeneratorConfig(double period, double probability);
     
-    void SetLootTypesCount(const model::Map::Id& map_id, size_t count);
-    
     std::unordered_map<uint64_t, std::pair<int, model::Position>>
     GetLootState(const model::Token& token) const;
-
-    void InitializeLootManagers();
 
 private:
     model::Position GenerateStartPosition(
@@ -92,30 +95,13 @@ private:
         model::Dog& dog,
         const model::Map& map,
         int64_t time_delta_ms);
-
-    void EnsureLootManager(const model::Map& map);
-
-    // Приватные методы для обработки коллизий
-    bool CheckLootCollision(
-        const model::Position& pos,
-        const model::Position& loot_pos);
-    
-    bool CheckOfficeCollision(
-        const model::Position& pos,
-        const model::Position& office_pos);
-    
-    std::vector<std::pair<double, uint64_t>> FindLootCollisions(
-        const model::Position& start,
-        const model::Position& end,
-        const std::unordered_map<uint64_t, std::pair<int, model::Position>>& loot_items,
-        const std::unordered_map<uint64_t, model::Dog*>& dogs_on_map);
-    
-    void ProcessCollisions(
+        
+    void ProcessDogCollisions(
         model::Dog& dog,
+        model::Player& player,
         const model::Map& map,
         const model::Position& start_pos,
-        const model::Position& end_pos,
-        uint64_t dog_id);
+        const model::Position& end_pos);
 
 private:
     model::Game& game_;
@@ -126,7 +112,6 @@ private:
     double loot_period_ = 5.0;
     double loot_probability_ = 0.5;
     std::unordered_map<model::Map::Id, std::unique_ptr<LootManager>, util::TaggedHasher<model::Map::Id>> loot_managers_;
-    bool loot_managers_initialized_ = false;
 };
 
 } // namespace game

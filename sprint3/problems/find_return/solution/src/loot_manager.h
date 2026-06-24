@@ -24,9 +24,12 @@ public:
     std::unordered_map<uint64_t, std::pair<int, model::Position>> GetLootItems() const;
     size_t GetLootCount() const;
     
-    // Новый метод для удаления предмета
-    bool RemoveLootItem(uint64_t id) {
-        return loot_items_.erase(id) > 0;
+    // Публичный метод для добавления трофеев
+    void AddLootItems(size_t count);
+    
+    // Метод для удаления трофея
+    void RemoveLootItem(uint64_t id) {
+        loot_items_.erase(id);
     }
     
 private:
@@ -38,7 +41,6 @@ private:
     
     model::Position GenerateRandomPosition();
     int GenerateRandomType();
-    void AddLootItems(size_t count);
 };
 
 } // namespace game
