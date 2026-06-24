@@ -68,10 +68,12 @@ model::Game LoadGame(const std::filesystem::path& json_path) {
                 int y0 = road_obj.at("y0").as_int64();
                 if (road_obj.contains("x1")) {
                     int x1 = road_obj.at("x1").as_int64();
-                    map.AddRoad(model::Road(model::Road::Horizontal, model::Point{x0, y0}, x1));
+                    // ИСПРАВЛЕНО: HORIZONTAL вместо Horizontal
+                    map.AddRoad(model::Road(model::Road::HORIZONTAL, model::Point{x0, y0}, x1));
                 } else {
                     int y1 = road_obj.at("y1").as_int64();
-                    map.AddRoad(model::Road(model::Road::Vertical, model::Point{x0, y0}, y1));
+                    // ИСПРАВЛЕНО: VERTICAL вместо Vertical
+                    map.AddRoad(model::Road(model::Road::VERTICAL, model::Point{x0, y0}, y1));
                 }
             }
         }
