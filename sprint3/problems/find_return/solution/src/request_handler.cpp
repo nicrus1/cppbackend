@@ -37,17 +37,6 @@ void RequestHandler::LoadExtraData(const std::filesystem::path& config_path) {
                            ", probability=" + std::to_string(probability));
         }
         
-        // Load default bag capacity
-        if (json_obj.contains("defaultBagCapacity")) {
-            size_t default_capacity = json_obj.at("defaultBagCapacity").as_int64();
-            // Устанавливаем вместимость для всех карт, у которых не задана своя
-            for (auto& map : game_.GetMaps()) {
-                // const_cast для изменения карты
-                const_cast<model::Map&>(map).SetDefaultBagCapacity(default_capacity);
-            }
-            logger::LogDebug("Default bag capacity set to " + std::to_string(default_capacity));
-        }
-        
         // Load loot types for each map
         if (json_obj.contains("maps")) {
             const auto& maps_array = json_obj.at("maps").as_array();
@@ -55,33 +44,27 @@ void RequestHandler::LoadExtraData(const std::filesystem::path& config_path) {
                 const auto& map_obj = map_value.as_object();
                 std::string map_id = std::string(map_obj.at("id").as_string());
                 
-                // Load bag capacity for this map
-                if (map_obj.contains("bagCapacity")) {
-                    size_t bag_capacity = map_obj.at("bagCapacity").as_int64();
-                    const model::Map* map = game_.FindMap(model::Map::Id{map_id});
-                    if (map) {
-                        const_cast<model::Map*>(map)->SetBagCapacity(bag_capacity);
-                        logger::LogDebug("Map " + map_id + " bag capacity set to " + std::to_string(bag_capacity));
-                    }
-                }
-                
+                size_t loot_types_count = 0;
                 if (map_obj.contains("lootTypes")) {
-                    extra_data::MapExtraData map_data;
                     const auto& loot_array = map_obj.at("lootTypes").as_array();
+                    loot_types_count = loot_array.size();
+                    
+                    extra_data::MapExtraData map_data;
                     extra_data::MapExtraData::LootTypes loot_types;
                     for (const auto& loot_value : loot_array) {
                         loot_types.push_back({loot_value.as_object()});
                     }
                     map_data.SetLootTypes(std::move(loot_types));
                     extra_data_.SetMapExtraData(map_id, std::move(map_data));
-                    
-                    // Set loot types count in model
-                    const model::Map* map = game_.FindMap(model::Map::Id{map_id});
-                    if (map) {
-                        const_cast<model::Map*>(map)->SetLootTypesCount(loot_array.size());
-                        logger::LogDebug("Map " + map_id + " has " + std::to_string(loot_array.size()) + 
-                                       " loot types");
-                    }
+                }
+                
+                // Устанавливаем количество типов лута в модели
+                const model::Map* map = game_.FindMap(model::Map::Id{map_id});
+                if (map) {
+                    const_cast<model::Map*>(map)->SetLootTypesCount(loot_types_count);
+                    api_handler_.SetLootTypesCount(model::Map::Id{map_id}, loot_types_count);
+                    logger::LogDebug("Map " + map_id + " has " + std::to_string(loot_types_count) + 
+                                   " loot types");
                 }
             }
         }
@@ -109,9 +92,9 @@ std::string RequestHandler::SerializeMap(const model::Map& map) const {
     map_obj["buildings"] = SerializeBuildings(map);
     map_obj["offices"] = SerializeOffices(map);
     
-    // ДОБАВИТЬ ЭТУ СТРОКУ (убедитесь, что метод в классе Map называется GetBagCapacity)
+    // Добавлено: сериализация вместимости сумки
     map_obj["bagCapacity"] = map.GetBagCapacity(); 
-
+    
     // Add lootTypes from extra data
     const auto* map_data = extra_data_.GetMapExtraData(*map.GetId());
     if (map_data) {
