@@ -89,17 +89,23 @@ std::string RequestHandler::SerializeMap(const model::Map& map) const {
     map_obj["id"] = *map.GetId();
     map_obj["name"] = map.GetName();
     
-    // ВОТ ЭТА СТРОКА ИСПРАВЛЯЕТ ОШИБКУ ТЕСТА:
+    // ВАЖНО: Добавлена сериализация вместимости рюкзака
     map_obj["bagCapacity"] = map.GetBagCapacity();
     
     map_obj["roads"] = SerializeRoads(map);
     map_obj["buildings"] = SerializeBuildings(map);
     map_obj["offices"] = SerializeOffices(map);
     
-    // Тут у вас также сериализуются lootTypes (из extra_data или из карты)
-    // Оставьте вашу текущую логику для lootTypes нетронутой, например:
-    if (extra_data_.contains(*map.GetId())) {
-        map_obj["lootTypes"] = extra_data_.at(*map.GetId());
+    // Ваша оригинальная и правильная логика для lootTypes
+    const auto* map_data = extra_data_.GetMapExtraData(*map.GetId());
+    if (map_data) {
+        boost::json::array loot_array;
+        for (const auto& loot : map_data->GetLootTypes()) {
+            loot_array.push_back(loot.data);
+        }
+        map_obj["lootTypes"] = loot_array;
+    } else {
+        map_obj["lootTypes"] = boost::json::array();
     }
     
     return boost::json::serialize(map_obj);
