@@ -13,6 +13,7 @@
 #include <optional>
 #include <random>
 #include <set>
+#include <tuple>
 
 namespace game {
 
@@ -30,7 +31,7 @@ public:
         model::Position pos;
         model::Speed speed;
         model::Direction dir;
-        int score;  // Добавляем поле score
+        int score;
         struct BagItem {
             uint64_t id;
             int type;
@@ -40,11 +41,9 @@ public:
 
     explicit GameState(model::Game& game);
 
-    // Запрещаем копирование
     GameState(const GameState&) = delete;
     GameState& operator=(const GameState&) = delete;
 
-    // Разрешаем перемещение
     GameState(GameState&&) = default;
     GameState& operator=(GameState&&) = default;
 
@@ -85,7 +84,8 @@ public:
 
     void SetLootGeneratorConfig(double period, double probability);
     
-    std::unordered_map<uint64_t, std::pair<int, model::Position>>
+    // Возвращает map: id -> (type, value, position)
+    std::unordered_map<uint64_t, std::tuple<int, int, model::Position>>
     GetLootState(const model::Token& token) const;
 
 private:

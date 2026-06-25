@@ -56,7 +56,6 @@ int LootManager::GenerateRandomType() {
 }
 
 int LootManager::GenerateRandomValue() {
-    // Генерируем случайное значение от 1 до 100
     std::uniform_int_distribution<int> value_dist(1, 100);
     return value_dist(rng_);
 }
@@ -66,7 +65,7 @@ void LootManager::AddLootItems(size_t count) {
         LootItem item;
         item.id = next_id_++;
         item.type = GenerateRandomType();
-        item.value = GenerateRandomValue();  // Генерируем value
+        item.value = GenerateRandomValue();
         item.pos = GenerateRandomPosition();
         loot_items_[item.id] = std::move(item);
     }
@@ -78,10 +77,11 @@ void LootManager::Update(std::chrono::milliseconds delta, size_t dog_count) {
     AddLootItems(new_loot_count);
 }
 
-std::unordered_map<uint64_t, std::pair<int, model::Position>> LootManager::GetLootItems() const {
-    std::unordered_map<uint64_t, std::pair<int, model::Position>> result;
+std::unordered_map<uint64_t, std::tuple<int, int, model::Position>> 
+LootManager::GetLootItems() const {
+    std::unordered_map<uint64_t, std::tuple<int, int, model::Position>> result;
     for (const auto& [id, item] : loot_items_) {
-        result[id] = {item.type, item.pos};
+        result[id] = {item.type, item.value, item.pos};
     }
     return result;
 }

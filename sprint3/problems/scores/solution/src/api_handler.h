@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <memory>
 #include <chrono>
+#include <tuple>
 
 namespace http_handler {
 
@@ -188,10 +189,10 @@ public:
         auto loot_items = game_state_->GetLootState(*token_opt);
         for (const auto& [id, loot] : loot_items) {
             boost::json::object item_obj;
-            item_obj["type"] = loot.first;
+            item_obj["type"] = std::get<0>(loot);  // type
             boost::json::array pos_arr;
-            pos_arr.push_back(loot.second.x);
-            pos_arr.push_back(loot.second.y);
+            pos_arr.push_back(std::get<2>(loot).x);  // position.x
+            pos_arr.push_back(std::get<2>(loot).y);  // position.y
             item_obj["pos"] = pos_arr;
             loot_obj[std::to_string(id)] = item_obj;
         }

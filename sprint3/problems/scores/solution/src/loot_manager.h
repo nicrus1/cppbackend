@@ -15,25 +15,25 @@ public:
     struct LootItem {
         uint64_t id;
         int type;
-        int value;  // Добавляем value для подсчета очков
+        int value;
         model::Position pos;
     };
     
     LootManager(const model::Map& map, double period, double probability);
     
     void Update(std::chrono::milliseconds delta, size_t dog_count);
-    std::unordered_map<uint64_t, std::pair<int, model::Position>> GetLootItems() const;
+    
+    // Возвращает map: id -> (type, value, position)
+    std::unordered_map<uint64_t, std::tuple<int, int, model::Position>> GetLootItems() const;
+    
     size_t GetLootCount() const;
     
-    // Публичный метод для добавления трофеев
     void AddLootItems(size_t count);
     
-    // Метод для удаления трофея
     void RemoveLootItem(uint64_t id) {
         loot_items_.erase(id);
     }
     
-    // Метод для получения value трофея
     int GetLootValue(uint64_t id) const {
         auto it = loot_items_.find(id);
         if (it != loot_items_.end()) {
@@ -51,7 +51,7 @@ private:
     
     model::Position GenerateRandomPosition();
     int GenerateRandomType();
-    int GenerateRandomValue();  // Новый метод для генерации value
+    int GenerateRandomValue();
 };
 
 } // namespace game

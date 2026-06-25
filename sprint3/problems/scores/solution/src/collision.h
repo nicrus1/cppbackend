@@ -5,6 +5,7 @@
 #include <vector>
 #include <algorithm>
 #include <set>
+#include <tuple>
 
 namespace collision {
 
@@ -53,7 +54,7 @@ std::vector<CollisionEvent> FindLootCollisions(
     // If no movement, check only end position
     if (std::abs(start.x - end.x) < 1e-9 && std::abs(start.y - end.y) < 1e-9) {
         for (const auto& [id, item] : loot_items) {
-            const auto& [type, pos] = item;
+            const auto& [type, value, pos] = item;
             if (CirclesOverlap(end, pickup_radius, pos, 0.0)) {
                 events.push_back({
                     CollisionEvent::LOOT_PICKUP,
@@ -73,7 +74,7 @@ std::vector<CollisionEvent> FindLootCollisions(
     double total_dist = std::sqrt(dx * dx + dy * dy);
     
     for (const auto& [id, item] : loot_items) {
-        const auto& [type, pos] = item;
+        const auto& [type, value, pos] = item;
         
         // Project loot position onto the path
         double t = ((pos.x - start.x) * dx + (pos.y - start.y) * dy) / (total_dist * total_dist);

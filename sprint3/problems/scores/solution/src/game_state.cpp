@@ -5,6 +5,8 @@
 #include <cmath>
 #include <iostream>
 #include <random>
+#include <set>
+#include <tuple>
 
 namespace {
 
@@ -143,8 +145,8 @@ void GameState::ProcessDogCollisions(model::Dog& dog,
             }
             
             // Pick up the loot with its value
-            int loot_type = loot_it->second.first;
-            int loot_value = loot_it->second.second;  // value is stored in second pair element
+            int loot_type = std::get<0>(loot_it->second);
+            int loot_value = std::get<1>(loot_it->second);
             dog.AddBagItem(event.loot_id, loot_type, loot_value);
             
             // Remove loot from the map
@@ -363,7 +365,7 @@ std::unordered_map<std::string, std::string> GameState::GetPlayersOnMap(const mo
     return GetPlayersOnMapForTest(player->GetMapId());
 }
 
-std::unordered_map<uint64_t, std::pair<int, model::Position>> 
+std::unordered_map<uint64_t, std::tuple<int, int, model::Position>> 
 GameState::GetLootState(const model::Token& token) const {
     const model::Player* player = players_.FindPlayerByToken(token);
     if (!player) {
