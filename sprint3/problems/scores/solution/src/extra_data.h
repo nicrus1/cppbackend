@@ -10,7 +10,7 @@ namespace extra_data {
 
 struct LootTypeInfo {
     boost::json::object data;
-    int value = 0;  // Добавляем value
+    int value = 0;
 };
 
 class MapExtraData {

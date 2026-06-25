@@ -2,6 +2,5 @@
 
 namespace extra_data {
 
-// Реализация методов, если они не inline в заголовке
 
 } // namespace extra_data

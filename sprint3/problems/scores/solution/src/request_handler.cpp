@@ -69,7 +69,6 @@ void RequestHandler::LoadExtraData(const std::filesystem::path& config_path) {
                     map_data.SetLootTypes(std::move(loot_types));
                     extra_data_.SetMapExtraData(map_id, std::move(map_data));
                     
-                    // Set loot types count in model
                     const model::Map* map = game_.FindMap(model::Map::Id{map_id});
                     if (map) {
                         const_cast<model::Map*>(map)->SetLootTypesCount(loot_array.size());
@@ -103,7 +102,6 @@ std::string RequestHandler::SerializeMap(const model::Map& map) const {
     map_obj["buildings"] = SerializeBuildings(map);
     map_obj["offices"] = SerializeOffices(map);
     
-    // Add lootTypes from extra data
     const auto* map_data = extra_data_.GetMapExtraData(*map.GetId());
     if (map_data) {
         boost::json::array loot_array;

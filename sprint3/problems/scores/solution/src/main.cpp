@@ -65,7 +65,6 @@ int main(int argc, const char* argv[]) {
         bool manual_tick_allowed = (args->tick_period == 0);
         http_handler::RequestHandler handler{game, args->www_root, manual_tick_allowed};
         
-        // Load extra data (loot types, loot generator config)
         handler.LoadExtraData(args->config_file);
         std::cerr << "RequestHandler created" << std::endl;
 

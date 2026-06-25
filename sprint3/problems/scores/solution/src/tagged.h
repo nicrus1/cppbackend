@@ -5,15 +5,12 @@
 
 namespace util {
 
-/* * С его помощью можно описать строгий тип на основе другого типа.
- */
 template <typename Value, typename Tag>
 class Tagged {
 public:
     using ValueType = Value;
     using TagType = Tag;
 
-    // Конструктор по умолчанию
     Tagged() = default;
     
     explicit Tagged(Value&& v)
@@ -40,7 +37,6 @@ public:
         return &value_;
     }
     
-    // Операторы присваивания
     Tagged& operator=(const Value& v) {
         value_ = v;
         return *this;
@@ -51,7 +47,6 @@ public:
         return *this;
     }
 
-    // Операторы сравнения (критически важно для unordered_map!)
     friend bool operator==(const Tagged& lhs, const Tagged& rhs) {
         return lhs.value_ == rhs.value_;
     }
@@ -68,14 +63,12 @@ public:
         return lhs.value_ != rhs;
     }
 
-    // Оператор сравнения (C++20)
     auto operator<=>(const Tagged&) const = default;
 
 private:
     Value value_{};
 };
 
-// Хешер для Tagged-типа
 template <typename TaggedValue>
 struct TaggedHasher {
     size_t operator()(const TaggedValue& value) const {

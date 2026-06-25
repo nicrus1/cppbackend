@@ -122,7 +122,6 @@ public:
         return default_speed_;
     }
     
-    // Bag management
     void AddBagItem(uint64_t id, int type, int value) {
         if (bag_.size() < bag_capacity_) {
             bag_.push_back({id, type, value});
@@ -153,7 +152,6 @@ public:
         return bag_capacity_;
     }
     
-    // Score management
     void AddScore(int points) {
         score_ += points;
     }
@@ -174,7 +172,7 @@ private:
     double default_speed_;
     std::vector<BagItem> bag_;
     size_t bag_capacity_ = 3;
-    int score_ = 0;  // Счет игрока
+    int score_ = 0;
 };
 
 class Road {
