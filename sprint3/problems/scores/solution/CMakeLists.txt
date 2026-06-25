@@ -10,7 +10,6 @@ find_package(Threads REQUIRED)
 include(${CMAKE_BINARY_DIR}/conanbuildinfo_multi.cmake)
 conan_basic_setup(TARGETS)
 
-# Основной исполняемый файл сервера
 add_executable(game_server
     src/main.cpp
     src/model.cpp
