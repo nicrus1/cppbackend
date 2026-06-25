@@ -71,7 +71,7 @@ public:
     struct BagItem {
         uint64_t id;
         int type;
-        int value;  // Добавляем value для подсчета очков
+        int value;
     };
 
     Dog(Id id, Point pos, double speed)

@@ -117,48 +117,37 @@ void GameState::ProcessDogCollisions(model::Dog& dog,
     
     auto& manager = *it->second;
     
-    // Get loot items for this map
     auto loot_items = manager.GetLootItems();
     if (loot_items.empty()) return;
     
-    // Find collisions with loot along the path
     auto events = collision::FindLootCollisions(start_pos, end_pos, loot_items);
-    
-    // Track which loot IDs have been collected
+
     std::set<uint64_t> collected_loot_ids;
     
-    // Process events in chronological order
     for (const auto& event : events) {
         if (event.type == collision::CollisionEvent::LOOT_PICKUP) {
-            // Skip if already collected (by another player or earlier in this tick)
             if (collected_loot_ids.find(event.loot_id) != collected_loot_ids.end()) {
                 continue;
             }
             
-            // Check if there's still loot (might have been removed)
             auto loot_it = loot_items.find(event.loot_id);
             if (loot_it == loot_items.end()) continue;
             
-            // Check if bag is full
             if (dog.IsBagFull()) {
-                continue; // Skip this loot, bag is full
+                continue;
             }
             
-            // Pick up the loot with its value
             int loot_type = std::get<0>(loot_it->second);
             int loot_value = std::get<1>(loot_it->second);
             dog.AddBagItem(event.loot_id, loot_type, loot_value);
             
-            // Remove loot from the map
             manager.RemoveLootItem(event.loot_id);
             collected_loot_ids.insert(event.loot_id);
         }
     }
     
-    // Check if dog is near any office - deliver all bag items
     for (const auto& office : map.GetOffices()) {
         if (collision::IsNearOffice(end_pos, office)) {
-            // Deliver all bag items and add score
             int total_score = 0;
             for (const auto& item : dog.GetBag()) {
                 total_score += item.value;
@@ -187,12 +176,11 @@ GameState::JoinResult GameState::JoinGame(const std::string& user_name, const mo
     
     model::Dog dog(dog_id, start_pos, dog_speed);
     dog.SetBagCapacity(map->GetBagCapacity());
-    dog.SetScore(0);  // Начальный счет равен 0
+    dog.SetScore(0);
     
     dogs_.emplace(player.GetId(), std::move(dog));
     player.SetDogId(dog_id);
 
-    // Создаем менеджер трофеев для карты если его нет
     auto it = loot_managers_.find(map_id);
     if (it == loot_managers_.end()) {
         auto manager = std::make_unique<LootManager>(
@@ -202,7 +190,6 @@ GameState::JoinResult GameState::JoinGame(const std::string& user_name, const mo
         it = loot_managers_.find(map_id);
     }
     
-    // Генерируем один трофей для нового игрока
     it->second->AddLootItems(1);
 
     return {token, player.GetId()};
@@ -268,7 +255,6 @@ void GameState::SetLootGeneratorConfig(double period, double probability) {
 void GameState::ProcessTick(int64_t time_delta_ms) {
     auto delta = std::chrono::milliseconds(time_delta_ms);
     
-    // First, move all dogs and process collisions
     for (auto& [player_id, dog] : dogs_) {
         model::Player* player = players_.FindPlayer(player_id);
         if (!player) continue;
@@ -276,17 +262,13 @@ void GameState::ProcessTick(int64_t time_delta_ms) {
         const model::Map* map = game_.FindMap(player->GetMapId());
         if (!map) continue;
 
-        // Store start position before moving
         model::Position start_pos = dog.GetPosition();
         
-        // Move the dog
         MoveDog(dog, *map, time_delta_ms);
         
-        // Process collisions for this dog
         ProcessDogCollisions(dog, *player, *map, start_pos, dog.GetPosition());
     }
     
-    // Update loot for each map
     for (const auto& map : game_.GetMaps()) {
         auto it = loot_managers_.find(map.GetId());
         if (it == loot_managers_.end()) {
@@ -297,7 +279,6 @@ void GameState::ProcessTick(int64_t time_delta_ms) {
             it = loot_managers_.find(map.GetId());
         }
         
-        // Count dogs on this map
         size_t dog_count = 0;
         for (const auto& [player_id, dog] : dogs_) {
             model::Player* player = players_.FindPlayer(player_id);
@@ -328,10 +309,9 @@ std::vector<GameState::PlayerState> GameState::GetGameState(const model::Token& 
             d.GetPosition(),
             d.GetSpeed(),
             d.GetDirection(),
-            d.GetScore()  // Добавляем счет
+            d.GetScore()
         };
         
-        // Add bag contents
         for (const auto& item : d.GetBag()) {
             state.bag.push_back({item.id, item.type});
         }

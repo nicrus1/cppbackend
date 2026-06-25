@@ -23,7 +23,6 @@ public:
     
     void Update(std::chrono::milliseconds delta, size_t dog_count);
     
-    // Возвращает map: id -> (type, value, position)
     std::unordered_map<uint64_t, std::tuple<int, int, model::Position>> GetLootItems() const;
     
     size_t GetLootCount() const;

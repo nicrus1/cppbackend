@@ -62,7 +62,7 @@ void RequestHandler::LoadExtraData(const std::filesystem::path& config_path) {
                         if (loot_obj.contains("value")) {
                             info.value = get_int(loot_obj.at("value"));
                         } else {
-                            info.value = 0;  // Значение по умолчанию
+                            info.value = 0;
                         }
                         loot_types.push_back(info);
                     }

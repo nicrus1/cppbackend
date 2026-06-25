@@ -30,7 +30,6 @@ target_link_libraries(game_server PRIVATE
     Threads::Threads
 )
 
-# Тесты
 add_executable(game_server_tests
     src/model.cpp
     src/game_state.cpp
@@ -52,11 +51,9 @@ target_link_libraries(game_server_tests PRIVATE
     Threads::Threads
 )
 
-# Настройка выходных директорий
 set_target_properties(game_server game_server_tests PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
 )
 
-# Включение тестирования
 enable_testing()
 add_test(NAME game_server_tests COMMAND game_server_tests)

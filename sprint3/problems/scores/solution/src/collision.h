@@ -9,10 +9,9 @@
 
 namespace collision {
 
-// Half-widths
-constexpr double PLAYER_HALF_WIDTH = 0.3;   // 0.6 / 2
-constexpr double OFFICE_HALF_WIDTH = 0.25;  // 0.5 / 2
-constexpr double LOOT_HALF_WIDTH = 0.0;     // zero width
+constexpr double PLAYER_HALF_WIDTH = 0.3;
+constexpr double OFFICE_HALF_WIDTH = 0.25;
+constexpr double LOOT_HALF_WIDTH = 0.0;
 
 struct CollisionEvent {
     enum Type { LOOT_PICKUP, OFFICE_DELIVERY };
@@ -23,7 +22,6 @@ struct CollisionEvent {
     double distance;
 };
 
-// Check if two circles overlap
 inline bool CirclesOverlap(const model::Position& p1, double r1,
                           const model::Position& p2, double r2) {
     double dx = p1.x - p2.x;
@@ -32,7 +30,6 @@ inline bool CirclesOverlap(const model::Position& p1, double r1,
     return dist <= (r1 + r2);
 }
 
-// Check if point is within circle
 inline bool IsPointInCircle(const model::Position& point, 
                            const model::Position& center, 
                            double radius) {
@@ -41,7 +38,6 @@ inline bool IsPointInCircle(const model::Position& point,
     return (dx * dx + dy * dy) <= (radius * radius);
 }
 
-// Find all loot items within pickup radius along a movement path
 template<typename LootContainer>
 std::vector<CollisionEvent> FindLootCollisions(
     const model::Position& start,
@@ -51,7 +47,6 @@ std::vector<CollisionEvent> FindLootCollisions(
     
     std::vector<CollisionEvent> events;
     
-    // If no movement, check only end position
     if (std::abs(start.x - end.x) < 1e-9 && std::abs(start.y - end.y) < 1e-9) {
         for (const auto& [id, item] : loot_items) {
             const auto& [type, value, pos] = item;
@@ -68,7 +63,6 @@ std::vector<CollisionEvent> FindLootCollisions(
         return events;
     }
     
-    // Check along the path
     double dx = end.x - start.x;
     double dy = end.y - start.y;
     double total_dist = std::sqrt(dx * dx + dy * dy);
@@ -76,7 +70,6 @@ std::vector<CollisionEvent> FindLootCollisions(
     for (const auto& [id, item] : loot_items) {
         const auto& [type, value, pos] = item;
         
-        // Project loot position onto the path
         double t = ((pos.x - start.x) * dx + (pos.y - start.y) * dy) / (total_dist * total_dist);
         t = std::clamp(t, 0.0, 1.0);
         
@@ -91,7 +84,6 @@ std::vector<CollisionEvent> FindLootCollisions(
         );
         
         if (dist_to_loot <= pickup_radius) {
-            // Calculate distance along path to this point
             double distance_along_path = t * total_dist;
             
             events.push_back({
@@ -104,7 +96,6 @@ std::vector<CollisionEvent> FindLootCollisions(
         }
     }
     
-    // Sort by distance along path
     std::sort(events.begin(), events.end(),
         [](const CollisionEvent& a, const CollisionEvent& b) {
             return a.distance < b.distance;
@@ -113,7 +104,6 @@ std::vector<CollisionEvent> FindLootCollisions(
     return events;
 }
 
-// Check if a point is within office pickup/delivery radius
 inline bool IsNearOffice(const model::Position& player_pos,
                         const model::Office& office,
                         double delivery_radius = PLAYER_HALF_WIDTH + OFFICE_HALF_WIDTH) {

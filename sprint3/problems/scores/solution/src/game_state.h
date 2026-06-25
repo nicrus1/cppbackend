@@ -84,7 +84,6 @@ public:
 
     void SetLootGeneratorConfig(double period, double probability);
     
-    // Возвращает map: id -> (type, value, position)
     std::unordered_map<uint64_t, std::tuple<int, int, model::Position>>
     GetLootState(const model::Token& token) const;
 
