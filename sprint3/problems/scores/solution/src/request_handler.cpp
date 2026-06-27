@@ -20,21 +20,30 @@ void RequestHandler::LoadExtraData(const std::filesystem::path& config_path) {
         boost::json::object json_obj = json_value.as_object();
         
         auto get_double = [](const boost::json::value& val) -> double {
-            if (val.is_double()) return val.as_double();
-            if (val.is_int64()) return static_cast<double>(val.as_int64());
-            if (val.is_uint64()) return static_cast<double>(val.as_uint64());
+            if (val.is_double()) {
+                return val.as_double();
+            }
+            if (val.is_int64()) {
+                return static_cast<double>(val.as_int64());
+            }
+            if (val.is_uint64()) {
+                return static_cast<double>(val.as_uint64());
+            }
             throw std::runtime_error("Not a number");
         };
         
         auto get_int = [](const boost::json::value& val) -> int {
-            if (val.is_int64()) return static_cast<int>(val.as_int64());
-            if (val.is_uint64()) return static_cast<int>(val.as_uint64());
+            if (val.is_int64()) {
+                return static_cast<int>(val.as_int64());
+            }
+            if (val.is_uint64()) {
+                return static_cast<int>(val.as_uint64());
+            }
             throw std::runtime_error("Not an integer");
         };
 
-        // Load loot generator config
-        if (json_obj.contains("lootGeneratorConfig")) {
-            const auto& config = json_obj.at("lootGeneratorConfig").as_object();
+        if (auto config_ptr = json_obj.if_contains("lootGeneratorConfig")) {
+            const auto& config = config_ptr->as_object();
             double period = get_double(config.at("period"));
             double probability = get_double(config.at("probability"));
             extra_data_.SetLootGeneratorConfig(period, probability);
@@ -43,29 +52,30 @@ void RequestHandler::LoadExtraData(const std::filesystem::path& config_path) {
                            ", probability=" + std::to_string(probability));
         }
         
-        // Load loot types for each map
-        if (json_obj.contains("maps")) {
-            const auto& maps_array = json_obj.at("maps").as_array();
+        if (auto maps_ptr = json_obj.if_contains("maps")) {
+            const auto& maps_array = maps_ptr->as_array();
             for (const auto& map_value : maps_array) {
                 const auto& map_obj = map_value.as_object();
                 std::string map_id = std::string(map_obj.at("id").as_string());
                 
-                if (map_obj.contains("lootTypes")) {
+                if (auto loot_ptr = map_obj.if_contains("lootTypes")) {
                     extra_data::MapExtraData map_data;
-                    const auto& loot_array = map_obj.at("lootTypes").as_array();
+                    const auto& loot_array = loot_ptr->as_array();
                     extra_data::MapExtraData::LootTypes loot_types;
+                    
                     for (const auto& loot_value : loot_array) {
                         const auto& loot_obj = loot_value.as_object();
                         extra_data::LootTypeInfo info;
                         info.data = loot_obj;
-                        // Извлекаем value из конфига
-                        if (loot_obj.contains("value")) {
-                            info.value = get_int(loot_obj.at("value"));
+                        
+                        if (auto value_ptr = loot_obj.if_contains("value")) {
+                            info.value = get_int(*value_ptr);
                         } else {
                             info.value = 0;
                         }
                         loot_types.push_back(info);
                     }
+                    
                     map_data.SetLootTypes(std::move(loot_types));
                     extra_data_.SetMapExtraData(map_id, std::move(map_data));
                     

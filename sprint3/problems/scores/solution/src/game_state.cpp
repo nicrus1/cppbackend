@@ -353,11 +353,9 @@ GameState::GetLootState(const model::Token& token) const {
     }
     
     auto it = loot_managers_.find(player->GetMapId());
-    if (it == loot_managers_.end()) {
-        return {};
-    }
-    
-    return it->second->GetLootItems();
+    return (it != loot_managers_.end()) 
+        ? it->second->GetLootItems() 
+        : std::unordered_map<uint64_t, std::tuple<int, int, model::Position>>{};
 }
 
 } // namespace game

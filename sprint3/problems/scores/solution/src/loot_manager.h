@@ -34,11 +34,8 @@ public:
     }
     
     int GetLootValue(uint64_t id) const {
-        auto it = loot_items_.find(id);
-        if (it != loot_items_.end()) {
-            return it->second.value;
-        }
-        return 0;
+    auto it = loot_items_.find(id);
+    return (it != loot_items_.end()) ? it->second.value : 0;
     }
     
 private:

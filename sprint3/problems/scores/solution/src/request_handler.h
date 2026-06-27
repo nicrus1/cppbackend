@@ -16,6 +16,16 @@ namespace http_handler {
 namespace beast = boost::beast;
 namespace http = beast::http;
 
+namespace endpoints {
+    constexpr std::string_view JOIN = "/api/v1/game/join";
+    constexpr std::string_view PLAYERS = "/api/v1/game/players";
+    constexpr std::string_view STATE = "/api/v1/game/state";
+    constexpr std::string_view ACTION = "/api/v1/game/player/action";
+    constexpr std::string_view TICK = "/api/v1/game/tick";
+    constexpr std::string_view MAPS = "/api/v1/maps";
+    constexpr std::string_view MAPS_PREFIX = "/api/v1/maps/";
+} // namespace endpoints
+
 class RequestHandler {
 public:
     explicit RequestHandler(model::Game& game, const std::string& static_dir, bool manual_tick_allowed)
@@ -59,27 +69,27 @@ public:
             return;
         }
 
-        if (target == "/api/v1/game/join") {
+        if (target == endpoints::JOIN) {
             api_handler_.HandleJoin(std::move(req), std::forward<Send>(send));
             return;
         }
 
-        if (target == "/api/v1/game/players") {
+        if (target == endpoints::PLAYERS) {
             api_handler_.HandleGetPlayers(std::move(req), std::forward<Send>(send));
             return;
         }
 
-        if (target == "/api/v1/game/state") {
+        if (target == endpoints::STATE) {
             api_handler_.HandleGameState(std::move(req), std::forward<Send>(send));
             return;
         }
         
-        if (target == "/api/v1/game/player/action") {
+        if (target == endpoints::ACTION) {
             api_handler_.HandlePlayerAction(std::move(req), std::forward<Send>(send));
             return;
         }
 
-        if (target == "/api/v1/game/tick") {
+        if (target == endpoints::TICK) {
             if (!manual_tick_allowed_) {
                 SendError(std::move(req), send, http::status::bad_request,
                           "badRequest", "Invalid endpoint");
@@ -89,50 +99,14 @@ public:
             return;
         }
 
-        if (target == "/api/v1/maps") {
-            if (method != "GET" && method != "HEAD") {
-                SendErrorWithAllow(std::move(req), send, http::status::method_not_allowed,
-                          "invalidMethod", "Method not allowed", "GET, HEAD");
-                return;
-            }
-            if (method == "HEAD") {
-                SendResponse(std::move(req), send, http::status::ok, "application/json", "");
-                return;
-            }
-            std::string body = SerializeMaps();
-            SendResponse(std::move(req), send, http::status::ok, "application/json", body);
+        if (target == endpoints::MAPS) {
+            HandleMapsEndpoint(std::move(req), std::forward<Send>(send), method);
             return;
         }
 
-        const std::string prefix = "/api/v1/maps/";
+        const std::string prefix = std::string(endpoints::MAPS_PREFIX);
         if (target.find(prefix) == 0) {
-            if (method != "GET" && method != "HEAD") {
-                SendErrorWithAllow(std::move(req), send, http::status::method_not_allowed,
-                          "invalidMethod", "Method not allowed", "GET, HEAD");
-                return;
-            }
-            std::string map_id_str = target.substr(prefix.length());
-            
-            while (!map_id_str.empty() && map_id_str.back() == '/') {
-                map_id_str.pop_back();
-            }
-
-            model::Map::Id map_id{std::move(map_id_str)};
-            const model::Map* map = game_.FindMap(map_id);
-
-            if (!map) {
-                SendError(std::move(req), send, http::status::not_found,
-                          "mapNotFound", "Map not found");
-                return;
-            }
-
-            if (method == "HEAD") {
-                SendResponse(std::move(req), send, http::status::ok, "application/json", "");
-                return;
-            }
-
-            std::string body = SerializeMap(*map);
-            SendResponse(std::move(req), send, http::status::ok, "application/json", body);
+            HandleMapDetailsEndpoint(std::move(req), std::forward<Send>(send), method, target, prefix);
             return;
         }
 
@@ -140,6 +114,61 @@ public:
     }
 
 private:
+    template <typename Body, typename Allocator, typename Send>
+    void HandleMapsEndpoint(http::request<Body, http::basic_fields<Allocator>>&& req,
+                            Send&& send,
+                            const std::string& method) {
+        if (method != "GET" && method != "HEAD") {
+            SendErrorWithAllow(std::move(req), send, http::status::method_not_allowed,
+                      "invalidMethod", "Method not allowed", "GET, HEAD");
+            return;
+        }
+        
+        if (method == "HEAD") {
+            SendResponse(std::move(req), send, http::status::ok, "application/json", "");
+            return;
+        }
+        
+        std::string body = SerializeMaps();
+        SendResponse(std::move(req), send, http::status::ok, "application/json", body);
+    }
+
+    template <typename Body, typename Allocator, typename Send>
+    void HandleMapDetailsEndpoint(http::request<Body, http::basic_fields<Allocator>>&& req,
+                                  Send&& send,
+                                  const std::string& method,
+                                  const std::string& target,
+                                  const std::string& prefix) {
+        if (method != "GET" && method != "HEAD") {
+            SendErrorWithAllow(std::move(req), send, http::status::method_not_allowed,
+                      "invalidMethod", "Method not allowed", "GET, HEAD");
+            return;
+        }
+        
+        std::string map_id_str = target.substr(prefix.length());
+        
+        while (!map_id_str.empty() && map_id_str.back() == '/') {
+            map_id_str.pop_back();
+        }
+
+        model::Map::Id map_id{std::move(map_id_str)};
+        const model::Map* map = game_.FindMap(map_id);
+
+        if (!map) {
+            SendError(std::move(req), send, http::status::not_found,
+                      "mapNotFound", "Map not found");
+            return;
+        }
+
+        if (method == "HEAD") {
+            SendResponse(std::move(req), send, http::status::ok, "application/json", "");
+            return;
+        }
+
+        std::string body = SerializeMap(*map);
+        SendResponse(std::move(req), send, http::status::ok, "application/json", body);
+    }
+
     template <typename Body, typename Allocator, typename Send>
     void HandleStaticFile(http::request<Body, http::basic_fields<Allocator>>&& req,
                           Send&& send,
@@ -165,14 +194,7 @@ private:
             return;
         }
         
-        std::string content_type = "text/plain";
-        std::string ext = full_path.extension().string();
-        if (ext == ".html") content_type = "text/html";
-        else if (ext == ".css") content_type = "text/css";
-        else if (ext == ".js") content_type = "application/javascript";
-        else if (ext == ".svg") content_type = "image/svg+xml";
-        else if (ext == ".png") content_type = "image/png";
-        else if (ext == ".jpg" || ext == ".jpeg") content_type = "image/jpeg";
+        std::string content_type = GetContentType(full_path);
         
         std::stringstream buffer;
         buffer << file.rdbuf();
@@ -184,6 +206,17 @@ private:
         response.prepare_payload();
         response.keep_alive(req.keep_alive());
         send(std::move(response));
+    }
+    
+    std::string GetContentType(const std::filesystem::path& file_path) const {
+        std::string ext = file_path.extension().string();
+        if (ext == ".html") return "text/html";
+        if (ext == ".css") return "text/css";
+        if (ext == ".js") return "application/javascript";
+        if (ext == ".svg") return "image/svg+xml";
+        if (ext == ".png") return "image/png";
+        if (ext == ".jpg" || ext == ".jpeg") return "image/jpeg";
+        return "text/plain";
     }
     
     template <typename Body, typename Allocator, typename Send>

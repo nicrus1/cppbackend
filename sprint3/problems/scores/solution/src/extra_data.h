@@ -65,10 +65,7 @@ public:
     
     const MapExtraData* GetMapExtraData(const std::string& map_id) const {
         auto it = map_extra_data_.find(map_id);
-        if (it != map_extra_data_.end()) {
-            return &it->second;
-        }
-        return nullptr;
+        return (it != map_extra_data_.end()) ? &it->second : nullptr;
     }
 
 private:
