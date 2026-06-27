@@ -3,7 +3,6 @@
 #include "model.h"
 #include "players.h"
 #include "player_tokens.h"
-#include "dog.h"
 #include "loot_manager.h"
 
 #include <unordered_map>
