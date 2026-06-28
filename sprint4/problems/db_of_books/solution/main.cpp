@@ -34,9 +34,6 @@ int main(int argc, char* argv[]) {
         // Подготовка запросов
         conn.prepare("add_book", 
             "INSERT INTO books (title, author, year, isbn) VALUES ($1, $2, $3, $4)");
-        conn.prepare("select_all",
-            "SELECT id, title, author, year, isbn FROM books "
-            "ORDER BY year DESC, title ASC, author ASC, isbn ASC");
 
         // Чтение команд из stdin
         std::string line;
@@ -55,8 +52,9 @@ int main(int argc, char* argv[]) {
                     int year = payload["year"];
                     
                     std::optional<std::string> isbn;
-                    if (!payload["isbn"].is_null()) {
-                        isbn = payload["isbn"].get<std::string>();
+                    // Исправлено: ищем ключ "ISBN" в верхнем регистре, как указано в задании
+                    if (!payload["ISBN"].is_null()) {
+                        isbn = payload["ISBN"].get<std::string>();
                     }
 
                     try {
@@ -76,9 +74,11 @@ int main(int argc, char* argv[]) {
                     pqxx::read_transaction r(conn);
                     json result = json::array();
                     
+                    // Исправлено: передаем сам текст SQL-запроса, а не его имя
                     for (auto [id, title, author, year, isbn] : 
                          r.query<int, std::string, std::string, int, std::optional<std::string>>(
-                             "select_all")) {
+                             "SELECT id, title, author, year, isbn FROM books "
+                             "ORDER BY year DESC, title ASC, author ASC, isbn ASC")) {
                         json book;
                         book["id"] = id;
                         book["title"] = title;
