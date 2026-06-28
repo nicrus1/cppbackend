@@ -1,7 +1,9 @@
 #pragma once
 #include <string>
+#include <vector>
 
 #include "../util/tagged_uuid.h"
+#include "author.h"  // For AuthorId
 
 namespace domain {
 

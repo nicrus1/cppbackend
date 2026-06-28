@@ -3,13 +3,10 @@
 #include <string>
 #include <vector>
 
-namespace app {
+#include "../domain/author.h"
+#include "../domain/book.h"
 
-struct BookData {
-    std::string title;
-    int publication_year;
-    std::string author_id;
-};
+namespace app {
 
 class UseCases {
 public:

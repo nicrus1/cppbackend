@@ -11,7 +11,8 @@ void UseCasesImpl::AddAuthor(const std::string& name) {
 }
 
 void UseCasesImpl::AddBook(const std::string& title, int publication_year, const std::string& author_id) {
-    books_.Save({BookId::New(), AuthorId::FromString(author_id), title, publication_year});
+    Book book{BookId::New(), AuthorId::FromString(author_id), title, publication_year};
+    books_.Save(book);
 }
 
 std::vector<Author> UseCasesImpl::GetAllAuthors() const {

@@ -159,7 +159,10 @@ std::vector<detail::AuthorInfo> View::GetAuthors() const {
     auto authors = use_cases_.GetAllAuthors();
     dst_authors.reserve(authors.size());
     for (const auto& author : authors) {
-        dst_authors.push_back({author.GetId().ToString(), author.GetName()});
+        AuthorInfo info;
+        info.id = author.GetId().ToString();
+        info.name = author.GetName();
+        dst_authors.push_back(info);
     }
     return dst_authors;
 }
@@ -169,7 +172,10 @@ std::vector<detail::BookInfo> View::GetBooks() const {
     auto books = use_cases_.GetAllBooks();
     books_info.reserve(books.size());
     for (const auto& book : books) {
-        books_info.push_back({book.GetTitle(), book.GetPublicationYear()});
+        BookInfo info;
+        info.title = book.GetTitle();
+        info.publication_year = book.GetPublicationYear();
+        books_info.push_back(info);
     }
     return books_info;
 }
@@ -179,7 +185,10 @@ std::vector<detail::BookInfo> View::GetAuthorBooks(const std::string& author_id)
     auto books = use_cases_.GetBooksByAuthor(author_id);
     books_info.reserve(books.size());
     for (const auto& book : books) {
-        books_info.push_back({book.GetTitle(), book.GetPublicationYear()});
+        BookInfo info;
+        info.title = book.GetTitle();
+        info.publication_year = book.GetPublicationYear();
+        books_info.push_back(info);
     }
     return books_info;
 }
