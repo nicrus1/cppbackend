@@ -2,6 +2,7 @@
 
 #include "../src/app/use_cases_impl.h"
 #include "../src/domain/author.h"
+#include "../src/domain/book.h" // Добавлен для работы с domain::Book
 
 namespace {
 
@@ -11,17 +12,41 @@ struct MockAuthorRepository : domain::AuthorRepository {
     void Save(const domain::Author& author) override {
         saved_authors.emplace_back(author);
     }
+
+    // Переопределяем недостающий виртуальный метод
+    std::vector<domain::Author> GetAll() const override {
+        return saved_authors;
+    }
+};
+
+// Добавляем мок для репозитория книг
+struct MockBookRepository : domain::BookRepository {
+    std::vector<domain::Book> saved_books;
+
+    void Save(const domain::Book& book) override {
+        saved_books.emplace_back(book);
+    }
+
+    std::vector<domain::Book> GetAll() const override {
+        return saved_books;
+    }
+
+    std::vector<domain::Book> GetByAuthor(const domain::AuthorId& /*author_id*/) const override {
+        return {}; // Заглушка для тестов
+    }
 };
 
 struct Fixture {
     MockAuthorRepository authors;
+    MockBookRepository books; // Добавляем репозиторий книг в фикстуру
 };
 
 }  // namespace
 
 SCENARIO_METHOD(Fixture, "Book Adding") {
     GIVEN("Use cases") {
-        app::UseCasesImpl use_cases{authors};
+        // Теперь передаем оба репозитория
+        app::UseCasesImpl use_cases{authors, books};
 
         WHEN("Adding an author") {
             const auto author_name = "Joanne Rowling";
