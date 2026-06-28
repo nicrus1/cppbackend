@@ -1,6 +1,7 @@
 #include "postgres.h"
 
 #include <pqxx/zview.hxx>
+#include <pqxx/result>
 
 namespace postgres {
 
