@@ -23,10 +23,10 @@ std::vector<domain::Author> AuthorRepositoryImpl::GetAll() const {
     auto res = r.exec("SELECT id, name FROM authors ORDER BY name");
     std::vector<domain::Author> authors;
     authors.reserve(res.size());
-    for (const auto& row : res) {
+    for (auto row : res) {
         authors.emplace_back(
-            domain::AuthorId::FromString(row[0].as<std::string>()),
-            row[1].as<std::string>()
+            domain::AuthorId::FromString(row[0].c_str()),
+            row[1].c_str()
         );
     }
     return authors;
@@ -54,11 +54,11 @@ std::vector<domain::Book> BookRepositoryImpl::GetAll() const {
     auto res = r.exec("SELECT id, author_id, title, publication_year FROM books ORDER BY title");
     std::vector<domain::Book> books;
     books.reserve(res.size());
-    for (const auto& row : res) {
+    for (auto row : res) {
         books.emplace_back(
-            domain::BookId::FromString(row[0].as<std::string>()),
-            domain::AuthorId::FromString(row[1].as<std::string>()),
-            row[2].as<std::string>(),
+            domain::BookId::FromString(row[0].c_str()),
+            domain::AuthorId::FromString(row[1].c_str()),
+            row[2].c_str(),
             row[3].as<int>()
         );
     }
@@ -74,11 +74,11 @@ std::vector<domain::Book> BookRepositoryImpl::GetByAuthor(const domain::AuthorId
     );
     std::vector<domain::Book> books;
     books.reserve(res.size());
-    for (const auto& row : res) {
+    for (auto row : res) {
         books.emplace_back(
-            domain::BookId::FromString(row[0].as<std::string>()),
-            domain::AuthorId::FromString(row[1].as<std::string>()),
-            row[2].as<std::string>(),
+            domain::BookId::FromString(row[0].c_str()),
+            domain::AuthorId::FromString(row[1].c_str()),
+            row[2].c_str(),
             row[3].as<int>()
         );
     }

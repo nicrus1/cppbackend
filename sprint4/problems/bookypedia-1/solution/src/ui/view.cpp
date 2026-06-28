@@ -13,6 +13,10 @@ using namespace std::literals;
 namespace ph = std::placeholders;
 
 namespace ui {
+
+// Use the detail namespace
+using namespace detail;
+
 namespace detail {
 
 std::ostream& operator<<(std::ostream& out, const AuthorInfo& author) {
@@ -159,7 +163,7 @@ std::vector<detail::AuthorInfo> View::GetAuthors() const {
     auto authors = use_cases_.GetAllAuthors();
     dst_authors.reserve(authors.size());
     for (const auto& author : authors) {
-        AuthorInfo info;
+        detail::AuthorInfo info;
         info.id = author.GetId().ToString();
         info.name = author.GetName();
         dst_authors.push_back(info);
@@ -172,7 +176,7 @@ std::vector<detail::BookInfo> View::GetBooks() const {
     auto books = use_cases_.GetAllBooks();
     books_info.reserve(books.size());
     for (const auto& book : books) {
-        BookInfo info;
+        detail::BookInfo info;
         info.title = book.GetTitle();
         info.publication_year = book.GetPublicationYear();
         books_info.push_back(info);
@@ -185,7 +189,7 @@ std::vector<detail::BookInfo> View::GetAuthorBooks(const std::string& author_id)
     auto books = use_cases_.GetBooksByAuthor(author_id);
     books_info.reserve(books.size());
     for (const auto& book : books) {
-        BookInfo info;
+        detail::BookInfo info;
         info.title = book.GetTitle();
         info.publication_year = book.GetPublicationYear();
         books_info.push_back(info);
