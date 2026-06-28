@@ -27,7 +27,7 @@ int main(int argc, char* argv[]) {
                 "author varchar(100) NOT NULL, "
                 "year integer NOT NULL, "
                 "isbn char(13) UNIQUE"
-                ");"_zv);
+                ")");
             w.commit();
         }
 
