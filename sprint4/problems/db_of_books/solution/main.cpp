@@ -6,11 +6,6 @@
 
 using json = nlohmann::json;
 using namespace std::literals;
-using pqxx::operator"" _zv;
-
-// Константы для подготовленных запросов
-constexpr auto PREP_ADD_BOOK = "add_book"_zv;
-constexpr auto PREP_SELECT_ALL = "select_all"_zv;
 
 int main(int argc, char* argv[]) {
     try {
@@ -22,13 +17,6 @@ int main(int argc, char* argv[]) {
         // Подключение к БД
         pqxx::connection conn{argv[1]};
         
-        // Подготовка запросов
-        conn.prepare(PREP_ADD_BOOK, 
-            "INSERT INTO books (title, author, year, isbn) VALUES ($1, $2, $3, $4)"_zv);
-        conn.prepare(PREP_SELECT_ALL,
-            "SELECT id, title, author, year, isbn FROM books "
-            "ORDER BY year DESC, title ASC, author ASC, isbn ASC"_zv);
-
         // Создание таблицы, если не существует
         {
             pqxx::work w(conn);
@@ -42,6 +30,13 @@ int main(int argc, char* argv[]) {
                 ");"_zv);
             w.commit();
         }
+
+        // Подготовка запросов
+        conn.prepare("add_book", 
+            "INSERT INTO books (title, author, year, isbn) VALUES ($1, $2, $3, $4)");
+        conn.prepare("select_all",
+            "SELECT id, title, author, year, isbn FROM books "
+            "ORDER BY year DESC, title ASC, author ASC, isbn ASC");
 
         // Чтение команд из stdin
         std::string line;
@@ -67,14 +62,13 @@ int main(int argc, char* argv[]) {
                     try {
                         pqxx::work w(conn);
                         if (isbn.has_value()) {
-                            w.exec_prepared(PREP_ADD_BOOK, title, author, year, isbn.value());
+                            w.exec_prepared("add_book", title, author, year, isbn.value());
                         } else {
-                            w.exec_prepared(PREP_ADD_BOOK, title, author, year, nullptr);
+                            w.exec_prepared("add_book", title, author, year, nullptr);
                         }
                         w.commit();
                         std::cout << json{{"result", true}} << std::endl;
                     } catch (const pqxx::sql_error& e) {
-                        // Ошибка дублирования ISBN или другая ошибка SQL
                         std::cout << json{{"result", false}} << std::endl;
                     }
                 }
@@ -84,7 +78,7 @@ int main(int argc, char* argv[]) {
                     
                     for (auto [id, title, author, year, isbn] : 
                          r.query<int, std::string, std::string, int, std::optional<std::string>>(
-                             PREP_SELECT_ALL)) {
+                             "select_all")) {
                         json book;
                         book["id"] = id;
                         book["title"] = title;
@@ -100,7 +94,6 @@ int main(int argc, char* argv[]) {
                     std::cout << result.dump() << std::endl;
                 }
             } catch (const json::parse_error& e) {
-                // Игнорируем некорректный JSON
                 continue;
             }
         }
