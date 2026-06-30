@@ -74,72 +74,93 @@ bool View::AddAuthor(std::istream& cmd_input) const {
             return true;
         }
         use_cases_.AddAuthor(std::move(name));
-    } catch (const std::exception&) {
-        output_ << "Failed to add author"sv << std::endl;
+        output_ << "Author added successfully" << std::endl;
+    } catch (const std::exception& e) {
+        output_ << "Failed to add author: " << e.what() << std::endl;
     }
     return true;
 }
 
 bool View::AddBook(std::istream& cmd_input) const {
     try {
-        // Получаем параметры книги
         detail::AddBookParams params;
         cmd_input >> params.publication_year;
         if (cmd_input.fail()) {
-            output_ << "Failed to add book" << std::endl;
+            output_ << "Failed to add book: invalid publication year" << std::endl;
             return true;
         }
         
         std::getline(cmd_input, params.title);
         boost::algorithm::trim(params.title);
         if (params.title.empty()) {
-            output_ << "Failed to add book" << std::endl;
+            output_ << "Failed to add book: title is empty" << std::endl;
             return true;
         }
 
-        // Выбираем или создаем автора
-        auto author_id = SelectOrCreateAuthor(cmd_input);
+        auto author_id = SelectOrCreateAuthor();
         if (!author_id) {
-            output_ << "Failed to add book" << std::endl;
+            output_ << "Failed to add book: author selection cancelled" << std::endl;
             return true;
         }
         params.author_id = *author_id;
 
-        // Вводим теги
         output_ << "Enter tags (comma separated):" << std::endl;
         std::string tags_line;
         std::getline(input_, tags_line);
         params.tags = NormalizeTags(tags_line);
 
-        // Сохраняем книгу
         use_cases_.AddBook(params.title, params.publication_year, params.author_id, params.tags);
+        output_ << "Book added successfully" << std::endl;
         return true;
-    } catch (const std::exception&) {
-        output_ << "Failed to add book" << std::endl;
+    } catch (const std::exception& e) {
+        output_ << "Failed to add book: " << e.what() << std::endl;
         return true;
     }
 }
 
 bool View::ShowAuthors() const {
-    auto authors = GetAuthors();
-    PrintVector(output_, authors);
+    try {
+        auto authors = GetAuthors();
+        if (authors.empty()) {
+            output_ << "No authors found" << std::endl;
+        } else {
+            PrintVector(output_, authors);
+        }
+    } catch (const std::exception& e) {
+        output_ << "Failed to show authors: " << e.what() << std::endl;
+    }
     return true;
 }
 
 bool View::ShowBooks() const {
-    auto books = GetBooks();
-    PrintVector(output_, books);
+    try {
+        auto books = GetBooks();
+        if (books.empty()) {
+            output_ << "No books found" << std::endl;
+        } else {
+            PrintVector(output_, books);
+        }
+    } catch (const std::exception& e) {
+        output_ << "Failed to show books: " << e.what() << std::endl;
+    }
     return true;
 }
 
 bool View::ShowAuthorBooks() const {
     try {
-        if (auto author_id = SelectAuthor()) {
-            auto books = GetAuthorBooks(*author_id);
+        auto author_id = SelectAuthor();
+        if (!author_id) {
+            output_ << "Author selection cancelled" << std::endl;
+            return true;
+        }
+        auto books = GetAuthorBooks(*author_id);
+        if (books.empty()) {
+            output_ << "No books found for this author" << std::endl;
+        } else {
             PrintVector(output_, books);
         }
-    } catch (const std::exception&) {
-        output_ << "Failed to Show Books" << std::endl;
+    } catch (const std::exception& e) {
+        output_ << "Failed to show author books: " << e.what() << std::endl;
     }
     return true;
 }
@@ -150,33 +171,37 @@ bool View::DeleteAuthor(std::istream& cmd_input) const {
         std::getline(cmd_input, name);
         boost::algorithm::trim(name);
 
-        std::optional<domain::AuthorId> author_id;
+        std::optional<std::string> author_id;
         
         if (name.empty()) {
-            auto id_str = SelectAuthor();
-            if (!id_str) return true;
-            author_id = domain::AuthorId::FromString(*id_str);
+            author_id = SelectAuthor();
+            if (!author_id) {
+                output_ << "Author selection cancelled" << std::endl;
+                return true;
+            }
         } else {
             auto uow = use_cases_.CreateUnitOfWork();
             auto author = uow->Authors().FindByName(name);
             if (!author) {
-                output_ << "Failed to delete author" << std::endl;
+                output_ << "Author not found: " << name << std::endl;
                 return true;
             }
-            author_id = author->GetId();
+            author_id = author->GetId().ToString();
         }
 
         auto uow = use_cases_.CreateUnitOfWork();
-        auto books = uow->Books().GetByAuthor(*author_id);
+        auto author_id_obj = domain::AuthorId::FromString(*author_id);
+        auto books = uow->Books().GetByAuthor(author_id_obj);
         for (const auto& book : books) {
             uow->Tags().DeleteByBook(book.GetId());
             uow->Books().Delete(book.GetId());
         }
-        uow->Authors().Delete(*author_id);
+        uow->Authors().Delete(author_id_obj);
         uow->Commit();
+        output_ << "Author and their books deleted successfully" << std::endl;
         return true;
-    } catch (const std::exception&) {
-        output_ << "Failed to delete author" << std::endl;
+    } catch (const std::exception& e) {
+        output_ << "Failed to delete author: " << e.what() << std::endl;
         return true;
     }
 }
@@ -187,20 +212,22 @@ bool View::EditAuthor(std::istream& cmd_input) const {
         std::getline(cmd_input, name);
         boost::algorithm::trim(name);
 
-        std::optional<domain::AuthorId> author_id;
+        std::optional<std::string> author_id;
         
         if (name.empty()) {
-            auto id_str = SelectAuthor();
-            if (!id_str) return true;
-            author_id = domain::AuthorId::FromString(*id_str);
+            author_id = SelectAuthor();
+            if (!author_id) {
+                output_ << "Author selection cancelled" << std::endl;
+                return true;
+            }
         } else {
             auto uow = use_cases_.CreateUnitOfWork();
             auto author = uow->Authors().FindByName(name);
             if (!author) {
-                output_ << "Failed to edit author" << std::endl;
+                output_ << "Author not found: " << name << std::endl;
                 return true;
             }
-            author_id = author->GetId();
+            author_id = author->GetId().ToString();
         }
 
         output_ << "Enter new name:" << std::endl;
@@ -208,16 +235,17 @@ bool View::EditAuthor(std::istream& cmd_input) const {
         std::getline(input_, new_name);
         boost::algorithm::trim(new_name);
         if (new_name.empty()) {
-            output_ << "Failed to edit author" << std::endl;
+            output_ << "New name cannot be empty" << std::endl;
             return true;
         }
 
         auto uow = use_cases_.CreateUnitOfWork();
-        uow->Authors().Save({*author_id, new_name});
+        uow->Authors().Save({domain::AuthorId::FromString(*author_id), new_name});
         uow->Commit();
+        output_ << "Author updated successfully" << std::endl;
         return true;
-    } catch (const std::exception&) {
-        output_ << "Failed to edit author" << std::endl;
+    } catch (const std::exception& e) {
+        output_ << "Failed to edit author: " << e.what() << std::endl;
         return true;
     }
 }
@@ -232,48 +260,35 @@ bool View::ShowBook(std::istream& cmd_input) const {
         std::vector<domain::Book> books;
         
         if (title.empty()) {
-            // Показываем все книги
             books = uow->Books().GetAll();
-            if (books.empty()) return true;
+            if (books.empty()) {
+                output_ << "No books found" << std::endl;
+                return true;
+            }
         } else {
             books = uow->Books().FindByTitle(title);
-            if (books.empty()) return true;
+            if (books.empty()) {
+                output_ << "No books found with title: " << title << std::endl;
+                return true;
+            }
         }
 
         domain::BookId book_id;
         if (books.size() > 1) {
             auto selected = SelectBook(books);
-            if (!selected) return true;
-            book_id = *selected;
-        } else if (!books.empty()) {
-            book_id = books[0].GetId();
-        } else {
-            return true;
-        }
-
-        auto book = uow->Books().FindById(book_id);
-        if (!book) return true;
-        
-        auto author = uow->Authors().FindById(book->GetAuthorId());
-        if (!author) return true;
-        
-        auto tags = uow->Tags().GetByBook(book_id);
-
-        output_ << "Title: " << book->GetTitle() << std::endl;
-        output_ << "Author: " << author->GetName() << std::endl;
-        output_ << "Publication year: " << book->GetPublicationYear() << std::endl;
-        
-        if (!tags.empty()) {
-            output_ << "Tags: ";
-            for (size_t i = 0; i < tags.size(); ++i) {
-                if (i > 0) output_ << ", ";
-                output_ << tags[i];
+            if (!selected) {
+                output_ << "Book selection cancelled" << std::endl;
+                return true;
             }
-            output_ << std::endl;
+            book_id = *selected;
+        } else {
+            book_id = books[0].GetId();
         }
+
+        DisplayBookDetails(book_id);
         return true;
-    } catch (const std::exception&) {
-        output_ << "Failed to show book" << std::endl;
+    } catch (const std::exception& e) {
+        output_ << "Failed to show book: " << e.what() << std::endl;
         return true;
     }
 }
@@ -290,13 +305,13 @@ bool View::DeleteBook(std::istream& cmd_input) const {
         if (title.empty()) {
             books = uow->Books().GetAll();
             if (books.empty()) {
-                output_ << "Failed to delete book" << std::endl;
+                output_ << "No books found" << std::endl;
                 return true;
             }
         } else {
             books = uow->Books().FindByTitle(title);
             if (books.empty()) {
-                output_ << "Failed to delete book" << std::endl;
+                output_ << "No books found with title: " << title << std::endl;
                 return true;
             }
         }
@@ -304,7 +319,10 @@ bool View::DeleteBook(std::istream& cmd_input) const {
         domain::BookId book_id;
         if (books.size() > 1) {
             auto selected = SelectBook(books);
-            if (!selected) return true;
+            if (!selected) {
+                output_ << "Book selection cancelled" << std::endl;
+                return true;
+            }
             book_id = *selected;
         } else {
             book_id = books[0].GetId();
@@ -313,9 +331,10 @@ bool View::DeleteBook(std::istream& cmd_input) const {
         uow->Tags().DeleteByBook(book_id);
         uow->Books().Delete(book_id);
         uow->Commit();
+        output_ << "Book deleted successfully" << std::endl;
         return true;
-    } catch (const std::exception&) {
-        output_ << "Failed to delete book" << std::endl;
+    } catch (const std::exception& e) {
+        output_ << "Failed to delete book: " << e.what() << std::endl;
         return true;
     }
 }
@@ -332,13 +351,13 @@ bool View::EditBook(std::istream& cmd_input) const {
         if (title.empty()) {
             books = uow->Books().GetAll();
             if (books.empty()) {
-                output_ << "Book not found" << std::endl;
+                output_ << "No books found" << std::endl;
                 return true;
             }
         } else {
             books = uow->Books().FindByTitle(title);
             if (books.empty()) {
-                output_ << "Book not found" << std::endl;
+                output_ << "No books found with title: " << title << std::endl;
                 return true;
             }
         }
@@ -346,7 +365,10 @@ bool View::EditBook(std::istream& cmd_input) const {
         domain::BookId book_id;
         if (books.size() > 1) {
             auto selected = SelectBook(books);
-            if (!selected) return true;
+            if (!selected) {
+                output_ << "Book selection cancelled" << std::endl;
+                return true;
+            }
             book_id = *selected;
         } else {
             book_id = books[0].GetId();
@@ -358,7 +380,6 @@ bool View::EditBook(std::istream& cmd_input) const {
             return true;
         }
 
-        // Редактируем название
         output_ << "Enter new title or empty line to use the current one (" << book->GetTitle() << "):" << std::endl;
         std::string new_title;
         std::getline(input_, new_title);
@@ -367,7 +388,6 @@ bool View::EditBook(std::istream& cmd_input) const {
             new_title = book->GetTitle();
         }
 
-        // Редактируем год
         output_ << "Enter publication year or empty line to use the current one (" << book->GetPublicationYear() << "):" << std::endl;
         std::string year_str;
         std::getline(input_, year_str);
@@ -377,12 +397,11 @@ bool View::EditBook(std::istream& cmd_input) const {
             try {
                 new_year = std::stoi(year_str);
             } catch (const std::exception&) {
-                output_ << "Failed to edit book" << std::endl;
+                output_ << "Invalid year format" << std::endl;
                 return true;
             }
         }
 
-        // Редактируем теги
         auto current_tags = uow->Tags().GetByBook(book_id);
         std::string tags_str;
         for (size_t i = 0; i < current_tags.size(); ++i) {
@@ -397,49 +416,58 @@ bool View::EditBook(std::istream& cmd_input) const {
             new_tags = current_tags;
         }
 
-        // Обновляем книгу
         uow->Books().Save({book_id, book->GetAuthorId(), new_title, new_year});
         uow->Tags().DeleteByBook(book_id);
         for (const auto& tag : new_tags) {
             uow->Tags().Save({book_id, tag});
         }
         uow->Commit();
+        output_ << "Book updated successfully" << std::endl;
         return true;
-    } catch (const std::exception&) {
-        output_ << "Failed to edit book" << std::endl;
+    } catch (const std::exception& e) {
+        output_ << "Failed to edit book: " << e.what() << std::endl;
         return true;
     }
 }
 
-std::optional<detail::AddBookParams> View::GetBookParams(std::istream& cmd_input) const {
-    detail::AddBookParams params;
-
-    cmd_input >> params.publication_year;
-    if (cmd_input.fail()) {
-        output_ << "Failed to add book" << std::endl;
-        return std::nullopt;
+void View::DisplayBookDetails(const domain::BookId& book_id) const {
+    auto uow = use_cases_.CreateUnitOfWork();
+    auto book = uow->Books().FindById(book_id);
+    if (!book) {
+        output_ << "Book not found" << std::endl;
+        return;
     }
     
-    std::getline(cmd_input, params.title);
-    boost::algorithm::trim(params.title);
-    
-    if (params.title.empty()) {
-        output_ << "Failed to add book" << std::endl;
-        return std::nullopt;
+    auto author = uow->Authors().FindById(book->GetAuthorId());
+    if (!author) {
+        output_ << "Author not found" << std::endl;
+        return;
     }
+    
+    auto tags = uow->Tags().GetByBook(book_id);
 
-    auto author_id = SelectAuthor();
-    if (!author_id.has_value())
-        return std::nullopt;
-    else {
-        params.author_id = author_id.value();
-        return params;
+    output_ << "Title: " << book->GetTitle() << std::endl;
+    output_ << "Author: " << author->GetName() << std::endl;
+    output_ << "Publication year: " << book->GetPublicationYear() << std::endl;
+    
+    if (!tags.empty()) {
+        output_ << "Tags: ";
+        for (size_t i = 0; i < tags.size(); ++i) {
+            if (i > 0) output_ << ", ";
+            output_ << tags[i];
+        }
+        output_ << std::endl;
     }
 }
 
 std::optional<std::string> View::SelectAuthor() const {
-    output_ << "Select author:" << std::endl;
     auto authors = GetAuthors();
+    if (authors.empty()) {
+        output_ << "No authors available" << std::endl;
+        return std::nullopt;
+    }
+    
+    output_ << "Select author:" << std::endl;
     PrintVector(output_, authors);
     output_ << "Enter author # or empty line to cancel" << std::endl;
 
@@ -450,20 +478,21 @@ std::optional<std::string> View::SelectAuthor() const {
 
     int author_idx;
     try {
-        author_idx = std::stoi(str);
+        author_idx = std::stoi(str) - 1;
     } catch (std::exception const&) {
-        throw std::runtime_error("Invalid author num");
+        output_ << "Invalid number format" << std::endl;
+        return std::nullopt;
     }
 
-    --author_idx;
     if (author_idx < 0 || author_idx >= static_cast<int>(authors.size())) {
-        throw std::runtime_error("Invalid author num");
+        output_ << "Invalid author number" << std::endl;
+        return std::nullopt;
     }
 
     return authors[author_idx].id;
 }
 
-std::optional<std::string> View::SelectOrCreateAuthor(std::istream& /*cmd_input*/) const {
+std::optional<std::string> View::SelectOrCreateAuthor() const {
     output_ << "Enter author name or empty line to select from list:" << std::endl;
     std::string name;
     std::getline(input_, name);
@@ -495,6 +524,11 @@ std::optional<std::string> View::SelectOrCreateAuthor(std::istream& /*cmd_input*
 }
 
 std::optional<domain::BookId> View::SelectBook(const std::vector<domain::Book>& books) const {
+    if (books.empty()) {
+        output_ << "No books available" << std::endl;
+        return std::nullopt;
+    }
+    
     output_ << "Select book:" << std::endl;
     
     auto uow = use_cases_.CreateUnitOfWork();
@@ -515,14 +549,15 @@ std::optional<domain::BookId> View::SelectBook(const std::vector<domain::Book>& 
 
     int book_idx;
     try {
-        book_idx = std::stoi(str);
+        book_idx = std::stoi(str) - 1;
     } catch (std::exception const&) {
-        throw std::runtime_error("Invalid book num");
+        output_ << "Invalid number format" << std::endl;
+        return std::nullopt;
     }
 
-    --book_idx;
     if (book_idx < 0 || book_idx >= static_cast<int>(books.size())) {
-        throw std::runtime_error("Invalid book num");
+        output_ << "Invalid book number" << std::endl;
+        return std::nullopt;
     }
 
     return books[book_idx].GetId();
@@ -557,7 +592,6 @@ std::vector<detail::BookInfo> View::GetBooks() const {
         books_info.push_back(info);
     }
     
-    // Сортировка по названию, автору, году
     std::sort(books_info.begin(), books_info.end(),
         [](const detail::BookInfo& a, const detail::BookInfo& b) {
             if (a.title != b.title) return a.title < b.title;
@@ -599,29 +633,27 @@ std::vector<std::string> View::NormalizeTags(const std::string& input) const {
     std::vector<std::string> result;
     std::set<std::string> unique_tags;
     
+    if (input.empty()) {
+        return result;
+    }
+    
     std::stringstream ss(input);
     std::string tag;
     
     while (std::getline(ss, tag, ',')) {
-        // Удаляем пробелы в начале и конце
         boost::algorithm::trim(tag);
         
-        // Удаляем лишние пробелы внутри
+        // Remove extra spaces inside
         tag = std::regex_replace(tag, std::regex("\\s+"), " ");
         
-        // Пропускаем пустые теги
         if (tag.empty()) continue;
-        
-        // Проверяем длину
         if (tag.size() > 30) continue;
         
-        // Добавляем только уникальные теги
-        if (unique_tags.find(tag) == unique_tags.end()) {
-            unique_tags.insert(tag);
-            result.push_back(tag);
-        }
+        unique_tags.insert(tag);
     }
     
+    // Return sorted tags
+    result.assign(unique_tags.begin(), unique_tags.end());
     return result;
 }
 

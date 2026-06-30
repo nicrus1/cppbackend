@@ -16,15 +16,15 @@ public:
         , tags_(transaction_) {
     }
 
-    postgres::AuthorRepositoryImpl& Authors() {
+    postgres::AuthorRepositoryImpl& Authors() noexcept {
         return authors_;
     }
 
-    postgres::BookRepositoryImpl& Books() {
+    postgres::BookRepositoryImpl& Books() noexcept {
         return books_;
     }
 
-    postgres::BookTagRepositoryImpl& Tags() {
+    postgres::BookTagRepositoryImpl& Tags() noexcept {
         return tags_;
     }
 

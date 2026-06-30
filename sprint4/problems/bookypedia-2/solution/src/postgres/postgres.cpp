@@ -2,6 +2,7 @@
 
 #include <pqxx/zview.hxx>
 #include <pqxx/result>
+#include <algorithm>
 
 namespace postgres {
 

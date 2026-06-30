@@ -54,16 +54,14 @@ private:
     bool DeleteBook(std::istream& cmd_input) const;
     bool EditBook(std::istream& cmd_input) const;
 
-    // Вспомогательные методы
-    std::optional<detail::AddBookParams> GetBookParams(std::istream& cmd_input) const;
+    void DisplayBookDetails(const domain::BookId& book_id) const;
     std::optional<std::string> SelectAuthor() const;
-    std::optional<std::string> SelectAuthorForCommand(std::istream& cmd_input) const;
+    std::optional<std::string> SelectOrCreateAuthor() const;
     std::optional<domain::BookId> SelectBook(const std::vector<domain::Book>& books) const;
     std::vector<detail::AuthorInfo> GetAuthors() const;
     std::vector<detail::BookInfo> GetBooks() const;
     std::vector<detail::BookInfo> GetAuthorBooks(const std::string& author_id) const;
     std::vector<std::string> NormalizeTags(const std::string& input) const;
-    std::optional<std::string> SelectOrCreateAuthor(std::istream& cmd_input) const;
 
     menu::Menu& menu_;
     app::UseCases& use_cases_;
