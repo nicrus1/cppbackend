@@ -9,6 +9,15 @@ conan_basic_setup(TARGETS)
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
 
+# Добавляем директории для поиска заголовочных файлов
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src/app)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src/domain)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src/menu)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src/ui)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src/postgres)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src/util)
+
 add_library(libbookypedia STATIC
     src/menu/menu.cpp
     src/menu/menu.h
