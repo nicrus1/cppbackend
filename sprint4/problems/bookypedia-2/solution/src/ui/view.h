@@ -4,6 +4,9 @@
 #include <string>
 #include <vector>
 
+#include "../domain/author.h"
+#include "../domain/book.h"
+
 namespace menu {
 class Menu;
 }

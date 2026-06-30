@@ -19,7 +19,7 @@ public:
     std::vector<domain::Author> GetAllAuthors() const override;
     std::vector<domain::Book> GetAllBooks() const override;
     std::vector<domain::Book> GetBooksByAuthor(const std::string& author_id) const override;
-    std::unique_ptr<UnitOfWork> CreateUnitOfWork() override;
+    std::unique_ptr<UnitOfWork> CreateUnitOfWork() const override;  // Добавлен const
 
 private:
     pqxx::connection& connection_;

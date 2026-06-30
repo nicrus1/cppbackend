@@ -5,10 +5,12 @@
 #include <iostream>
 #include <regex>
 #include <set>
+#include <sstream>
 
 #include "../app/use_cases.h"
 #include "../domain/author.h"
 #include "../domain/book.h"
+#include "../domain/book_tag.h"
 #include "../menu/menu.h"
 
 using namespace std::literals;
@@ -136,7 +138,7 @@ bool View::ShowAuthorBooks() const {
             auto books = GetAuthorBooks(*author_id);
             PrintVector(output_, books);
         }
-    } catch (const std::exception& e) {
+    } catch (const std::exception&) {
         output_ << "Failed to Show Books" << std::endl;
     }
     return true;
@@ -454,14 +456,14 @@ std::optional<std::string> View::SelectAuthor() const {
     }
 
     --author_idx;
-    if (author_idx < 0 or author_idx >= authors.size()) {
+    if (author_idx < 0 || author_idx >= static_cast<int>(authors.size())) {
         throw std::runtime_error("Invalid author num");
     }
 
     return authors[author_idx].id;
 }
 
-std::optional<std::string> View::SelectOrCreateAuthor(std::istream& cmd_input) const {
+std::optional<std::string> View::SelectOrCreateAuthor(std::istream& /*cmd_input*/) const {
     output_ << "Enter author name or empty line to select from list:" << std::endl;
     std::string name;
     std::getline(input_, name);
@@ -519,7 +521,7 @@ std::optional<domain::BookId> View::SelectBook(const std::vector<domain::Book>& 
     }
 
     --book_idx;
-    if (book_idx < 0 or book_idx >= books.size()) {
+    if (book_idx < 0 || book_idx >= static_cast<int>(books.size())) {
         throw std::runtime_error("Invalid book num");
     }
 

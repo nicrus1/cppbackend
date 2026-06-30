@@ -41,7 +41,7 @@ std::vector<Book> UseCasesImpl::GetBooksByAuthor(const std::string& author_id) c
     return uow->Books().GetByAuthor(AuthorId::FromString(author_id));
 }
 
-std::unique_ptr<UnitOfWork> UseCasesImpl::CreateUnitOfWork() {
+std::unique_ptr<UnitOfWork> UseCasesImpl::CreateUnitOfWork() const {
     return std::make_unique<UnitOfWork>(connection_);
 }
 

@@ -3,13 +3,13 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include <optional>
 
 #include "../domain/author.h"
 #include "../domain/book.h"
+#include "unit_of_work.h"
 
 namespace app {
-
-class UnitOfWork;
 
 class UseCases {
 public:
@@ -18,7 +18,7 @@ public:
     virtual std::vector<domain::Author> GetAllAuthors() const = 0;
     virtual std::vector<domain::Book> GetAllBooks() const = 0;
     virtual std::vector<domain::Book> GetBooksByAuthor(const std::string& author_id) const = 0;
-    virtual std::unique_ptr<UnitOfWork> CreateUnitOfWork() = 0;
+    virtual std::unique_ptr<UnitOfWork> CreateUnitOfWork() const = 0;
 
 protected:
     ~UseCases() = default;
