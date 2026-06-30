@@ -18,8 +18,8 @@ public:
 
 private:
     pqxx::connection connection_;
-    postgres::Database db_{connection_};
-    app::UseCasesImpl use_cases_{connection_};
+    postgres::Database db_;  // Будет инициализироваться в конструкторе
+    app::UseCasesImpl use_cases_;  // Будет инициализироваться в конструкторе
 };
 
 }  // namespace bookypedia

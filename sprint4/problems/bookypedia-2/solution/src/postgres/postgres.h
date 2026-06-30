@@ -59,14 +59,18 @@ private:
 
 class Database {
 public:
-    explicit Database(pqxx::connection connection);
+    explicit Database(pqxx::connection& connection)  // Принимаем ссылку
+        : connection_{connection} {
+        InitTables();
+    }
 
     pqxx::connection& GetConnection() {
         return connection_;
     }
 
 private:
-    pqxx::connection connection_;
+    void InitTables();
+    pqxx::connection& connection_;
 };
 
 }  // namespace postgres

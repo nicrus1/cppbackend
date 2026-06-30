@@ -210,8 +210,7 @@ void BookTagRepositoryImpl::DeleteByBookAndTag(const domain::BookId& book_id, co
     );
 }
 
-Database::Database(pqxx::connection connection)
-    : connection_{std::move(connection)} {
+void Database::InitTables() {
     pqxx::work work{connection_};
     
     work.exec(R"(
