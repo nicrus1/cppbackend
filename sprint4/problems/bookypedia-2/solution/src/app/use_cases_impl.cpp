@@ -8,7 +8,7 @@ namespace app {
 using namespace domain;
 
 void UseCasesImpl::AddAuthor(const std::string& name) {
-    if (test_authors_) {
+    if (is_test_mode_ && test_authors_) {
         // Тестовый режим
         test_authors_->Save({AuthorId::New(), name});
         return;
@@ -19,7 +19,7 @@ void UseCasesImpl::AddAuthor(const std::string& name) {
 }
 
 void UseCasesImpl::AddBook(const std::string& title, int publication_year, const std::string& author_id, const std::vector<std::string>& tags) {
-    if (test_books_) {
+    if (is_test_mode_ && test_books_) {
         // Тестовый режим
         Book book{BookId::New(), AuthorId::FromString(author_id), title, publication_year};
         test_books_->Save(book);
@@ -38,7 +38,7 @@ void UseCasesImpl::AddBook(const std::string& title, int publication_year, const
 }
 
 std::vector<Author> UseCasesImpl::GetAllAuthors() const {
-    if (test_authors_) {
+    if (is_test_mode_ && test_authors_) {
         return test_authors_->GetAll();
     }
     auto uow = CreateUnitOfWork();
@@ -46,7 +46,7 @@ std::vector<Author> UseCasesImpl::GetAllAuthors() const {
 }
 
 std::vector<Book> UseCasesImpl::GetAllBooks() const {
-    if (test_books_) {
+    if (is_test_mode_ && test_books_) {
         return test_books_->GetAll();
     }
     auto uow = CreateUnitOfWork();
@@ -54,7 +54,7 @@ std::vector<Book> UseCasesImpl::GetAllBooks() const {
 }
 
 std::vector<Book> UseCasesImpl::GetBooksByAuthor(const std::string& author_id) const {
-    if (test_books_) {
+    if (is_test_mode_ && test_books_) {
         return test_books_->GetByAuthor(AuthorId::FromString(author_id));
     }
     auto uow = CreateUnitOfWork();
@@ -62,6 +62,9 @@ std::vector<Book> UseCasesImpl::GetBooksByAuthor(const std::string& author_id) c
 }
 
 std::unique_ptr<UnitOfWork> UseCasesImpl::CreateUnitOfWork() const {
+    if (is_test_mode_) {
+        throw std::runtime_error("Cannot create UnitOfWork in test mode");
+    }
     return std::make_unique<UnitOfWork>(connection_);
 }
 

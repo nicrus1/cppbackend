@@ -12,8 +12,8 @@ using namespace std::literals;
 
 Application::Application(const AppConfig& config)
     : connection_(config.db_url)
-    , db_(std::move(connection_))  // Перемещаем connection
-    , use_cases_(connection_) {    // Передаем ссылку на connection
+    , db_(connection_)
+    , use_cases_(connection_) {
 }
 
 void Application::Run() {

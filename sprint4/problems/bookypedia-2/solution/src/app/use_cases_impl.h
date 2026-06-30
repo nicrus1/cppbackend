@@ -1,5 +1,6 @@
 #pragma once
 #include <pqxx/connection>
+#include <optional>
 
 #include "../domain/author_fwd.h"
 #include "../domain/book.h"
@@ -12,14 +13,16 @@ class UseCasesImpl : public UseCases {
 public:
     // Конструктор для продакшена - принимает connection
     explicit UseCasesImpl(pqxx::connection& connection)
-        : connection_{connection} {
+        : connection_{&connection}
+        , is_test_mode_{false} {
     }
     
     // Конструктор для тестов - принимает репозитории
     UseCasesImpl(domain::AuthorRepository& authors, domain::BookRepository& books)
-        : connection_{nullptr}  // Для тестов connection не нужен
+        : connection_{nullptr}
         , test_authors_{&authors}
-        , test_books_{&books} {
+        , test_books_{&books}
+        , is_test_mode_{true} {
     }
 
     void AddAuthor(const std::string& name) override;
@@ -30,7 +33,7 @@ public:
     std::unique_ptr<UnitOfWork> CreateUnitOfWork() const override;
 
 private:
-    pqxx::connection& connection_;
+    pqxx::connection* connection_;  // Указатель вместо ссылки
     // Для тестов
     domain::AuthorRepository* test_authors_ = nullptr;
     domain::BookRepository* test_books_ = nullptr;
