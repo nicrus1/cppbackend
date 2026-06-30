@@ -62,10 +62,10 @@ std::vector<Book> UseCasesImpl::GetBooksByAuthor(const std::string& author_id) c
 }
 
 std::unique_ptr<UnitOfWork> UseCasesImpl::CreateUnitOfWork() const {
-    if (is_test_mode_) {
+    if (is_test_mode_ || connection_ == nullptr) {
         throw std::runtime_error("Cannot create UnitOfWork in test mode");
     }
-    return std::make_unique<UnitOfWork>(connection_);
+    return std::make_unique<UnitOfWork>(*connection_);  // Разыменовываем указатель
 }
 
 }  // namespace app
