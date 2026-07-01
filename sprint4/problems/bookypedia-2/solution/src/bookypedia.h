@@ -17,9 +17,8 @@ public:
     void Run();
 
 private:
-    pqxx::connection connection_;
     postgres::Database db_;
-    app::UseCasesImpl use_cases_;
+    app::UseCasesImpl use_cases_{db_.GetAuthors(), db_.GetBooks()};
 };
 
 }  // namespace bookypedia

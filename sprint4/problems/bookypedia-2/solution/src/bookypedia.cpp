@@ -11,9 +11,7 @@ namespace bookypedia {
 using namespace std::literals;
 
 Application::Application(const AppConfig& config)
-    : connection_(config.db_url)
-    , db_(connection_)
-    , use_cases_(connection_) {
+    : db_{pqxx::connection{config.db_url}} {
 }
 
 void Application::Run() {

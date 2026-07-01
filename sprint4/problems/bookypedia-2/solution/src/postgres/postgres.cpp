@@ -1,16 +1,16 @@
 #include "postgres.h"
-
 #include <pqxx/zview.hxx>
 #include <pqxx/result>
-#include <algorithm>
 
 namespace postgres {
 
 using namespace std::literals;
 using pqxx::operator"" _zv;
 
+// --- AuthorRepositoryImpl ---
+
 void AuthorRepositoryImpl::Save(const domain::Author& author) {
-    transaction_.exec_params(
+    work_.exec_params(
         R"(
 INSERT INTO authors (id, name) VALUES ($1, $2)
 ON CONFLICT (id) DO UPDATE SET name=$2;
@@ -19,55 +19,34 @@ ON CONFLICT (id) DO UPDATE SET name=$2;
 }
 
 std::vector<domain::Author> AuthorRepositoryImpl::GetAll() const {
-    auto res = transaction_.exec("SELECT id, name FROM authors ORDER BY name");
+    auto res = work_.exec("SELECT id, name FROM authors ORDER BY name");
     std::vector<domain::Author> authors;
     authors.reserve(res.size());
     for (auto row : res) {
-        authors.emplace_back(
-            domain::AuthorId::FromString(row[0].c_str()),
-            row[1].c_str()
-        );
+        authors.emplace_back(domain::AuthorId::FromString(row[0].c_str()), row[1].c_str());
     }
     return authors;
 }
 
+std::optional<domain::Author> AuthorRepositoryImpl::GetByName(const std::string& name) const {
+    auto res = work_.exec_params("SELECT id, name FROM authors WHERE name = $1", name);
+    if (res.empty()) return std::nullopt;
+    return domain::Author{domain::AuthorId::FromString(res[0][0].c_str()), res[0][1].c_str()};
+}
+
 void AuthorRepositoryImpl::Delete(const domain::AuthorId& id) {
-    transaction_.exec_params(
-        "DELETE FROM authors WHERE id = $1",
-        id.ToString()
-    );
+    work_.exec_params("DELETE FROM authors WHERE id = $1", id.ToString());
 }
 
-std::optional<domain::Author> AuthorRepositoryImpl::FindByName(const std::string& name) const {
-    auto res = transaction_.exec_params(
-        "SELECT id, name FROM authors WHERE name = $1",
-        name
-    );
-    if (res.empty()) {
-        return std::nullopt;
-    }
-    return domain::Author{
-        domain::AuthorId::FromString(res[0][0].c_str()),
-        res[0][1].c_str()
-    };
+void AuthorRepositoryImpl::Update(const domain::Author& author) {
+    work_.exec_params("UPDATE authors SET name = $2 WHERE id = $1", author.GetId().ToString(), author.GetName());
 }
 
-std::optional<domain::Author> AuthorRepositoryImpl::FindById(const domain::AuthorId& id) const {
-    auto res = transaction_.exec_params(
-        "SELECT id, name FROM authors WHERE id = $1",
-        id.ToString()
-    );
-    if (res.empty()) {
-        return std::nullopt;
-    }
-    return domain::Author{
-        domain::AuthorId::FromString(res[0][0].c_str()),
-        res[0][1].c_str()
-    };
-}
+
+// --- BookRepositoryImpl ---
 
 void BookRepositoryImpl::Save(const domain::Book& book) {
-    transaction_.exec_params(
+    work_.exec_params(
         R"(
 INSERT INTO books (id, author_id, title, publication_year) VALUES ($1, $2, $3, $4)
 ON CONFLICT (id) DO UPDATE SET 
@@ -82,7 +61,13 @@ ON CONFLICT (id) DO UPDATE SET
 }
 
 std::vector<domain::Book> BookRepositoryImpl::GetAll() const {
-    auto res = transaction_.exec("SELECT id, author_id, title, publication_year FROM books ORDER BY title");
+    // JOIN для сортировки: Название -> Имя автора -> Год
+    auto res = work_.exec(R"(
+SELECT b.id, b.author_id, b.title, b.publication_year 
+FROM books b
+JOIN authors a ON b.author_id = a.id
+ORDER BY b.title ASC, a.name ASC, b.publication_year ASC
+    )");
     std::vector<domain::Book> books;
     books.reserve(res.size());
     for (auto row : res) {
@@ -97,7 +82,7 @@ std::vector<domain::Book> BookRepositoryImpl::GetAll() const {
 }
 
 std::vector<domain::Book> BookRepositoryImpl::GetByAuthor(const domain::AuthorId& author_id) const {
-    auto res = transaction_.exec_params(
+    auto res = work_.exec_params(
         "SELECT id, author_id, title, publication_year FROM books "
         "WHERE author_id = $1 ORDER BY publication_year, title",
         author_id.ToString()
@@ -115,33 +100,9 @@ std::vector<domain::Book> BookRepositoryImpl::GetByAuthor(const domain::AuthorId
     return books;
 }
 
-std::vector<domain::Book> BookRepositoryImpl::FindByTitle(const std::string& title) const {
-    auto res = transaction_.exec_params(
-        "SELECT id, author_id, title, publication_year FROM books "
-        "WHERE title = $1 ORDER BY title",
-        title
-    );
-    std::vector<domain::Book> books;
-    books.reserve(res.size());
-    for (auto row : res) {
-        books.emplace_back(
-            domain::BookId::FromString(row[0].c_str()),
-            domain::AuthorId::FromString(row[1].c_str()),
-            row[2].c_str(),
-            row[3].as<int>()
-        );
-    }
-    return books;
-}
-
-std::optional<domain::Book> BookRepositoryImpl::FindById(const domain::BookId& id) const {
-    auto res = transaction_.exec_params(
-        "SELECT id, author_id, title, publication_year FROM books WHERE id = $1",
-        id.ToString()
-    );
-    if (res.empty()) {
-        return std::nullopt;
-    }
+std::optional<domain::Book> BookRepositoryImpl::GetById(const domain::BookId& id) const {
+    auto res = work_.exec_params("SELECT id, author_id, title, publication_year FROM books WHERE id = $1", id.ToString());
+    if (res.empty()) return std::nullopt;
     return domain::Book{
         domain::BookId::FromString(res[0][0].c_str()),
         domain::AuthorId::FromString(res[0][1].c_str()),
@@ -151,43 +112,30 @@ std::optional<domain::Book> BookRepositoryImpl::FindById(const domain::BookId& i
 }
 
 void BookRepositoryImpl::Delete(const domain::BookId& id) {
-    transaction_.exec_params(
-        "DELETE FROM books WHERE id = $1",
-        id.ToString()
+    work_.exec_params("DELETE FROM books WHERE id = $1", id.ToString());
+}
+
+void BookRepositoryImpl::Update(const domain::Book& book) {
+    work_.exec_params(
+        "UPDATE books SET title = $2, publication_year = $3, author_id = $4 WHERE id = $1",
+        book.GetId().ToString(), book.GetTitle(), book.GetPublicationYear(), book.GetAuthorId().ToString()
     );
 }
 
+// --- BookTagRepositoryImpl ---
+
 void BookTagRepositoryImpl::Save(const domain::BookTag& tag) {
-    transaction_.exec_params(
-        "INSERT INTO book_tags (book_id, tag) VALUES ($1, $2) ON CONFLICT DO NOTHING",
-        tag.GetBookId().ToString(),
-        tag.GetTag()
-    );
+    work_.exec_params("INSERT INTO book_tags (book_id, tag) VALUES ($1, $2)", tag.GetBookId().ToString(), tag.GetTag());
 }
 
 void BookTagRepositoryImpl::SaveAll(const std::vector<domain::BookTag>& tags) {
-    if (tags.empty()) return;
-    
-    std::string query = "INSERT INTO book_tags (book_id, tag) VALUES ";
-    for (size_t i = 0; i < tags.size(); ++i) {
-        if (i > 0) query += ", ";
-        query += "($" + std::to_string(i * 2 + 1) + ", $" + std::to_string(i * 2 + 2) + ")";
-    }
-    query += " ON CONFLICT DO NOTHING";
-    
-    pqxx::params args;
     for (const auto& tag : tags) {
-        args.append(tag.GetBookId().ToString());
-        args.append(tag.GetTag());
+        Save(tag);
     }
-    transaction_.exec_params(query, args);
 }
 
 std::vector<std::string> BookTagRepositoryImpl::GetByBook(const domain::BookId& book_id) const {
-    auto res = transaction_.exec_params(
-        "SELECT tag FROM book_tags WHERE book_id = $1 ORDER BY tag",
-        book_id.ToString()
-    );
+    auto res = work_.exec_params("SELECT tag FROM book_tags WHERE book_id = $1 ORDER BY tag ASC", book_id.ToString());
     std::vector<std::string> tags;
     tags.reserve(res.size());
     for (auto row : res) {
@@ -197,23 +145,20 @@ std::vector<std::string> BookTagRepositoryImpl::GetByBook(const domain::BookId& 
 }
 
 void BookTagRepositoryImpl::DeleteByBook(const domain::BookId& book_id) {
-    transaction_.exec_params(
-        "DELETE FROM book_tags WHERE book_id = $1",
-        book_id.ToString()
-    );
+    work_.exec_params("DELETE FROM book_tags WHERE book_id = $1", book_id.ToString());
 }
 
 void BookTagRepositoryImpl::DeleteByBookAndTag(const domain::BookId& book_id, const std::string& tag) {
-    transaction_.exec_params(
-        "DELETE FROM book_tags WHERE book_id = $1 AND tag = $2",
-        book_id.ToString(),
-        tag
-    );
+    work_.exec_params("DELETE FROM book_tags WHERE book_id = $1 AND tag = $2", book_id.ToString(), tag);
 }
 
-void Database::InitTables() {
+// --- Database ---
+
+Database::Database(pqxx::connection connection)
+    : connection_{std::move(connection)} {
     pqxx::work work{connection_};
     
+    // ON DELETE CASCADE решает проблему ручного удаления зависимостей
     work.exec(R"(
 CREATE TABLE IF NOT EXISTS authors (
     id UUID CONSTRAINT author_id_constraint PRIMARY KEY,
@@ -229,12 +174,11 @@ CREATE TABLE IF NOT EXISTS books (
     publication_year integer NOT NULL
 );
 )"_zv);
-    
+
     work.exec(R"(
 CREATE TABLE IF NOT EXISTS book_tags (
     book_id UUID NOT NULL REFERENCES books(id) ON DELETE CASCADE,
-    tag VARCHAR(30) NOT NULL,
-    PRIMARY KEY (book_id, tag)
+    tag varchar(30) NOT NULL
 );
 )"_zv);
 

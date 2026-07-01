@@ -1,47 +1,26 @@
 #pragma once
-#include <pqxx/connection>
-#include <pqxx/transaction>
-
-#include "../postgres/postgres.h"
+#include <memory>
+#include "../domain/author.h"
+#include "../domain/book.h"
+#include "../domain/book_tag.h"
 
 namespace app {
 
 class UnitOfWork {
 public:
-    explicit UnitOfWork(pqxx::connection& connection)
-        : connection_(connection)
-        , transaction_(connection)
-        , authors_(transaction_)
-        , books_(transaction_)
-        , tags_(transaction_) {
-    }
+    virtual void Commit() = 0;
+    virtual domain::AuthorRepository& Authors() = 0;
+    virtual domain::BookRepository& Books() = 0;
+    virtual domain::BookTagRepository& BookTags() = 0;
+protected:
+    ~UnitOfWork() = default;
+};
 
-    postgres::AuthorRepositoryImpl& Authors() noexcept {
-        return authors_;
-    }
-
-    postgres::BookRepositoryImpl& Books() noexcept {
-        return books_;
-    }
-
-    postgres::BookTagRepositoryImpl& Tags() noexcept {
-        return tags_;
-    }
-
-    void Commit() {
-        transaction_.commit();
-    }
-
-    void Rollback() {
-        transaction_.abort();
-    }
-
-private:
-    pqxx::connection& connection_;
-    pqxx::work transaction_;
-    postgres::AuthorRepositoryImpl authors_;
-    postgres::BookRepositoryImpl books_;
-    postgres::BookTagRepositoryImpl tags_;
+class UnitOfWorkFactory {
+public:
+    virtual std::unique_ptr<UnitOfWork> CreateUnitOfWork() = 0;
+protected:
+    ~UnitOfWorkFactory() = default;
 };
 
 }  // namespace app

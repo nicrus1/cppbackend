@@ -2,7 +2,7 @@
 
 #include "../src/app/use_cases_impl.h"
 #include "../src/domain/author.h"
-#include "../src/domain/book.h"
+#include "../src/domain/book.h" // Добавлен для работы с domain::Book
 
 namespace {
 
@@ -13,11 +13,13 @@ struct MockAuthorRepository : domain::AuthorRepository {
         saved_authors.emplace_back(author);
     }
 
+    // Переопределяем недостающий виртуальный метод
     std::vector<domain::Author> GetAll() const override {
         return saved_authors;
     }
 };
 
+// Добавляем мок для репозитория книг
 struct MockBookRepository : domain::BookRepository {
     std::vector<domain::Book> saved_books;
 
@@ -36,14 +38,14 @@ struct MockBookRepository : domain::BookRepository {
 
 struct Fixture {
     MockAuthorRepository authors;
-    MockBookRepository books;
+    MockBookRepository books; // Добавляем репозиторий книг в фикстуру
 };
 
 }  // namespace
 
 SCENARIO_METHOD(Fixture, "Book Adding") {
     GIVEN("Use cases") {
-        // Используем конструктор для тестов
+        // Теперь передаем оба репозитория
         app::UseCasesImpl use_cases{authors, books};
 
         WHEN("Adding an author") {
