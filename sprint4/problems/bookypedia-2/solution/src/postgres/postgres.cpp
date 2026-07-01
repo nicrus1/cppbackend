@@ -7,8 +7,6 @@ namespace postgres {
 using namespace std::literals;
 using pqxx::operator"" _zv;
 
-// --- AuthorRepositoryImpl ---
-
 void AuthorRepositoryImpl::Save(const domain::Author& author) {
     work_.exec_params(
         R"(
@@ -28,6 +26,12 @@ std::vector<domain::Author> AuthorRepositoryImpl::GetAll() const {
     return authors;
 }
 
+std::optional<domain::Author> AuthorRepositoryImpl::GetById(const domain::AuthorId& id) const {
+    auto res = work_.exec_params("SELECT id, name FROM authors WHERE id = $1", id.ToString());
+    if (res.empty()) return std::nullopt;
+    return domain::Author{domain::AuthorId::FromString(res[0][0].c_str()), res[0][1].c_str()};
+}
+
 std::optional<domain::Author> AuthorRepositoryImpl::GetByName(const std::string& name) const {
     auto res = work_.exec_params("SELECT id, name FROM authors WHERE name = $1", name);
     if (res.empty()) return std::nullopt;
@@ -42,8 +46,6 @@ void AuthorRepositoryImpl::Update(const domain::Author& author) {
     work_.exec_params("UPDATE authors SET name = $2 WHERE id = $1", author.GetId().ToString(), author.GetName());
 }
 
-
-// --- BookRepositoryImpl ---
 
 void BookRepositoryImpl::Save(const domain::Book& book) {
     work_.exec_params(
@@ -61,7 +63,6 @@ ON CONFLICT (id) DO UPDATE SET
 }
 
 std::vector<domain::Book> BookRepositoryImpl::GetAll() const {
-    // JOIN для сортировки: Название -> Имя автора -> Год
     auto res = work_.exec(R"(
 SELECT b.id, b.author_id, b.title, b.publication_year 
 FROM books b
@@ -84,7 +85,7 @@ ORDER BY b.title ASC, a.name ASC, b.publication_year ASC
 std::vector<domain::Book> BookRepositoryImpl::GetByAuthor(const domain::AuthorId& author_id) const {
     auto res = work_.exec_params(
         "SELECT id, author_id, title, publication_year FROM books "
-        "WHERE author_id = $1 ORDER BY publication_year, title",
+        "WHERE author_id = $1 ORDER BY publication_year ASC, title ASC",
         author_id.ToString()
     );
     std::vector<domain::Book> books;
@@ -122,8 +123,6 @@ void BookRepositoryImpl::Update(const domain::Book& book) {
     );
 }
 
-// --- BookTagRepositoryImpl ---
-
 void BookTagRepositoryImpl::Save(const domain::BookTag& tag) {
     work_.exec_params("INSERT INTO book_tags (book_id, tag) VALUES ($1, $2)", tag.GetBookId().ToString(), tag.GetTag());
 }
@@ -152,13 +151,11 @@ void BookTagRepositoryImpl::DeleteByBookAndTag(const domain::BookId& book_id, co
     work_.exec_params("DELETE FROM book_tags WHERE book_id = $1 AND tag = $2", book_id.ToString(), tag);
 }
 
-// --- Database ---
 
 Database::Database(pqxx::connection connection)
     : connection_{std::move(connection)} {
     pqxx::work work{connection_};
     
-    // ON DELETE CASCADE решает проблему ручного удаления зависимостей
     work.exec(R"(
 CREATE TABLE IF NOT EXISTS authors (
     id UUID CONSTRAINT author_id_constraint PRIMARY KEY,

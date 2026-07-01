@@ -1,9 +1,10 @@
 #pragma once
 #include <string>
 #include <vector>
+#include <optional>
 
 #include "../util/tagged_uuid.h"
-#include "author.h"  // For AuthorId
+#include "author.h"
 
 namespace domain {
 
@@ -50,6 +51,9 @@ public:
     virtual void Save(const Book& book) = 0;
     virtual std::vector<Book> GetAll() const = 0;
     virtual std::vector<Book> GetByAuthor(const AuthorId& author_id) const = 0;
+    virtual std::optional<Book> GetById(const BookId& id) const = 0;
+    virtual void Delete(const BookId& id) = 0;
+    virtual void Update(const Book& book) = 0;
 
 protected:
     ~BookRepository() = default;

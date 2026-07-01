@@ -17,8 +17,9 @@ public:
     void Save(const domain::Author& author) override;
     std::vector<domain::Author> GetAll() const override;
     void Delete(const domain::AuthorId& id) override;
+    std::optional<domain::Author> GetById(const domain::AuthorId& id) const override;
+    void Update(const domain::Author& author) override;
     std::optional<domain::Author> GetByName(const std::string& name) const;
-    void Update(const domain::Author& author);
 
 private:
     pqxx::work& work_;
@@ -31,9 +32,9 @@ public:
     void Save(const domain::Book& book) override;
     std::vector<domain::Book> GetAll() const override;
     std::vector<domain::Book> GetByAuthor(const domain::AuthorId& author_id) const override;
-    void Delete(const domain::BookId& id); // Пока не добавляем override, так как в book.h его еще нет
-    std::optional<domain::Book> GetById(const domain::BookId& id) const;
-    void Update(const domain::Book& book);
+    void Delete(const domain::BookId& id) override;
+    std::optional<domain::Book> GetById(const domain::BookId& id) const override;
+    void Update(const domain::Book& book) override;
 
 private:
     pqxx::work& work_;
@@ -53,7 +54,6 @@ private:
     pqxx::work& work_;
 };
 
-// Реализация UnitOfWork
 class UnitOfWorkImpl : public app::UnitOfWork {
 public:
     explicit UnitOfWorkImpl(pqxx::connection& connection)
@@ -79,7 +79,6 @@ private:
     BookTagRepositoryImpl tags_;
 };
 
-// Фабрика транзакций
 class UnitOfWorkFactoryImpl : public app::UnitOfWorkFactory {
 public:
     explicit UnitOfWorkFactoryImpl(pqxx::connection& connection)
