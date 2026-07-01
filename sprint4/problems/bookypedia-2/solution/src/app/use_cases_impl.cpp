@@ -44,12 +44,7 @@ void UseCasesImpl::DeleteAuthor(const std::string& author_id) {
         throw std::runtime_error("Author not found");
     }
     
-    // Сначала удаляем все книги автора (каскадное удаление через БД)
-    auto books = uow->Books().GetByAuthor(id);
-    for (const auto& book : books) {
-        uow->Books().Delete(book.GetId());
-    }
-    
+    // Удаляем автора. Все книги и их теги удалятся каскадно благодаря ON DELETE CASCADE в PostgreSQL.
     uow->Authors().Delete(id);
     uow->Commit();
 }

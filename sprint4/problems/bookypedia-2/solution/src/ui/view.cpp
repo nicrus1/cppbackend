@@ -71,7 +71,10 @@ bool View::DeleteAuthor(std::istream& cmd_input) const {
         
         if (author_input.empty()) {
             auto optional_author_id = SelectAuthor();
-            if (!optional_author_id) return true; 
+            if (!optional_author_id) {
+                output_ << "Failed to delete author" << std::endl;
+                return true; 
+            }
             author_id = *optional_author_id;
         } else {
             // Check if input is a number (index)
@@ -122,7 +125,10 @@ bool View::EditAuthor(std::istream& cmd_input) const {
         
         if (author_input.empty()) {
             auto optional_author_id = SelectAuthor();
-            if (!optional_author_id) return true;
+            if (!optional_author_id) {
+                output_ << "Failed to edit author" << std::endl;
+                return true;
+            }
             author_id = *optional_author_id;
         } else {
             // Check if input is a number (index)
@@ -203,7 +209,10 @@ bool View::AddBook(std::istream& cmd_input) const {
         
         if (author_name.empty()) {
             auto optional_author_id = SelectAuthor();
-            if (!optional_author_id) return true;
+            if (!optional_author_id) {
+                output_ << "Failed to add book" << std::endl;
+                return true;
+            }
             author_id = *optional_author_id;
         } else {
             auto authors = use_cases_.GetAllAuthors();
@@ -367,9 +376,11 @@ bool View::DeleteBook(std::istream& cmd_input) const {
         boost::trim(title);
 
         auto book_opt = SelectBook(title);
-        if (book_opt) {
-            use_cases_.DeleteBook(book_opt->GetId().ToString());
+        if (!book_opt) {
+            output_ << "Failed to delete book" << std::endl;
+            return true;
         }
+        use_cases_.DeleteBook(book_opt->GetId().ToString());
     } catch (const std::exception& e) {
         output_ << "Failed to delete book" << std::endl;
     }
@@ -383,7 +394,10 @@ bool View::EditBook(std::istream& cmd_input) const {
         boost::trim(title);
 
         auto book_opt = SelectBook(title);
-        if (!book_opt) return true;
+        if (!book_opt) {
+            output_ << "Failed to edit book" << std::endl;
+            return true;
+        }
 
         auto book = *book_opt;
 
