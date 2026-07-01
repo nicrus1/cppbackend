@@ -283,7 +283,7 @@ std::optional<domain::Book> View::SelectBook(const std::string& title_filter) co
             if (b.GetTitle() == title_filter) matches.push_back(b);
         }
         if (matches.empty()) {
-            output_ << "No book found" << std::endl;
+            output_ << "Book not found" << std::endl;
             return std::nullopt;
         }
         if (matches.size() == 1) return matches.front();
@@ -292,7 +292,7 @@ std::optional<domain::Book> View::SelectBook(const std::string& title_filter) co
     }
     
     if (matches.empty()) {
-        output_ << "No books found" << std::endl;
+        output_ << "Book not found" << std::endl;
         return std::nullopt;
     }
     
