@@ -124,7 +124,7 @@ struct MockUnitOfWorkFactory : app::UnitOfWorkFactory {
 
     std::unique_ptr<app::UnitOfWork> CreateUnitOfWork() override {
         auto uow = std::make_unique<MockUnitOfWork>();
-        last_uow = uow.get();  // Сохраняем сырой указатель
+        last_uow = uow.get();
         return uow;
     }
 };
