@@ -350,7 +350,12 @@ bool View::EditBook(std::istream& cmd_input) const {
         std::string new_title;
         std::getline(input_, new_title);
         boost::trim(new_title);
-        if (new_title.empty()) new_title = book.GetTitle();
+        
+        // Если пользователь ввел пустую строку для названия - отменяем операцию
+        if (new_title.empty()) {
+            output_ << "Operation cancelled" << std::endl;
+            return true;
+        }
 
         output_ << "Enter publication year:" << std::endl;
         std::string year_str;
@@ -360,7 +365,9 @@ bool View::EditBook(std::istream& cmd_input) const {
         if (!year_str.empty()) {
             try {
                 new_year = std::stoi(year_str);
-            } catch (...) {}
+            } catch (...) {
+                // Если введен невалидный год, оставляем старый
+            }
         }
 
         auto tags = use_cases_.GetBookTags(book.GetId().ToString());
@@ -371,7 +378,7 @@ bool View::EditBook(std::istream& cmd_input) const {
         std::getline(input_, new_tags_str);
         boost::trim(new_tags_str);
 
-        // Если передана пустая строка, мы используем ее как сигнал для сброса тегов (ожидаемое поведение в тестах)
+        // Если передана пустая строка для тегов, используем ее как сигнал для сброса тегов
         use_cases_.EditBook(book.GetId().ToString(), new_title, new_year, new_tags_str);
     } catch (const std::exception& e) {
         output_ << "Failed to edit book" << std::endl;
