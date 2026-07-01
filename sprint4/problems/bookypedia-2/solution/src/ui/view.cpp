@@ -14,13 +14,13 @@ using namespace std::literals;
 namespace ph = std::placeholders;
 
 namespace ui {
-using namespace detail;
-
 namespace detail {
+
 std::ostream& operator<<(std::ostream& out, const AuthorInfo& author) {
     out << author.name;
     return out;
 }
+
 }  // namespace detail
 
 template <typename T>
@@ -252,7 +252,6 @@ std::optional<domain::Book> View::SelectBook(const std::string& title_filter) co
             if (b.GetTitle() == title_filter) matches.push_back(b);
         }
         if (matches.empty()) {
-            output_ << "Book not found" << std::endl;
             return std::nullopt;
         }
         if (matches.size() == 1) return matches.front();
@@ -261,7 +260,7 @@ std::optional<domain::Book> View::SelectBook(const std::string& title_filter) co
     }
     
     if (matches.empty()) {
-        output_ << "Book not found" << std::endl;
+        output_ << "No books found" << std::endl;
         return std::nullopt;
     }
     
@@ -342,17 +341,19 @@ bool View::EditBook(std::istream& cmd_input) const {
         boost::trim(title);
 
         auto book_opt = SelectBook(title);
-        if (!book_opt) return true;
+        if (!book_opt) {
+            return true;
+        }
 
         auto book = *book_opt;
 
-        output_ << "Enter new title:" << std::endl;
+        output_ << "Enter new title or empty line to use the current one (" << book.GetTitle() << "):" << std::endl;
         std::string new_title;
         std::getline(input_, new_title);
         boost::trim(new_title);
         if (new_title.empty()) new_title = book.GetTitle();
 
-        output_ << "Enter publication year:" << std::endl;
+        output_ << "Enter publication year or empty line to use the current one (" << book.GetPublicationYear() << "):" << std::endl;
         std::string year_str;
         std::getline(input_, year_str);
         boost::trim(year_str);
@@ -371,7 +372,6 @@ bool View::EditBook(std::istream& cmd_input) const {
         std::getline(input_, new_tags_str);
         boost::trim(new_tags_str);
 
-        // Если передана пустая строка, мы используем ее как сигнал для сброса тегов (ожидаемое поведение в тестах)
         use_cases_.EditBook(book.GetId().ToString(), new_title, new_year, new_tags_str);
     } catch (const std::exception& e) {
         output_ << "Failed to edit book" << std::endl;
