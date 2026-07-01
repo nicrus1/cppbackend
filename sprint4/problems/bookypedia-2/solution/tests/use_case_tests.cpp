@@ -17,6 +17,10 @@ struct MockAuthorRepository : domain::AuthorRepository {
     std::vector<domain::Author> GetAll() const override {
         return saved_authors;
     }
+
+    void Delete(const domain::AuthorId& /*id*/) override {
+        // Мок-реализация - ничего не делаем
+    }
 };
 
 struct MockBookRepository : domain::BookRepository {
