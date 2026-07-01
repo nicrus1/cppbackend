@@ -53,7 +53,7 @@ private:
 
     std::optional<detail::AddBookParams> GetBookParams(std::istream& cmd_input) const;
     std::optional<std::string> SelectAuthor() const;
-    std::optional<domain::Book> SelectBook(const std::string& title_filter) const;
+    std::optional<domain::Book> SelectBook(const std::string& title_filter, bool silent = false) const;
     std::vector<detail::AuthorInfo> GetAuthors() const;
     std::vector<detail::BookInfo> GetBooks() const;
     std::vector<detail::BookInfo> GetAuthorBooks(const std::string& author_id) const;

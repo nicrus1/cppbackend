@@ -243,7 +243,7 @@ bool View::ShowAuthorBooks() const {
     return true;
 }
 
-std::optional<domain::Book> View::SelectBook(const std::string& title_filter) const {
+std::optional<domain::Book> View::SelectBook(const std::string& title_filter, bool silent) const {
     auto books = use_cases_.GetAllBooks();
     std::vector<domain::Book> matches;
     
@@ -252,6 +252,9 @@ std::optional<domain::Book> View::SelectBook(const std::string& title_filter) co
             if (b.GetTitle() == title_filter) matches.push_back(b);
         }
         if (matches.empty()) {
+            if (!silent) {
+                output_ << "Book not found" << std::endl;
+            }
             return std::nullopt;
         }
         if (matches.size() == 1) return matches.front();
@@ -260,7 +263,9 @@ std::optional<domain::Book> View::SelectBook(const std::string& title_filter) co
     }
     
     if (matches.empty()) {
-        output_ << "No books found" << std::endl;
+        if (!silent) {
+            output_ << "No books found" << std::endl;
+        }
         return std::nullopt;
     }
     
@@ -298,7 +303,7 @@ bool View::ShowBook(std::istream& cmd_input) const {
         std::getline(cmd_input, title);
         boost::trim(title);
 
-        auto book_opt = SelectBook(title);
+        auto book_opt = SelectBook(title, false);
         if (!book_opt) return true;
 
         auto author_opt = use_cases_.GetAuthorById(book_opt->GetAuthorId().ToString());
@@ -324,7 +329,7 @@ bool View::DeleteBook(std::istream& cmd_input) const {
         std::getline(cmd_input, title);
         boost::trim(title);
 
-        auto book_opt = SelectBook(title);
+        auto book_opt = SelectBook(title, false);
         if (book_opt) {
             use_cases_.DeleteBook(book_opt->GetId().ToString());
         }
@@ -340,7 +345,7 @@ bool View::EditBook(std::istream& cmd_input) const {
         std::getline(cmd_input, title);
         boost::trim(title);
 
-        auto book_opt = SelectBook(title);
+        auto book_opt = SelectBook(title, false);
         if (!book_opt) {
             return true;
         }
