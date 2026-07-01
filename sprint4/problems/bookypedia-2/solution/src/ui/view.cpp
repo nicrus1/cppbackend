@@ -341,9 +341,7 @@ bool View::EditBook(std::istream& cmd_input) const {
 
         auto book_opt = SelectBook(title);
         if (!book_opt) {
-            if (!title.empty()) {
-                output_ << "Book not found" << std::endl;
-            }
+            output_ << "Book not found" << std::endl;
             return true;
         }
 
