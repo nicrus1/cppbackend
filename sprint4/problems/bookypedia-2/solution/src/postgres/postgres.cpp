@@ -1,5 +1,5 @@
 #include "postgres.h"
-#include <pqxx/zview>
+#include <pqxx/zview.hxx>
 #include <pqxx/result>
 
 namespace postgres {
@@ -113,9 +113,6 @@ std::optional<domain::Book> BookRepositoryImpl::GetById(const domain::BookId& id
 }
 
 void BookRepositoryImpl::Delete(const domain::BookId& id) {
-    // Сначала удаляем теги книги
-    work_.exec_params("DELETE FROM book_tags WHERE book_id = $1", id.ToString());
-    // Затем удаляем книгу
     work_.exec_params("DELETE FROM books WHERE id = $1", id.ToString());
 }
 
