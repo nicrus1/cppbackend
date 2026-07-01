@@ -14,6 +14,7 @@ public:
     }
 
     std::string AddAuthor(const std::string& name) override;
+    void DeleteAuthor(const std::string& author_id) override;
     void AddBook(const std::string& title, int publication_year, const std::string& author_id, const std::string& tags = "") override;
     std::vector<domain::Author> GetAllAuthors() const override;
     std::vector<domain::Book> GetAllBooks() const override;

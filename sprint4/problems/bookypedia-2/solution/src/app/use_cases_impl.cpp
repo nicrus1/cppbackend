@@ -36,6 +36,12 @@ std::string UseCasesImpl::AddAuthor(const std::string& name) {
     return new_id.ToString();
 }
 
+void UseCasesImpl::DeleteAuthor(const std::string& author_id) {
+    auto uow = uow_factory_.CreateUnitOfWork();
+    uow->Authors().Delete(AuthorId::FromString(author_id));
+    uow->Commit();
+}
+
 void UseCasesImpl::AddBook(const std::string& title, int publication_year, const std::string& author_id, const std::string& tags) {
     auto uow = uow_factory_.CreateUnitOfWork();
     

@@ -34,6 +34,7 @@ void PrintVector(std::ostream& out, const std::vector<T>& vector) {
 View::View(menu::Menu& menu, app::UseCases& use_cases, std::istream& input, std::ostream& output)
     : menu_{menu}, use_cases_{use_cases}, input_{input}, output_{output} {
     menu_.AddAction("AddAuthor"s, "name"s, "Adds author"s, std::bind(&View::AddAuthor, this, ph::_1));
+    menu_.AddAction("DeleteAuthor"s, {} , "Delete author"s, std::bind(&View::DeleteAuthor, this, ph::_1));
     menu_.AddAction("AddBook"s, "<pub year> <title>"s, "Adds book"s, std::bind(&View::AddBook, this, ph::_1));
     menu_.AddAction("ShowAuthors"s, {}, "Show authors"s, std::bind(&View::ShowAuthors, this));
     menu_.AddAction("ShowBooks"s, {}, "Show books"s, std::bind(&View::ShowBooks, this));
@@ -52,6 +53,45 @@ bool View::AddAuthor(std::istream& cmd_input) const {
         use_cases_.AddAuthor(std::move(name));
     } catch (...) {
         output_ << "Failed to add author"sv << std::endl;
+    }
+    return true;
+}
+
+bool View::DeleteAuthor(std::istream& cmd_input) const {
+    try {
+        output_ << "Enter author name or empty line to select from list:" << std::endl;
+        std::string author_name;
+        std::getline(input_, author_name);
+        boost::trim(author_name);
+
+        std::string author_id;
+        
+        if (author_name.empty()) {
+            auto optional_author_id = SelectAuthor();
+            if (!optional_author_id) {
+                return true; 
+            }
+            author_id = *optional_author_id;
+        } else {
+            auto authors = use_cases_.GetAllAuthors();
+            bool found = false;
+            for (const auto& a : authors) {
+                if (a.GetName() == author_name) {
+                    author_id = a.GetId().ToString();
+                    found = true;
+                    break;
+                }
+            }
+
+            if (!found) {
+                output_ << "Failed to delete author" << std::endl;
+                return true;
+            }
+        }
+
+        use_cases_.DeleteAuthor(author_id);
+    } catch (...) {
+        output_ << "Failed to delete author"sv << std::endl;
     }
     return true;
 }
@@ -90,7 +130,6 @@ bool View::AddBook(std::istream& cmd_input) const {
             if (!optional_author_id) return true;
             author_id = *optional_author_id;
         } else {
-            // Проверка, существует ли автор
             auto authors = use_cases_.GetAllAuthors();
             bool found = false;
             for (const auto& a : authors) {
