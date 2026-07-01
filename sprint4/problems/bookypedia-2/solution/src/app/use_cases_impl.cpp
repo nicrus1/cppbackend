@@ -20,6 +20,9 @@ namespace {
             boost::trim(tag);
             if (tag.empty()) continue;
             tag = std::regex_replace(tag, multiple_spaces, " ");
+            if (tag.length() > 30) {
+                tag = tag.substr(0, 30); // Защита от превышения длины тега
+            }
             unique_tags.insert(tag);
         }
         return {unique_tags.begin(), unique_tags.end()};
@@ -44,7 +47,13 @@ void UseCasesImpl::DeleteAuthor(const std::string& author_id) {
         throw std::runtime_error("Author not found");
     }
     
-    // Удаляем автора. Все книги и их теги удалятся каскадно благодаря ON DELETE CASCADE в PostgreSQL.
+    // Явно удаляем теги и книги автора для предотвращения нарушения внешних ключей
+    auto books = uow->Books().GetByAuthor(id);
+    for (const auto& book : books) {
+        uow->BookTags().DeleteByBook(book.GetId());
+        uow->Books().Delete(book.GetId());
+    }
+    
     uow->Authors().Delete(id);
     uow->Commit();
 }

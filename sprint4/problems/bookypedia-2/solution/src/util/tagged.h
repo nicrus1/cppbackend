@@ -3,28 +3,6 @@
 
 namespace util {
 
-/**
- * Вспомогательный шаблонный класс "Маркированный тип".
- * С его помощью можно описать строгий тип на основе другого типа.
- * Пример:
- *
- *  struct AddressTag{}; // метка типа для строки, хранящей адрес
- *  using Address = util::Tagged<std::string, AddressTag>;
- *
- *  struct NameTag{}; // метка типа для строки, хранящей имя
- *  using Name = util::Tagged<std::string, NameTag>;
- *
- *  struct Person {
- *      Name name;
- *      Address address;
- *  };
- *
- *  Name name{"Harry Potter"s};
- *  Address address{"4 Privet Drive, Little Whinging, Surrey, England"s};
- *
- * Person p1{name, address}; // OK
- * Person p2{address, name}; // Ошибка, Address и Name - разные типы
- */
 template <typename Value, typename Tag>
 class Tagged {
 public:
