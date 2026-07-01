@@ -62,6 +62,8 @@ public:
         , books_{work_}
         , tags_{work_} {}
 
+    ~UnitOfWorkImpl() override = default;
+
     void Commit() override {
         work_.commit();
     }
@@ -83,6 +85,8 @@ public:
     explicit UnitOfWorkFactoryImpl(pqxx::connection& connection)
         : connection_{connection} {}
 
+    ~UnitOfWorkFactoryImpl() override = default;
+
     std::unique_ptr<app::UnitOfWork> CreateUnitOfWork() override {
         return std::make_unique<UnitOfWorkImpl>(connection_);
     }
@@ -94,6 +98,8 @@ private:
 class Database {
 public:
     explicit Database(pqxx::connection connection);
+
+    ~Database() = default;
 
     pqxx::connection& GetConnection() { return connection_; }
 

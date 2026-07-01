@@ -1,6 +1,7 @@
 #pragma once
 #include <string>
 #include <vector>
+#include <stdexcept>
 #include "book.h"
 
 namespace domain {
@@ -36,8 +37,7 @@ public:
     virtual void DeleteByBook(const BookId& book_id) = 0;
     virtual void DeleteByBookAndTag(const BookId& book_id, const std::string& tag) = 0;
 
-protected:
-    ~BookTagRepository() = default;
+    virtual ~BookTagRepository() = default;
 };
 
 }  // namespace domain

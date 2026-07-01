@@ -69,8 +69,6 @@ std::vector<Book> UseCasesImpl::GetBooksByAuthor(const std::string& author_id) c
 }
 
 std::optional<Author> UseCasesImpl::GetAuthorByName(const std::string& name) const {
-    // Этот метод требует доступа к специфическим методам репозитория
-    // Возвращаем пустой optional, если не можем найти
     auto authors = GetAllAuthors();
     for (const auto& author : authors) {
         if (author.GetName() == name) {

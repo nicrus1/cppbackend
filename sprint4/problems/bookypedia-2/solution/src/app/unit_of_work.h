@@ -12,15 +12,13 @@ public:
     virtual domain::AuthorRepository& Authors() = 0;
     virtual domain::BookRepository& Books() = 0;
     virtual domain::BookTagRepository& BookTags() = 0;
-protected:
-    ~UnitOfWork() = default;
+    virtual ~UnitOfWork() = default;  // Делаем публичным
 };
 
 class UnitOfWorkFactory {
 public:
     virtual std::unique_ptr<UnitOfWork> CreateUnitOfWork() = 0;
-protected:
-    ~UnitOfWorkFactory() = default;
+    virtual ~UnitOfWorkFactory() = default;  // Делаем публичным
 };
 
 }  // namespace app
