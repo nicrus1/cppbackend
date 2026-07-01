@@ -20,6 +20,9 @@ namespace {
             boost::trim(tag);
             if (tag.empty()) continue;
             tag = std::regex_replace(tag, multiple_spaces, " ");
+            if (tag.length() > 30) {
+                tag = tag.substr(0, 30); // Защита от превышения длины тега
+            }
             unique_tags.insert(tag);
         }
         return {unique_tags.begin(), unique_tags.end()};

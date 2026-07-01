@@ -74,7 +74,6 @@ bool View::DeleteAuthor(std::istream& cmd_input) const {
             if (!optional_author_id) return true; 
             author_id = *optional_author_id;
         } else {
-            // Ищем строго по имени, убрана ошибочная проверка на is_number
             auto authors = use_cases_.GetAllAuthors();
             auto it = std::find_if(authors.begin(), authors.end(), 
                 [&](const auto& a){ return a.GetName() == author_name; });
@@ -372,11 +371,7 @@ bool View::EditBook(std::istream& cmd_input) const {
         std::getline(input_, new_tags_str);
         boost::trim(new_tags_str);
 
-        // Если пользователь вводит пустую строку, сохраняем текущие теги
-        if (new_tags_str.empty()) {
-            new_tags_str = tags_joined;
-        }
-
+        // Если передана пустая строка, мы используем ее как сигнал для сброса тегов (ожидаемое поведение в тестах)
         use_cases_.EditBook(book.GetId().ToString(), new_title, new_year, new_tags_str);
     } catch (const std::exception& e) {
         output_ << "Failed to edit book" << std::endl;
