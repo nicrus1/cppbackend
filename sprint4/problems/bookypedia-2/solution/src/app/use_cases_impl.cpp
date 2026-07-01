@@ -108,9 +108,6 @@ void UseCasesImpl::DeleteBook(const std::string& book_id) {
         throw std::runtime_error("Book not found");
     }
     
-    // Удаляем теги книги
-    uow->BookTags().DeleteByBook(id);
-    
     uow->Books().Delete(id);
     uow->Commit();
 }
