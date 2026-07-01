@@ -44,6 +44,12 @@ void UseCasesImpl::DeleteAuthor(const std::string& author_id) {
         throw std::runtime_error("Author not found");
     }
     
+    // Сначала удаляем все книги автора (каскадное удаление через БД)
+    auto books = uow->Books().GetByAuthor(id);
+    for (const auto& book : books) {
+        uow->Books().Delete(book.GetId());
+    }
+    
     uow->Authors().Delete(id);
     uow->Commit();
 }
@@ -106,6 +112,9 @@ void UseCasesImpl::DeleteBook(const std::string& book_id) {
     if (!book_opt) {
         throw std::runtime_error("Book not found");
     }
+    
+    // Удаляем теги книги
+    uow->BookTags().DeleteByBook(id);
     
     uow->Books().Delete(id);
     uow->Commit();
