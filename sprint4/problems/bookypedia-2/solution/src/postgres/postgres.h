@@ -95,6 +95,8 @@ class Database {
 public:
     explicit Database(pqxx::connection connection);
 
+    pqxx::connection& GetConnection() { return connection_; }
+
     UnitOfWorkFactoryImpl& GetUnitOfWorkFactory() {
         return uow_factory_;
     }

@@ -2,7 +2,8 @@
 
 #include "../src/app/use_cases_impl.h"
 #include "../src/domain/author.h"
-#include "../src/domain/book.h" // Добавлен для работы с domain::Book
+#include "../src/domain/book.h"
+#include "../src/app/unit_of_work.h"
 
 namespace {
 
@@ -13,13 +14,11 @@ struct MockAuthorRepository : domain::AuthorRepository {
         saved_authors.emplace_back(author);
     }
 
-    // Переопределяем недостающий виртуальный метод
     std::vector<domain::Author> GetAll() const override {
         return saved_authors;
     }
 };
 
-// Добавляем мок для репозитория книг
 struct MockBookRepository : domain::BookRepository {
     std::vector<domain::Book> saved_books;
 
@@ -32,30 +31,98 @@ struct MockBookRepository : domain::BookRepository {
     }
 
     std::vector<domain::Book> GetByAuthor(const domain::AuthorId& /*author_id*/) const override {
-        return {}; // Заглушка для тестов
+        return {};
+    }
+};
+
+struct MockBookTagRepository : domain::BookTagRepository {
+    std::vector<domain::BookTag> saved_tags;
+
+    void Save(const domain::BookTag& tag) override {
+        saved_tags.emplace_back(tag);
+    }
+
+    void SaveAll(const std::vector<domain::BookTag>& tags) override {
+        for (const auto& tag : tags) {
+            saved_tags.emplace_back(tag);
+        }
+    }
+
+    std::vector<std::string> GetByBook(const domain::BookId& /*book_id*/) const override {
+        return {};
+    }
+
+    void DeleteByBook(const domain::BookId& /*book_id*/) override {}
+    void DeleteByBookAndTag(const domain::BookId& /*book_id*/, const std::string& /*tag*/) override {}
+};
+
+struct MockUnitOfWork : app::UnitOfWork {
+    MockAuthorRepository authors;
+    MockBookRepository books;
+    MockBookTagRepository tags;
+    bool committed = false;
+
+    void Commit() override {
+        committed = true;
+    }
+
+    domain::AuthorRepository& Authors() override {
+        return authors;
+    }
+
+    domain::BookRepository& Books() override {
+        return books;
+    }
+
+    domain::BookTagRepository& BookTags() override {
+        return tags;
+    }
+};
+
+struct MockUnitOfWorkFactory : app::UnitOfWorkFactory {
+    std::unique_ptr<MockUnitOfWork> last_uow;
+
+    std::unique_ptr<app::UnitOfWork> CreateUnitOfWork() override {
+        auto uow = std::make_unique<MockUnitOfWork>();
+        last_uow = uow.get();
+        return uow;
     }
 };
 
 struct Fixture {
-    MockAuthorRepository authors;
-    MockBookRepository books; // Добавляем репозиторий книг в фикстуру
+    MockUnitOfWorkFactory factory;
+    app::UseCasesImpl use_cases{factory};
 };
 
 }  // namespace
 
-SCENARIO_METHOD(Fixture, "Book Adding") {
+SCENARIO_METHOD(Fixture, "Author Adding") {
     GIVEN("Use cases") {
-        // Теперь передаем оба репозитория
-        app::UseCasesImpl use_cases{authors, books};
-
         WHEN("Adding an author") {
             const auto author_name = "Joanne Rowling";
-            use_cases.AddAuthor(author_name);
+            auto author_id = use_cases.AddAuthor(author_name);
 
             THEN("author with the specified name is saved to repository") {
-                REQUIRE(authors.saved_authors.size() == 1);
-                CHECK(authors.saved_authors.at(0).GetName() == author_name);
-                CHECK(authors.saved_authors.at(0).GetId() != domain::AuthorId{});
+                REQUIRE(factory.last_uow->authors.saved_authors.size() == 1);
+                CHECK(factory.last_uow->authors.saved_authors.at(0).GetName() == author_name);
+                CHECK(factory.last_uow->authors.saved_authors.at(0).GetId() != domain::AuthorId{});
+                CHECK(factory.last_uow->committed);
+            }
+        }
+    }
+}
+
+SCENARIO_METHOD(Fixture, "Book Adding") {
+    GIVEN("Use cases") {
+        WHEN("Adding a book") {
+            auto author_id = use_cases.AddAuthor("Joanne Rowling");
+            use_cases.AddBook("Harry Potter", 1997, author_id, "fantasy, magic");
+
+            THEN("book is saved to repository") {
+                REQUIRE(factory.last_uow->books.saved_books.size() == 1);
+                CHECK(factory.last_uow->books.saved_books.at(0).GetTitle() == "Harry Potter");
+                CHECK(factory.last_uow->books.saved_books.at(0).GetPublicationYear() == 1997);
+                CHECK(factory.last_uow->committed);
             }
         }
     }

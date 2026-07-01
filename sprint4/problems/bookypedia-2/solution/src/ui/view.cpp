@@ -116,6 +116,7 @@ bool View::AddBook(std::istream& cmd_input) const {
         output_ << "Enter tags (comma separated):" << std::endl;
         std::string tags_str;
         std::getline(input_, tags_str);
+        boost::trim(tags_str);
 
         use_cases_.AddBook(title, publication_year, author_id, tags_str);
     } catch (...) {

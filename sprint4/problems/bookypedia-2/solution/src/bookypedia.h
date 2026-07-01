@@ -18,7 +18,8 @@ public:
 
 private:
     postgres::Database db_;
-    app::UseCasesImpl use_cases_{db_.GetAuthors(), db_.GetBooks()};
+    postgres::UnitOfWorkFactoryImpl uow_factory_{db_.GetConnection()};
+    app::UseCasesImpl use_cases_{uow_factory_};
 };
 
 }  // namespace bookypedia
