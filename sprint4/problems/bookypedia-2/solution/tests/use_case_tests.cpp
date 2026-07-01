@@ -18,8 +18,24 @@ struct MockAuthorRepository : domain::AuthorRepository {
         return saved_authors;
     }
 
-    void Delete(const domain::AuthorId& /*id*/) override {
-        // Мок-реализация - ничего не делаем
+    void Delete(const domain::AuthorId& id) override {
+        std::erase_if(saved_authors, [&](const auto& a) { return a.GetId() == id; });
+    }
+
+    std::optional<domain::Author> GetById(const domain::AuthorId& id) const override {
+        for (const auto& a : saved_authors) {
+            if (a.GetId() == id) return a;
+        }
+        return std::nullopt;
+    }
+
+    void Update(const domain::Author& author) override {
+        for (auto& a : saved_authors) {
+            if (a.GetId() == author.GetId()) {
+                a = author;
+                break;
+            }
+        }
     }
 };
 
@@ -36,6 +52,26 @@ struct MockBookRepository : domain::BookRepository {
 
     std::vector<domain::Book> GetByAuthor(const domain::AuthorId& /*author_id*/) const override {
         return {};
+    }
+
+    std::optional<domain::Book> GetById(const domain::BookId& id) const override {
+        for (const auto& b : saved_books) {
+            if (b.GetId() == id) return b;
+        }
+        return std::nullopt;
+    }
+
+    void Delete(const domain::BookId& id) override {
+        std::erase_if(saved_books, [&](const auto& b) { return b.GetId() == id; });
+    }
+
+    void Update(const domain::Book& book) override {
+        for (auto& b : saved_books) {
+            if (b.GetId() == book.GetId()) {
+                b = book;
+                break;
+            }
+        }
     }
 };
 
@@ -178,8 +214,7 @@ SCENARIO_METHOD(Fixture, "Getting Books By Author") {
             auto books = use_cases.GetBooksByAuthor(author_id);
 
             THEN("books by the author are returned") {
-                // В моке GetByAuthor возвращает пустой вектор, поэтому просто проверяем, что он есть
-                REQUIRE(books.size() == 0); // Из-за мока возвращается пустой вектор
+                REQUIRE(books.size() == 0); 
             }
         }
     }
