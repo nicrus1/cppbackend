@@ -20,9 +20,6 @@ namespace {
             boost::trim(tag);
             if (tag.empty()) continue;
             tag = std::regex_replace(tag, multiple_spaces, " ");
-            if (tag.length() > 30) {
-                tag = tag.substr(0, 30); // Защита от превышения длины тега
-            }
             unique_tags.insert(tag);
         }
         return {unique_tags.begin(), unique_tags.end()};
@@ -45,13 +42,6 @@ void UseCasesImpl::DeleteAuthor(const std::string& author_id) {
     auto author_opt = uow->Authors().GetById(id);
     if (!author_opt) {
         throw std::runtime_error("Author not found");
-    }
-    
-    // Явно удаляем теги и книги автора для предотвращения нарушения внешних ключей
-    auto books = uow->Books().GetByAuthor(id);
-    for (const auto& book : books) {
-        uow->BookTags().DeleteByBook(book.GetId());
-        uow->Books().Delete(book.GetId());
     }
     
     uow->Authors().Delete(id);
@@ -116,9 +106,6 @@ void UseCasesImpl::DeleteBook(const std::string& book_id) {
     if (!book_opt) {
         throw std::runtime_error("Book not found");
     }
-    
-    // Удаляем теги книги
-    uow->BookTags().DeleteByBook(id);
     
     uow->Books().Delete(id);
     uow->Commit();
