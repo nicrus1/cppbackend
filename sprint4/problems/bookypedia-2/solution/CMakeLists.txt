@@ -9,7 +9,7 @@ conan_basic_setup(TARGETS)
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
 
-# Добавляем директории для поиска заголовочных файлов
+# Добавляем include директории
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src/app)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src/domain)
@@ -40,17 +40,35 @@ add_library(libbookypedia STATIC
     src/postgres/postgres.cpp
     src/postgres/postgres.h
 )
-target_link_libraries(libbookypedia PUBLIC CONAN_PKG::boost Threads::Threads CONAN_PKG::libpq CONAN_PKG::libpqxx)
+
+# Для библиотеки используем boost_headers
+target_link_libraries(libbookypedia PUBLIC 
+    CONAN_PKG::boost_headers
+    Threads::Threads 
+    CONAN_PKG::libpq 
+    CONAN_PKG::libpqxx
+)
 
 add_executable(bookypedia
     src/bookypedia.cpp
     src/bookypedia.h
     src/main.cpp
 )
-target_link_libraries(bookypedia PRIVATE CONAN_PKG::boost libbookypedia)
+
+target_link_libraries(bookypedia PRIVATE 
+    CONAN_PKG::boost_headers
+    libbookypedia
+)
 
 add_executable(tests
     tests/use_case_tests.cpp
     tests/tagged_uuid_tests.cpp
 )
-target_link_libraries(tests PRIVATE CONAN_PKG::catch2 CONAN_PKG::gtest libbookypedia)
+
+# Для тестов нужны Catch2 и Google Test
+target_link_libraries(tests PRIVATE 
+    CONAN_PKG::catch2 
+    CONAN_PKG::gtest
+    CONAN_PKG::boost
+    libbookypedia
+)
