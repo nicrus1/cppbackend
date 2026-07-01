@@ -288,6 +288,7 @@ std::optional<domain::Book> View::SelectBook(const std::string& title_filter) co
         }
         if (matches.size() == 1) return matches.front();
     } else {
+        // Если фильтр пустой, показываем все книги
         matches = books;
     }
     
@@ -372,6 +373,7 @@ bool View::EditBook(std::istream& cmd_input) const {
         std::getline(cmd_input, title);
         boost::trim(title);
 
+        // Если title пустой, показываем список всех книг для выбора
         auto book_opt = SelectBook(title);
         if (!book_opt) return true;
 
