@@ -16,8 +16,8 @@ public:
 
     void Save(const domain::Author& author) override;
     std::vector<domain::Author> GetAll() const override;
+    void Delete(const domain::AuthorId& id) override;
     std::optional<domain::Author> GetByName(const std::string& name) const;
-    void Delete(const domain::AuthorId& id);
     void Update(const domain::Author& author);
 
 private:
@@ -31,8 +31,8 @@ public:
     void Save(const domain::Book& book) override;
     std::vector<domain::Book> GetAll() const override;
     std::vector<domain::Book> GetByAuthor(const domain::AuthorId& author_id) const override;
+    void Delete(const domain::BookId& id); // Пока не добавляем override, так как в book.h его еще нет
     std::optional<domain::Book> GetById(const domain::BookId& id) const;
-    void Delete(const domain::BookId& id);
     void Update(const domain::Book& book);
 
 private:
