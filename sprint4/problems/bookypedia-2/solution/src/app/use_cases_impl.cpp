@@ -36,13 +36,29 @@ std::string UseCasesImpl::AddAuthor(const std::string& name) {
 
 void UseCasesImpl::DeleteAuthor(const std::string& author_id) {
     auto uow = uow_factory_.CreateUnitOfWork();
-    uow->Authors().Delete(AuthorId::FromString(author_id));
+    auto id = AuthorId::FromString(author_id);
+    
+    // Проверяем, существует ли автор
+    auto author_opt = uow->Authors().GetById(id);
+    if (!author_opt) {
+        throw std::runtime_error("Author not found");
+    }
+    
+    uow->Authors().Delete(id);
     uow->Commit();
 }
 
 void UseCasesImpl::EditAuthor(const std::string& author_id, const std::string& new_name) {
     auto uow = uow_factory_.CreateUnitOfWork();
-    uow->Authors().Update({AuthorId::FromString(author_id), new_name});
+    auto id = AuthorId::FromString(author_id);
+    
+    // Проверяем, существует ли автор
+    auto author_opt = uow->Authors().GetById(id);
+    if (!author_opt) {
+        throw std::runtime_error("Author not found");
+    }
+    
+    uow->Authors().Update({id, new_name});
     uow->Commit();
 }
 
@@ -59,7 +75,15 @@ std::vector<Author> UseCasesImpl::GetAllAuthors() const {
 void UseCasesImpl::AddBook(const std::string& title, int publication_year, const std::string& author_id, const std::string& tags) {
     auto uow = uow_factory_.CreateUnitOfWork();
     
-    Book book{BookId::New(), AuthorId::FromString(author_id), title, publication_year};
+    auto author_id_obj = AuthorId::FromString(author_id);
+    
+    // Проверяем, существует ли автор
+    auto author_opt = uow->Authors().GetById(author_id_obj);
+    if (!author_opt) {
+        throw std::runtime_error("Author not found");
+    }
+    
+    Book book{BookId::New(), author_id_obj, title, publication_year};
     uow->Books().Save(book);
     
     if (!tags.empty()) {
@@ -75,7 +99,15 @@ void UseCasesImpl::AddBook(const std::string& title, int publication_year, const
 
 void UseCasesImpl::DeleteBook(const std::string& book_id) {
     auto uow = uow_factory_.CreateUnitOfWork();
-    uow->Books().Delete(BookId::FromString(book_id));
+    auto id = BookId::FromString(book_id);
+    
+    // Проверяем, существует ли книга
+    auto book_opt = uow->Books().GetById(id);
+    if (!book_opt) {
+        throw std::runtime_error("Book not found");
+    }
+    
+    uow->Books().Delete(id);
     uow->Commit();
 }
 

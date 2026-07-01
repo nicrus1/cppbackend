@@ -63,28 +63,45 @@ bool View::AddAuthor(std::istream& cmd_input) const {
 
 bool View::DeleteAuthor(std::istream& cmd_input) const {
     try {
-        std::string author_name;
-        std::getline(cmd_input, author_name);
-        boost::trim(author_name);
+        std::string author_input;
+        std::getline(cmd_input, author_input);
+        boost::trim(author_input);
 
         std::string author_id;
         
-        if (author_name.empty()) {
+        if (author_input.empty()) {
             auto optional_author_id = SelectAuthor();
             if (!optional_author_id) return true; 
             author_id = *optional_author_id;
         } else {
-            auto authors = use_cases_.GetAllAuthors();
-            auto it = std::find_if(authors.begin(), authors.end(), [&](const auto& a){ return a.GetName() == author_name; });
-            if (it == authors.end()) {
-                output_ << "Failed to delete author" << std::endl;
-                return true;
+            // Проверяем, является ли ввод числом (индексом)
+            bool is_number = true;
+            for (char c : author_input) {
+                if (!std::isdigit(c)) {
+                    is_number = false;
+                    break;
+                }
             }
-            author_id = it->GetId().ToString();
+            
+            if (is_number) {
+                auto optional_author_id = SelectAuthor();
+                if (!optional_author_id) return true;
+                author_id = *optional_author_id;
+            } else {
+                // Ищем по имени
+                auto authors = use_cases_.GetAllAuthors();
+                auto it = std::find_if(authors.begin(), authors.end(), 
+                    [&](const auto& a){ return a.GetName() == author_input; });
+                if (it == authors.end()) {
+                    output_ << "Failed to delete author" << std::endl;
+                    return true;
+                }
+                author_id = it->GetId().ToString();
+            }
         }
 
         use_cases_.DeleteAuthor(author_id);
-    } catch (...) {
+    } catch (const std::exception& e) {
         output_ << "Failed to delete author" << std::endl;
     }
     return true;
@@ -92,24 +109,40 @@ bool View::DeleteAuthor(std::istream& cmd_input) const {
 
 bool View::EditAuthor(std::istream& cmd_input) const {
     try {
-        std::string author_name;
-        std::getline(cmd_input, author_name);
-        boost::trim(author_name);
+        std::string author_input;
+        std::getline(cmd_input, author_input);
+        boost::trim(author_input);
 
         std::string author_id;
         
-        if (author_name.empty()) {
+        if (author_input.empty()) {
             auto optional_author_id = SelectAuthor();
             if (!optional_author_id) return true;
             author_id = *optional_author_id;
         } else {
-            auto authors = use_cases_.GetAllAuthors();
-            auto it = std::find_if(authors.begin(), authors.end(), [&](const auto& a){ return a.GetName() == author_name; });
-            if (it == authors.end()) {
-                output_ << "Failed to edit author" << std::endl;
-                return true;
+            // Проверяем, является ли ввод числом (индексом)
+            bool is_number = true;
+            for (char c : author_input) {
+                if (!std::isdigit(c)) {
+                    is_number = false;
+                    break;
+                }
             }
-            author_id = it->GetId().ToString();
+            
+            if (is_number) {
+                auto optional_author_id = SelectAuthor();
+                if (!optional_author_id) return true;
+                author_id = *optional_author_id;
+            } else {
+                auto authors = use_cases_.GetAllAuthors();
+                auto it = std::find_if(authors.begin(), authors.end(), 
+                    [&](const auto& a){ return a.GetName() == author_input; });
+                if (it == authors.end()) {
+                    output_ << "Failed to edit author" << std::endl;
+                    return true;
+                }
+                author_id = it->GetId().ToString();
+            }
         }
 
         output_ << "Enter new name:" << std::endl;
@@ -123,7 +156,7 @@ bool View::EditAuthor(std::istream& cmd_input) const {
         }
 
         use_cases_.EditAuthor(author_id, new_name);
-    } catch (...) {
+    } catch (const std::exception& e) {
         output_ << "Failed to edit author" << std::endl;
     }
     return true;
@@ -177,6 +210,7 @@ bool View::AddBook(std::istream& cmd_input) const {
                 output_ << "No author found. Do you want to add " << author_name << " (y/n)?" << std::endl;
                 std::string answer;
                 std::getline(input_, answer);
+                boost::trim(answer);
                 if (answer != "y" && answer != "Y") {
                     output_ << "Failed to add book" << std::endl;
                     return true;
@@ -206,6 +240,10 @@ bool View::ShowAuthors() const {
 bool View::ShowBooks() const {
     auto books = use_cases_.GetAllBooks();
     auto authors = use_cases_.GetAllAuthors();
+    
+    if (books.empty()) {
+        return true;
+    }
     
     int i = 1;
     for (const auto& book : books) {
@@ -244,13 +282,19 @@ std::optional<domain::Book> View::SelectBook(const std::string& title_filter) co
         for (const auto& b : books) {
             if (b.GetTitle() == title_filter) matches.push_back(b);
         }
-        if (matches.empty()) return std::nullopt;
+        if (matches.empty()) {
+            output_ << "No book found" << std::endl;
+            return std::nullopt;
+        }
         if (matches.size() == 1) return matches.front();
     } else {
         matches = books;
     }
     
-    if (matches.empty()) return std::nullopt;
+    if (matches.empty()) {
+        output_ << "No books found" << std::endl;
+        return std::nullopt;
+    }
     
     auto authors = use_cases_.GetAllAuthors();
     int i = 1;
@@ -270,10 +314,13 @@ std::optional<domain::Book> View::SelectBook(const std::string& title_filter) co
     
     try {
         int idx = std::stoi(str) - 1;
-        if (idx < 0 || idx >= matches.size()) throw std::out_of_range("");
+        if (idx < 0 || idx >= static_cast<int>(matches.size())) {
+            throw std::out_of_range("");
+        }
         return matches[idx];
     } catch (...) {
-        throw std::runtime_error("Invalid book num");
+        output_ << "Invalid book number" << std::endl;
+        return std::nullopt;
     }
 }
 
@@ -297,7 +344,8 @@ bool View::ShowBook(std::istream& cmd_input) const {
         if (!tags.empty()) {
             output_ << "Tags: " << boost::algorithm::join(tags, ", ") << std::endl;
         }
-    } catch (...) {
+    } catch (const std::exception& e) {
+        output_ << e.what() << std::endl;
     }
     return true;
 }
@@ -312,7 +360,7 @@ bool View::DeleteBook(std::istream& cmd_input) const {
         if (book_opt) {
             use_cases_.DeleteBook(book_opt->GetId().ToString());
         }
-    } catch (...) {
+    } catch (const std::exception& e) {
         output_ << "Failed to delete book" << std::endl;
     }
     return true;
@@ -323,18 +371,6 @@ bool View::EditBook(std::istream& cmd_input) const {
         std::string title;
         std::getline(cmd_input, title);
         boost::trim(title);
-
-        auto books = use_cases_.GetAllBooks();
-        bool exists = false;
-        if (!title.empty()) {
-            for (const auto& b : books) {
-                if (b.GetTitle() == title) exists = true;
-            }
-            if (!exists) {
-                output_ << "Book not found" << std::endl;
-                return true;
-            }
-        }
 
         auto book_opt = SelectBook(title);
         if (!book_opt) return true;
@@ -352,7 +388,13 @@ bool View::EditBook(std::istream& cmd_input) const {
         std::getline(input_, year_str);
         boost::trim(year_str);
         int new_year = book.GetPublicationYear();
-        if (!year_str.empty()) new_year = std::stoi(year_str);
+        if (!year_str.empty()) {
+            try {
+                new_year = std::stoi(year_str);
+            } catch (...) {
+                output_ << "Invalid year, keeping current" << std::endl;
+            }
+        }
 
         auto tags = use_cases_.GetBookTags(book.GetId().ToString());
         std::string tags_joined = boost::algorithm::join(tags, ", ");
@@ -363,8 +405,8 @@ bool View::EditBook(std::istream& cmd_input) const {
         boost::trim(new_tags_str);
 
         use_cases_.EditBook(book.GetId().ToString(), new_title, new_year, new_tags_str);
-    } catch (...) {
-        output_ << "Book not found" << std::endl;
+    } catch (const std::exception& e) {
+        output_ << "Failed to edit book: " << e.what() << std::endl;
     }
     return true;
 }
@@ -372,6 +414,10 @@ bool View::EditBook(std::istream& cmd_input) const {
 std::optional<std::string> View::SelectAuthor() const {
     output_ << "Select author:" << std::endl;
     auto authors = GetAuthors();
+    if (authors.empty()) {
+        output_ << "No authors found" << std::endl;
+        return std::nullopt;
+    }
     PrintVector(output_, authors);
     output_ << "Enter author # or empty line to cancel" << std::endl;
 
@@ -384,12 +430,14 @@ std::optional<std::string> View::SelectAuthor() const {
     try {
         author_idx = std::stoi(str);
     } catch (...) {
-        throw std::runtime_error("Invalid author num");
+        output_ << "Invalid author number" << std::endl;
+        return std::nullopt;
     }
 
     --author_idx;
-    if (author_idx < 0 || author_idx >= authors.size()) {
-        throw std::runtime_error("Invalid author num");
+    if (author_idx < 0 || author_idx >= static_cast<int>(authors.size())) {
+        output_ << "Invalid author number" << std::endl;
+        return std::nullopt;
     }
 
     return authors[author_idx].id;
