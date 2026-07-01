@@ -74,21 +74,26 @@ bool View::DeleteAuthor(std::istream& cmd_input) const {
             if (!optional_author_id) return true; 
             author_id = *optional_author_id;
         } else {
-            // Проверяем, является ли ввод числом (индексом)
+            // Check if input is a number (index)
             bool is_number = true;
             for (char c : author_input) {
-                if (!std::isdigit(c)) {
+                if (!std::isdigit(static_cast<unsigned char>(c))) {
                     is_number = false;
                     break;
                 }
             }
             
             if (is_number) {
-                auto optional_author_id = SelectAuthor();
-                if (!optional_author_id) return true;
-                author_id = *optional_author_id;
+                // Use the number as an index directly
+                auto authors = use_cases_.GetAllAuthors();
+                int idx = std::stoi(author_input) - 1;
+                if (idx < 0 || idx >= static_cast<int>(authors.size())) {
+                    output_ << "Failed to delete author" << std::endl;
+                    return true;
+                }
+                author_id = authors[idx].GetId().ToString();
             } else {
-                // Ищем по имени
+                // Search by name
                 auto authors = use_cases_.GetAllAuthors();
                 auto it = std::find_if(authors.begin(), authors.end(), 
                     [&](const auto& a){ return a.GetName() == author_input; });
@@ -120,19 +125,24 @@ bool View::EditAuthor(std::istream& cmd_input) const {
             if (!optional_author_id) return true;
             author_id = *optional_author_id;
         } else {
-            // Проверяем, является ли ввод числом (индексом)
+            // Check if input is a number (index)
             bool is_number = true;
             for (char c : author_input) {
-                if (!std::isdigit(c)) {
+                if (!std::isdigit(static_cast<unsigned char>(c))) {
                     is_number = false;
                     break;
                 }
             }
             
             if (is_number) {
-                auto optional_author_id = SelectAuthor();
-                if (!optional_author_id) return true;
-                author_id = *optional_author_id;
+                // Use the number as an index directly
+                auto authors = use_cases_.GetAllAuthors();
+                int idx = std::stoi(author_input) - 1;
+                if (idx < 0 || idx >= static_cast<int>(authors.size())) {
+                    output_ << "Failed to edit author" << std::endl;
+                    return true;
+                }
+                author_id = authors[idx].GetId().ToString();
             } else {
                 auto authors = use_cases_.GetAllAuthors();
                 auto it = std::find_if(authors.begin(), authors.end(), 
