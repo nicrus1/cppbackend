@@ -176,6 +176,9 @@ public:
             player_info["speed"] = speed_arr;
 
             player_info["dir"] = model::DirectionToString(ps.dir);
+            
+            // Добавляем очки игрока
+            player_info["score"] = ps.score;
 
             players_obj[ps.player_id] = player_info;
         }
@@ -320,7 +323,6 @@ public:
             std::string param;
             for (char c : query) {
                 if (c == '&') {
-                    // Обработка параметра
                     auto eq_pos = param.find('=');
                     if (eq_pos != std::string::npos) {
                         std::string key = param.substr(0, eq_pos);
@@ -343,7 +345,6 @@ public:
                     param += c;
                 }
             }
-            // Обработка последнего параметра
             if (!param.empty()) {
                 auto eq_pos = param.find('=');
                 if (eq_pos != std::string::npos) {

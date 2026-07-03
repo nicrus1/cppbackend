@@ -352,7 +352,8 @@ std::vector<GameState::PlayerState> GameState::GetGameState(const model::Token& 
             std::to_string(*p->GetId()),
             d.GetPosition(),
             d.GetSpeed(),
-            d.GetDirection()
+            d.GetDirection(),
+            d.GetScore()  // Добавляем очки
         });
     }
 

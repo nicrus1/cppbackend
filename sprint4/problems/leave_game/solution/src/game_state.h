@@ -31,6 +31,7 @@ public:
         model::Position pos;
         model::Speed speed;
         model::Direction dir;
+        int score = 0;
     };
 
     explicit GameState(model::Game& game);
