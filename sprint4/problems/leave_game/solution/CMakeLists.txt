@@ -7,6 +7,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # Find Threads first
 find_package(Threads REQUIRED)
 
+# Если в вашем conanfile.txt указан генератор "cmake", а не "cmake_multi", 
+# замените эту строку на: include(${CMAKE_BINARY_DIR}/conanbuildinfo.cmake)
 include(${CMAKE_BINARY_DIR}/conanbuildinfo_multi.cmake)
 conan_basic_setup(TARGETS)
 
@@ -31,9 +33,9 @@ target_include_directories(game_server PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
-# Правильные имена целей от Conan
+# Правильные имена целей от Conan (изменено с CONAN_LIBS на CONAN_TARGETS)
 target_link_libraries(game_server PRIVATE 
-    ${CONAN_LIBS}
+    ${CONAN_TARGETS}
     Threads::Threads
 )
 
@@ -53,8 +55,9 @@ target_include_directories(game_server_tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/tests
 )
 
+# (изменено с CONAN_LIBS на CONAN_TARGETS)
 target_link_libraries(game_server_tests PRIVATE 
-    ${CONAN_LIBS}
+    ${CONAN_TARGETS}
     Threads::Threads
 )
 
