@@ -77,11 +77,12 @@ std::vector<Record> RecordManager::GetRecords(int start, int max_items) {
         std::vector<Record> records;
         records.reserve(result.size());
         
-        for (const auto& row : result) {
+        // Use index-based access instead of range-based for loop
+        for (size_t i = 0; i < result.size(); ++i) {
             Record rec;
-            rec.name = row[0].as<std::string>();
-            rec.score = row[1].as<int>();
-            rec.play_time = row[2].as<double>();
+            rec.name = result[i][0].as<std::string>();
+            rec.score = result[i][1].as<int>();
+            rec.play_time = result[i][2].as<double>();
             records.push_back(std::move(rec));
         }
         
