@@ -25,9 +25,13 @@ RUN mkdir -p /app/build && \
 # Финальный образ
 FROM ubuntu:22.04
 
-# Установка runtime зависимостей
+# Установка runtime зависимостей и PostgreSQL клиента
 RUN apt update && \
-    apt install -y libstdc++6 ca-certificates && \
+    apt install -y \
+        libstdc++6 \
+        ca-certificates \
+        postgresql-client \
+        && \
     rm -rf /var/lib/apt/lists/*
 
 # Создание пользователя для запуска
@@ -45,6 +49,9 @@ WORKDIR /app
 
 # Права на выполнение
 RUN chmod +x /app/game_server
+
+# Установка переменных окружения для подключения к PostgreSQL
+ENV GAME_DB_URL="postgresql://postgres:Mys3Cr3t@postgres:5432/game_db"
 
 # Запуск сервера с параметрами по умолчанию
 ENTRYPOINT ["/app/game_server"]

@@ -77,7 +77,7 @@ std::vector<Record> RecordManager::GetRecords(int start, int max_items) {
         std::vector<Record> records;
         records.reserve(result.size());
         
-        // Use index-based access instead of range-based for loop
+        // Используем индексный доступ вместо range-based for
         for (size_t i = 0; i < result.size(); ++i) {
             Record rec;
             rec.name = result[i][0].as<std::string>();

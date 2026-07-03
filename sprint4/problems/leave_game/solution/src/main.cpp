@@ -77,8 +77,10 @@ int main(int argc, const char* argv[]) {
         if (db_url) {
             std::cerr << "Initializing database connection pool..." << std::endl;
             try {
+                // Уменьшаем размер пула для тестов
+                size_t pool_size = 2; // Фиксированный размер для тестов
                 auto pool = std::make_shared<db::ConnectionPool>(
-                    std::max(1u, num_threads),
+                    pool_size,
                     [db_url]() {
                         return std::make_shared<pqxx::connection>(db_url);
                     }
@@ -88,7 +90,7 @@ int main(int argc, const char* argv[]) {
                 record_manager->InitTable();
                 
                 handler.SetRecordManager(record_manager);
-                std::cerr << "Database initialized successfully" << std::endl;
+                std::cerr << "Database initialized successfully with pool size " << pool_size << std::endl;
             } catch (const std::exception& e) {
                 std::cerr << "Failed to initialize database: " << e.what() << std::endl;
                 // Продолжаем работу без БД
