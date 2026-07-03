@@ -78,11 +78,11 @@ std::vector<Record> RecordManager::GetRecords(int start, int max_items) {
         records.reserve(result.size());
         
         for (const auto& row : result) {
-            records.push_back({
-                row[0].as<std::string>(),
-                row[1].as<int>(),
-                row[2].as<double>()
-            });
+            Record rec;
+            rec.name = row[0].as<std::string>();
+            rec.score = row[1].as<int>();
+            rec.play_time = row[2].as<double>();
+            records.push_back(std::move(rec));
         }
         
         return records;
