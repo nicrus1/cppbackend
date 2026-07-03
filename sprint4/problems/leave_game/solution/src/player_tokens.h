@@ -49,6 +49,15 @@ public:
     bool IsValidToken(const Token& token) const {
         return token_to_player_.find(token) != token_to_player_.end();
     }
+    
+    // Метод для удаления токена игрока
+    void RemoveToken(PlayerId player_id) {
+        auto it = player_to_token_.find(player_id);
+        if (it != player_to_token_.end()) {
+            token_to_player_.erase(it->second);
+            player_to_token_.erase(it);
+        }
+    }
 
 private:
     std::mt19937_64 generator1_;

@@ -4,6 +4,7 @@
 #include <unordered_map>
 #include <memory>
 #include <vector>
+#include <algorithm>
 
 namespace model {
 
@@ -117,6 +118,30 @@ public:
 
     bool HasPlayer(PlayerId id) const {
         return players_.find(id) != players_.end();
+    }
+
+    // Метод для удаления игрока
+    bool RemovePlayer(PlayerId id) {
+        auto it = players_.find(id);
+        if (it == players_.end()) {
+            return false;
+        }
+        
+        const Player* player = it->second.get();
+        if (player) {
+            auto map_it = map_players_.find(player->GetMapId());
+            if (map_it != map_players_.end()) {
+                auto& vec = map_it->second;
+                vec.erase(std::remove(vec.begin(), vec.end(), id), vec.end());
+            }
+        }
+        
+        // Удаляем токен игрока
+        // Нам нужно найти токен по id игрока и удалить его
+        // Для этого добавим метод в PlayerTokens
+        
+        players_.erase(it);
+        return true;
     }
 
 private:

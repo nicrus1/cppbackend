@@ -122,9 +122,7 @@ void GameState::CollectLootForDog(model::Dog& dog, const model::Map& map) {
         double dx = dog_pos.x - item.second.x;
         double dy = dog_pos.y - item.second.y;
         if (dx * dx + dy * dy < COLLECT_RADIUS * COLLECT_RADIUS) {
-            // Собираем трофей
-            // TODO: Получить стоимость трофея по его типу
-            dog.AddScore(10); // Временное значение
+            dog.AddScore(10);
             items_to_remove.push_back(id);
         }
     }
@@ -136,44 +134,35 @@ void GameState::CollectLootForDog(model::Dog& dog, const model::Map& map) {
 
 void GameState::CheckDogInactivity(int64_t time_delta_ms) {
     auto now = std::chrono::steady_clock::now();
-    std::vector<model::PlayerId> players_to_retire;
     std::vector<model::PlayerId> players_to_remove;
     
     for (auto& [player_id, dog] : dogs_) {
         model::Player* player = players_.FindPlayer(player_id);
         if (!player) continue;
         
-        // Если собака движется - обновляем время активности
         auto speed = dog.GetSpeed();
         if (speed.vx != 0.0 || speed.vy != 0.0) {
             dog.SetLastActivityTime(now);
             continue;
         }
         
-        // Проверяем, не превышено ли время бездействия
         auto idle_time = std::chrono::duration_cast<std::chrono::milliseconds>(
             now - dog.GetLastActivityTime()
         );
         
         if (idle_time >= dog_retirement_time_) {
-            // Собака уходит на пенсию
             RetireDog(dog, *player);
-            players_to_retire.push_back(player_id);
             players_to_remove.push_back(player_id);
         }
     }
     
-    // Удаляем собак и игроков, ушедших на пенсию
-    for (auto player_id : players_to_retire) {
-        // Удаляем собаку
+    for (auto player_id : players_to_remove) {
         auto dog_it = dogs_.find(player_id);
         if (dog_it != dogs_.end()) {
             dogs_.erase(dog_it);
         }
+        players_.RemovePlayer(player_id);
     }
-    
-    // TODO: Удалить игроков из системы
-    // Для этого нужно добавить метод RemovePlayer в Players
 }
 
 void GameState::RetireDog(model::Dog& dog, const model::Player& player) {
@@ -211,7 +200,6 @@ GameState::JoinResult GameState::JoinGame(const std::string& user_name, const mo
     dogs_.emplace(player.GetId(), std::move(dog));
     player.SetDogId(dog_id);
 
-    // Создаем менеджер трофеев для карты если его нет
     auto it = loot_managers_.find(map_id);
     if (it == loot_managers_.end()) {
         auto manager = std::make_unique<LootManager>(
@@ -221,7 +209,6 @@ GameState::JoinResult GameState::JoinGame(const std::string& user_name, const mo
         it = loot_managers_.find(map_id);
     }
     
-    // Генерируем один трофей для нового игрока
     it->second->AddLootItems(1);
 
     return {token, player.GetId()};
@@ -271,7 +258,6 @@ void GameState::StopDog(const model::Token& token) {
     if (!dog) return;
 
     dog->SetSpeed({0.0, 0.0});
-    // Время бездействия начинает отсчитываться с этого момента
     dog->SetLastActivityTime(std::chrono::steady_clock::now());
 }
 
@@ -290,13 +276,11 @@ void GameState::SetLootGeneratorConfig(double period, double probability) {
 void GameState::ProcessTick(int64_t time_delta_ms) {
     auto delta = std::chrono::milliseconds(time_delta_ms);
     
-    // Обновляем общее время игры для всех собак
     for (auto& [player_id, dog] : dogs_) {
         auto total = dog.GetTotalPlayTime();
         dog.SetTotalPlayTime(total + delta);
     }
     
-    // Двигаем собак и собираем трофеи
     for (auto& [player_id, dog] : dogs_) {
         model::Player* player = players_.FindPlayer(player_id);
         if (!player) continue;
@@ -308,10 +292,8 @@ void GameState::ProcessTick(int64_t time_delta_ms) {
         CollectLootForDog(dog, *map);
     }
     
-    // Проверяем бездействие
     CheckDogInactivity(time_delta_ms);
     
-    // Обновляем трофеи для каждой карты
     for (const auto& map : game_.GetMaps()) {
         auto it = loot_managers_.find(map.GetId());
         if (it == loot_managers_.end()) {
@@ -322,7 +304,6 @@ void GameState::ProcessTick(int64_t time_delta_ms) {
             it = loot_managers_.find(map.GetId());
         }
         
-        // Count dogs on this map
         size_t dog_count = 0;
         for (const auto& [player_id, dog] : dogs_) {
             model::Player* player = players_.FindPlayer(player_id);
@@ -353,7 +334,7 @@ std::vector<GameState::PlayerState> GameState::GetGameState(const model::Token& 
             d.GetPosition(),
             d.GetSpeed(),
             d.GetDirection(),
-            d.GetScore()  // Добавляем очки
+            d.GetScore()
         });
     }
 
