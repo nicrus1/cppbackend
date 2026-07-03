@@ -157,10 +157,12 @@ void GameState::CheckDogInactivity(int64_t time_delta_ms) {
     }
     
     for (auto player_id : players_to_remove) {
+        // Удаляем собаку
         auto dog_it = dogs_.find(player_id);
         if (dog_it != dogs_.end()) {
             dogs_.erase(dog_it);
         }
+        // Удаляем игрока (теперь с удалением токена)
         players_.RemovePlayer(player_id);
     }
 }
@@ -276,11 +278,13 @@ void GameState::SetLootGeneratorConfig(double period, double probability) {
 void GameState::ProcessTick(int64_t time_delta_ms) {
     auto delta = std::chrono::milliseconds(time_delta_ms);
     
+    // Обновляем время игры для всех собак
     for (auto& [player_id, dog] : dogs_) {
         auto total = dog.GetTotalPlayTime();
         dog.SetTotalPlayTime(total + delta);
     }
     
+    // Двигаем собак и собираем трофеи
     for (auto& [player_id, dog] : dogs_) {
         model::Player* player = players_.FindPlayer(player_id);
         if (!player) continue;
@@ -292,8 +296,10 @@ void GameState::ProcessTick(int64_t time_delta_ms) {
         CollectLootForDog(dog, *map);
     }
     
+    // Проверяем бездействие
     CheckDogInactivity(time_delta_ms);
     
+    // Обновляем генерацию трофеев
     for (const auto& map : game_.GetMaps()) {
         auto it = loot_managers_.find(map.GetId());
         if (it == loot_managers_.end()) {

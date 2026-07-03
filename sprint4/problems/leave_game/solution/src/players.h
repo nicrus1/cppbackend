@@ -134,11 +134,10 @@ public:
                 auto& vec = map_it->second;
                 vec.erase(std::remove(vec.begin(), vec.end(), id), vec.end());
             }
+            
+            // Удаляем токен игрока
+            player_tokens_.RemoveToken(id);
         }
-        
-        // Удаляем токен игрока
-        // Нам нужно найти токен по id игрока и удалить его
-        // Для этого добавим метод в PlayerTokens
         
         players_.erase(it);
         return true;

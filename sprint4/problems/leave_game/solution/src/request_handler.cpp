@@ -30,6 +30,7 @@ void RequestHandler::LoadExtraData(const std::filesystem::path& config_path) {
         if (json_obj.contains("dogRetirementTime")) {
             double retirement_seconds = get_double(json_obj.at("dogRetirementTime"));
             SetDogRetirementTime(retirement_seconds);
+            api_handler_.SetDogRetirementTime(retirement_seconds);
             logger::LogDebug("Dog retirement time set to " + std::to_string(retirement_seconds) + " seconds");
         }
 
