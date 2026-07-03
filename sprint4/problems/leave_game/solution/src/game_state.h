@@ -14,6 +14,7 @@
 #include <optional>
 #include <random>
 #include <chrono>
+#include <map>
 
 namespace game {
 
@@ -36,11 +37,9 @@ public:
 
     explicit GameState(model::Game& game);
 
-    // Запрещаем копирование
     GameState(const GameState&) = delete;
     GameState& operator=(const GameState&) = delete;
 
-    // Разрешаем перемещение
     GameState(GameState&&) = default;
     GameState& operator=(GameState&&) = default;
 
@@ -84,7 +83,6 @@ public:
     std::unordered_map<uint64_t, std::pair<int, model::Position>>
     GetLootState(const model::Token& token) const;
     
-    // Новые методы для работы с бездействием и рекордами
     void SetDogRetirementTime(double seconds) {
         dog_retirement_time_ = std::chrono::milliseconds(
             static_cast<int64_t>(seconds * 1000)
@@ -120,6 +118,9 @@ private:
     
     std::chrono::milliseconds dog_retirement_time_{60000}; // 1 минута по умолчанию
     std::shared_ptr<db::RecordManager> record_manager_;
+    
+    // Для отслеживания времени бездействия
+    std::unordered_map<model::PlayerId, std::chrono::milliseconds, util::TaggedHasher<model::PlayerId>> idle_time_;
 };
 
 } // namespace game
