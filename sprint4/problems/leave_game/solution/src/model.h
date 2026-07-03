@@ -74,14 +74,16 @@ public:
         : id_(id)
         , pos_{static_cast<double>(pos.x), static_cast<double>(pos.y)}
         , default_speed_(speed)
-        , last_activity_time_(std::chrono::steady_clock::now()) {
+        , last_activity_time_(std::chrono::steady_clock::now())
+        , last_activity_logical_time_(0) {
     }
 
     Dog(Id id, Position pos, double speed)
         : id_(id)
         , pos_(pos)
         , default_speed_(speed)
-        , last_activity_time_(std::chrono::steady_clock::now()) {
+        , last_activity_time_(std::chrono::steady_clock::now())
+        , last_activity_logical_time_(0) {
     }
 
     Id GetId() const {
@@ -106,7 +108,8 @@ public:
 
     void SetSpeed(Speed speed) {
         speed_ = speed;
-        // Обновляем время активности при любом изменении скорости
+        // Используем логическое игровое время вместо реального 
+        last_activity_logical_time_ = total_play_time_;
         last_activity_time_ = std::chrono::steady_clock::now();
     }
 
@@ -124,10 +127,14 @@ public:
 
     void SetLastActivityTime(std::chrono::steady_clock::time_point time) {
         last_activity_time_ = time;
+        last_activity_logical_time_ = total_play_time_;
     }
     
     std::chrono::steady_clock::time_point GetLastActivityTime() const {
-        return last_activity_time_;
+        // Вычисляем простой на основе игровых тиков
+        auto idle_time = total_play_time_ - last_activity_logical_time_;
+        // Возвращаем time_point, который корректно отработает при сравнении с steady_clock::now()
+        return std::chrono::steady_clock::now() - idle_time;
     }
     
     void SetRetirementTime(std::chrono::milliseconds time) {
@@ -163,6 +170,7 @@ private:
     int score_ = 0;
     
     std::chrono::steady_clock::time_point last_activity_time_;
+    std::chrono::milliseconds last_activity_logical_time_{0};
     std::chrono::milliseconds retirement_time_{60000};
     std::chrono::milliseconds total_play_time_{0};
 };

@@ -30,7 +30,6 @@ void RequestHandler::LoadExtraData(const std::filesystem::path& config_path) {
         if (json_obj.contains("dogRetirementTime")) {
             double retirement_seconds = get_double(json_obj.at("dogRetirementTime"));
             SetDogRetirementTime(retirement_seconds);
-            api_handler_.SetDogRetirementTime(retirement_seconds);
             logger::LogDebug("Dog retirement time set to " + std::to_string(retirement_seconds) + " seconds");
         }
 
@@ -40,7 +39,7 @@ void RequestHandler::LoadExtraData(const std::filesystem::path& config_path) {
             double period = get_double(config.at("period"));
             double probability = get_double(config.at("probability"));
             extra_data_.SetLootGeneratorConfig(period, probability);
-            api_handler_.SetLootGeneratorConfig(period, probability);
+            SetLootGeneratorConfig(period, probability);
             logger::LogDebug("Loot generator config loaded: period=" + std::to_string(period) + 
                            ", probability=" + std::to_string(probability));
         }
