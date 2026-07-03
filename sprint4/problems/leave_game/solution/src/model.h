@@ -106,9 +106,8 @@ public:
 
     void SetSpeed(Speed speed) {
         speed_ = speed;
-        if (speed.vx != 0.0 || speed.vy != 0.0) {
-            last_activity_time_ = std::chrono::steady_clock::now();
-        }
+        // Обновляем время активности при любом изменении скорости
+        last_activity_time_ = std::chrono::steady_clock::now();
     }
 
     Direction GetDirection() const {

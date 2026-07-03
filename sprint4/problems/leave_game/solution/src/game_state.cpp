@@ -140,12 +140,14 @@ void GameState::CheckDogInactivity(int64_t time_delta_ms) {
         model::Player* player = players_.FindPlayer(player_id);
         if (!player) continue;
         
+        // Проверяем скорость - если собака движется, обновляем время активности
         auto speed = dog.GetSpeed();
         if (speed.vx != 0.0 || speed.vy != 0.0) {
             dog.SetLastActivityTime(now);
             continue;
         }
         
+        // Проверяем время бездействия
         auto idle_time = std::chrono::duration_cast<std::chrono::milliseconds>(
             now - dog.GetLastActivityTime()
         );
@@ -197,6 +199,7 @@ GameState::JoinResult GameState::JoinGame(const std::string& user_name, const mo
     
     model::Dog dog(dog_id, start_pos, dog_speed);
     dog.SetRetirementTime(dog_retirement_time_);
+    // Устанавливаем время последней активности на текущий момент
     dog.SetLastActivityTime(std::chrono::steady_clock::now());
     
     dogs_.emplace(player.GetId(), std::move(dog));
@@ -252,6 +255,7 @@ void GameState::SetDogDirection(const model::Token& token, model::Direction dir)
         case model::Direction::EAST:  dog->SetSpeed({speed, 0.0}); break;
     }
     dog->SetDirection(dir);
+    // Обновляем время активности при установке направления (собака начинает двигаться)
     dog->SetLastActivityTime(std::chrono::steady_clock::now());
 }
 
@@ -260,6 +264,7 @@ void GameState::StopDog(const model::Token& token) {
     if (!dog) return;
 
     dog->SetSpeed({0.0, 0.0});
+    // Обновляем время активности при остановке (собака останавливается, но это считается активностью)
     dog->SetLastActivityTime(std::chrono::steady_clock::now());
 }
 
