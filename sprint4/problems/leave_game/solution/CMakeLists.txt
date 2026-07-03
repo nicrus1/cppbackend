@@ -23,17 +23,17 @@ add_executable(game_server
     src/logger.cpp
     src/htmldecode.cpp
     src/boost_json.cpp
-    src/db/record_manager.cpp
     src/db/db_connection_pool.cpp
+    src/db/record_manager.cpp
 )
 
 target_include_directories(game_server PRIVATE 
     ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
+# Правильные имена целей от Conan
 target_link_libraries(game_server PRIVATE 
-    CONAN_PKG::boost
-    CONAN_PKG::pqxx
+    ${CONAN_LIBS}
     Threads::Threads
 )
 
@@ -54,8 +54,7 @@ target_include_directories(game_server_tests PRIVATE
 )
 
 target_link_libraries(game_server_tests PRIVATE 
-    CONAN_PKG::catch2
-    CONAN_PKG::boost
+    ${CONAN_LIBS}
     Threads::Threads
 )
 
