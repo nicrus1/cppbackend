@@ -4,6 +4,8 @@
 #include <vector>
 #include <optional>
 #include <chrono>
+#include <algorithm>
+#include <stdexcept>
 
 #include "tagged.h"
 
@@ -104,7 +106,6 @@ public:
 
     void SetSpeed(Speed speed) {
         speed_ = speed;
-        // Если скорость изменилась на ненулевую, обновляем время активности
         if (speed.vx != 0.0 || speed.vy != 0.0) {
             last_activity_time_ = std::chrono::steady_clock::now();
         }
@@ -122,7 +123,6 @@ public:
         return default_speed_;
     }
 
-    // Методы для отслеживания бездействия
     void SetLastActivityTime(std::chrono::steady_clock::time_point time) {
         last_activity_time_ = time;
     }
@@ -147,7 +147,6 @@ public:
         return total_play_time_;
     }
     
-    // Методы для очков
     int GetScore() const {
         return score_;
     }
@@ -165,10 +164,191 @@ private:
     int score_ = 0;
     
     std::chrono::steady_clock::time_point last_activity_time_;
-    std::chrono::milliseconds retirement_time_{60000}; // 1 минута по умолчанию
+    std::chrono::milliseconds retirement_time_{60000};
     std::chrono::milliseconds total_play_time_{0};
 };
 
-// ... остальной код (Road, Building, Office, Map, Game) без изменений ...
+// --- Road ---
+class Road {
+public:
+    using Id = uint64_t;
+    static constexpr int HORIZONTAL = 0;
+    static constexpr int VERTICAL = 1;
+
+    Road(int type, Point start, Coord end)
+        : type_(type)
+        , start_(start)
+        , end_((type == HORIZONTAL) ? Point{end, start.y} : Point{start.x, end}) {
+    }
+
+    bool IsHorizontal() const {
+        return type_ == HORIZONTAL;
+    }
+
+    bool IsVertical() const {
+        return type_ == VERTICAL;
+    }
+
+    const Point& GetStart() const {
+        return start_;
+    }
+
+    const Point& GetEnd() const {
+        return end_;
+    }
+
+private:
+    int type_;
+    Point start_;
+    Point end_;
+};
+
+// --- Building ---
+class Building {
+public:
+    Building(Rectangle rect)
+        : bounds_(rect) {
+    }
+
+    const Rectangle& GetBounds() const {
+        return bounds_;
+    }
+
+private:
+    Rectangle bounds_;
+};
+
+// --- Office ---
+class Office {
+public:
+    struct Id : public util::Tagged<std::string, Office> {
+        using Tagged::Tagged;
+    };
+
+    Office(Id id, Point pos, Offset offset)
+        : id_(std::move(id))
+        , pos_(pos)
+        , offset_(offset) {
+    }
+
+    const Id& GetId() const {
+        return id_;
+    }
+
+    const Point& GetPosition() const {
+        return pos_;
+    }
+
+    const Offset& GetOffset() const {
+        return offset_;
+    }
+
+private:
+    Id id_;
+    Point pos_;
+    Offset offset_;
+};
+
+// --- Map ---
+class Map {
+public:
+    struct Id : public util::Tagged<std::string, Map> {
+        using Tagged::Tagged;
+    };
+
+    Map(Id id, std::string name)
+        : id_(std::move(id))
+        , name_(std::move(name)) {
+    }
+
+    const Id& GetId() const {
+        return id_;
+    }
+
+    const std::string& GetName() const {
+        return name_;
+    }
+
+    void AddRoad(Road road) {
+        roads_.push_back(std::move(road));
+    }
+
+    const std::vector<Road>& GetRoads() const {
+        return roads_;
+    }
+
+    void AddBuilding(Building building) {
+        buildings_.push_back(std::move(building));
+    }
+
+    const std::vector<Building>& GetBuildings() const {
+        return buildings_;
+    }
+
+    void AddOffice(Office office);
+
+    const std::vector<Office>& GetOffices() const {
+        return offices_;
+    }
+
+    void SetDogSpeed(double speed) {
+        dog_speed_ = speed;
+    }
+
+    void SetDefaultDogSpeed(double speed) {
+        default_dog_speed_ = speed;
+    }
+
+    double GetDogSpeed() const {
+        return dog_speed_.value_or(default_dog_speed_);
+    }
+
+    void SetLootTypesCount(size_t count) {
+        loot_types_count_ = count;
+    }
+
+    size_t GetLootTypesCount() const {
+        return loot_types_count_;
+    }
+
+private:
+    using OfficeIdToIndex = std::unordered_map<Office::Id, size_t, util::TaggedHasher<Office::Id>>;
+
+    Id id_;
+    std::string name_;
+    std::vector<Road> roads_;
+    std::vector<Building> buildings_;
+    std::vector<Office> offices_;
+    OfficeIdToIndex warehouse_id_to_index_;
+    double default_dog_speed_ = 1.0;
+    std::optional<double> dog_speed_;
+    size_t loot_types_count_ = 0;
+};
+
+// --- Game ---
+class Game {
+public:
+    using Maps = std::vector<Map>;
+
+    void AddMap(Map map);
+
+    const Maps& GetMaps() const {
+        return maps_;
+    }
+
+    const Map* FindMap(const Map::Id& id) const {
+        auto it = map_id_to_index_.find(id);
+        if (it == map_id_to_index_.end()) {
+            return nullptr;
+        }
+        return &maps_.at(it->second);
+    }
+
+private:
+    using MapIdToIndex = std::unordered_map<Map::Id, size_t, util::TaggedHasher<Map::Id>>;
+
+    Maps maps_;
+    MapIdToIndex map_id_to_index_;
+};
 
 }  // namespace model
