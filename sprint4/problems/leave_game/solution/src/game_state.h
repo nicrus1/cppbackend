@@ -59,7 +59,6 @@ public:
     model::Dog* GetDogByTokenMutable(
         const model::Token& token);
 
-    // Проверяет, жива ли собака (не ушла на покой)
     bool IsDogAlive(const model::Token& token) const {
         return GetDogByToken(token) != nullptr;
     }
@@ -126,6 +125,8 @@ private:
     
     // Для отслеживания времени бездействия
     std::unordered_map<model::PlayerId, std::chrono::milliseconds, util::TaggedHasher<model::PlayerId>> idle_time_;
+    // Флаг, была ли собака остановлена игроком
+    std::unordered_map<model::PlayerId, bool, util::TaggedHasher<model::PlayerId>> is_stopped_by_player_;
 };
 
 } // namespace game
