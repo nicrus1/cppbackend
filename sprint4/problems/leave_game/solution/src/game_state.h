@@ -59,6 +59,11 @@ public:
     model::Dog* GetDogByTokenMutable(
         const model::Token& token);
 
+    // Проверяет, жива ли собака (не ушла на покой)
+    bool IsDogAlive(const model::Token& token) const {
+        return GetDogByToken(token) != nullptr;
+    }
+
     std::vector<PlayerState>
     GetGameState(const model::Token& token) const;
 

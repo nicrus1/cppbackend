@@ -270,7 +270,10 @@ void GameState::SetDogDirection(const model::Token& token, model::Direction dir)
 
 void GameState::StopDog(const model::Token& token) {
     model::Dog* dog = GetDogByTokenMutable(token);
-    if (!dog) return;
+    if (!dog) {
+        // Собака уже ушла на покой - просто игнорируем
+        return;
+    }
 
     dog->SetSpeed({0.0, 0.0});
     // Не сбрасываем время бездействия при остановке - оно начинает отсчитываться
@@ -361,7 +364,11 @@ std::vector<GameState::PlayerState> GameState::GetGameState(const model::Token& 
 }
 
 bool GameState::ValidateToken(const model::Token& token) const {
-    return players_.ValidateToken(token);
+    // Проверяем, что токен существует и собака ещё жива
+    if (!players_.ValidateToken(token)) {
+        return false;
+    }
+    return GetDogByToken(token) != nullptr;
 }
 
 std::unordered_map<std::string, std::string> GameState::GetPlayersOnMapForTest(const model::Map::Id& map_id) const {
@@ -369,7 +376,10 @@ std::unordered_map<std::string, std::string> GameState::GetPlayersOnMapForTest(c
     std::unordered_map<std::string, std::string> result;
     
     for (auto* p : players_on_map) {
-        result[std::to_string(*p->GetId())] = p->GetName();
+        // Проверяем, что у игрока ещё есть собака
+        if (dogs_.find(p->GetId()) != dogs_.end()) {
+            result[std::to_string(*p->GetId())] = p->GetName();
+        }
     }
     
     return result;
