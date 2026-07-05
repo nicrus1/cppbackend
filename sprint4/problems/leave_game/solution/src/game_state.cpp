@@ -132,29 +132,34 @@ void GameState::CollectLootForDog(model::Dog& dog, const model::Map& map) {
     }
 }
 
-void GameState::CheckDogInactivity(int64_t /*time_delta_ms*/) {
+void GameState::CheckDogInactivity(int64_t time_delta_ms) {
     std::vector<model::PlayerId> players_to_remove;
     
     for (auto& [player_id, dog] : dogs_) {
         model::Player* player = players_.FindPlayer(player_id);
         if (!player) continue;
         
-        // Проверяем, не превысило ли время бездействия лимит
+        auto speed = dog.GetSpeed();
+        
+        if (speed.vx != 0.0 || speed.vy != 0.0) {
+            idle_time_[player_id] = std::chrono::milliseconds(0);
+            continue;
+        }
+        
+        idle_time_[player_id] += std::chrono::milliseconds(time_delta_ms);
+        
         if (idle_time_[player_id] >= dog_retirement_time_) {
             RetireDog(dog, *player);
             players_to_remove.push_back(player_id);
         }
     }
     
-    // Удаляем игроков, чьи собаки ушли на покой
     for (auto player_id : players_to_remove) {
         idle_time_.erase(player_id);
-        
         auto dog_it = dogs_.find(player_id);
         if (dog_it != dogs_.end()) {
             dogs_.erase(dog_it);
         }
-        
         players_.RemovePlayer(player_id);
     }
 }
@@ -193,7 +198,6 @@ GameState::JoinResult GameState::JoinGame(const std::string& user_name, const mo
     dogs_.emplace(player.GetId(), std::move(dog));
     player.SetDogId(dog_id);
     
-    // Инициализируем время бездействия
     idle_time_[player.GetId()] = std::chrono::milliseconds(0);
 
     auto it = loot_managers_.find(map_id);
@@ -247,7 +251,6 @@ void GameState::SetDogDirection(const model::Token& token, model::Direction dir)
     }
     dog->SetDirection(dir);
     
-    // Сбрасываем время бездействия при начале движения
     model::Player* player = players_.FindPlayerByToken(token);
     if (player) {
         idle_time_[player->GetId()] = std::chrono::milliseconds(0);
@@ -260,7 +263,6 @@ void GameState::StopDog(const model::Token& token) {
 
     dog->SetSpeed({0.0, 0.0});
     
-    // Сбрасываем время бездействия при остановке
     model::Player* player = players_.FindPlayerByToken(token);
     if (player) {
         idle_time_[player->GetId()] = std::chrono::milliseconds(0);
@@ -282,13 +284,18 @@ void GameState::SetLootGeneratorConfig(double period, double probability) {
 void GameState::ProcessTick(int64_t time_delta_ms) {
     auto delta = std::chrono::milliseconds(time_delta_ms);
     
-    // Обновляем время игры для всех собак
     for (auto& [player_id, dog] : dogs_) {
         auto total = dog.GetTotalPlayTime();
         dog.SetTotalPlayTime(total + delta);
     }
     
-    // Двигаем собак, собираем трофеи и высчитываем точное время простоя
+    // Фиксируем, двигалась ли собака в начале тика
+    std::unordered_map<model::PlayerId, bool> was_moving;
+    for (auto& [player_id, dog] : dogs_) {
+        auto speed = dog.GetSpeed();
+        was_moving[player_id] = (speed.vx != 0.0 || speed.vy != 0.0);
+    }
+    
     for (auto& [player_id, dog] : dogs_) {
         model::Player* player = players_.FindPlayer(player_id);
         if (!player) continue;
@@ -296,41 +303,22 @@ void GameState::ProcessTick(int64_t time_delta_ms) {
         const model::Map* map = game_.FindMap(player->GetMapId());
         if (!map) continue;
 
-        auto old_pos = dog.GetPosition();
-        auto old_speed = dog.GetSpeed();
-
         MoveDog(dog, *map, time_delta_ms);
         
-        auto new_pos = dog.GetPosition();
         auto new_speed = dog.GetSpeed();
-
-        if (old_speed.vx == 0.0 && old_speed.vy == 0.0) {
-            // Собака стояла с самого начала тика
-            idle_time_[player_id] += std::chrono::milliseconds(time_delta_ms);
-        } else if (new_speed.vx != 0.0 || new_speed.vy != 0.0) {
-            // Собака всё еще находится в движении (не уткнулась в стену)
-            idle_time_[player_id] = std::chrono::milliseconds(0);
-        } else {
-            // Собака двигалась, но остановилась во время этого тика
-            double dist = std::abs(new_pos.x - old_pos.x) + std::abs(new_pos.y - old_pos.y);
-            double speed_mag = std::max(std::abs(old_speed.vx), std::abs(old_speed.vy));
-            double move_time_s = dist / speed_mag;
-            int64_t move_time_ms = static_cast<int64_t>(std::round(move_time_s * 1000.0));
-            
-            int64_t idle_ms = time_delta_ms - move_time_ms;
-            if (idle_ms < 0) idle_ms = 0;
-            
-            // Засчитываем в простой только тот остаток тика, который она простояла
-            idle_time_[player_id] = std::chrono::milliseconds(idle_ms);
+        
+        // Если собака начала тик в движении, но во время него остановилась (уткнулась в стену), 
+        // компенсируем time_delta_ms отрицательным значением, чтобы последующий вызов
+        // CheckDogInactivity добавил time_delta_ms и вывел таймер бездействия точно в 0.
+        if (was_moving[player_id] && new_speed.vx == 0.0 && new_speed.vy == 0.0) {
+            idle_time_[player_id] = std::chrono::milliseconds(-time_delta_ms);
         }
-
+        
         CollectLootForDog(dog, *map);
     }
     
-    // Удаляем неактивных собак
-    CheckDogInactivity(0);
+    CheckDogInactivity(time_delta_ms);
     
-    // Обновляем генерацию трофеев
     for (const auto& map : game_.GetMaps()) {
         auto it = loot_managers_.find(map.GetId());
         if (it == loot_managers_.end()) {
