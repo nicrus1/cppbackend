@@ -8,9 +8,6 @@
 #include <functional>
 #include <cassert>
 #include <stdexcept>
-#include <unordered_set>
-#include <thread>
-#include <chrono>
 
 namespace db {
 
@@ -47,7 +44,6 @@ public:
     ConnectionPool(size_t capacity, std::function<ConnectionPtr()> factory);
     
     ConnectionWrapper GetConnection();
-    ConnectionWrapper GetConnection(std::chrono::milliseconds timeout);
     
     size_t GetPoolSize() const;
     size_t GetUsedConnections() const;
@@ -59,7 +55,6 @@ private:
     std::condition_variable cond_var_;
     std::vector<ConnectionPtr> pool_;
     size_t used_connections_ = 0;
-    std::unordered_set<std::thread::id> locked_by_thread_;
 };
 
 } // namespace db

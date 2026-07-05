@@ -77,10 +77,8 @@ int main(int argc, const char* argv[]) {
         if (db_url) {
             std::cerr << "Initializing database connection pool..." << std::endl;
             try {
-                // Размер пула: количество потоков + 1 для безопасности
-                size_t pool_size = num_threads + 1;
-                std::cerr << "Creating connection pool with size " << pool_size << std::endl;
-                
+                // Уменьшаем размер пула для тестов
+                size_t pool_size = 2; // Фиксированный размер для тестов
                 auto pool = std::make_shared<db::ConnectionPool>(
                     pool_size,
                     [db_url]() {

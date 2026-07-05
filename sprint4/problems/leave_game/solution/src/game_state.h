@@ -6,7 +6,6 @@
 #include "dog.h"
 #include "loot_manager.h"
 #include "db/record_manager.h"
-#include "logger.h"
 
 #include <unordered_map>
 #include <memory>
@@ -16,7 +15,6 @@
 #include <random>
 #include <chrono>
 #include <map>
-#include <mutex>
 
 namespace game {
 
@@ -123,9 +121,6 @@ private:
     
     // Для отслеживания времени бездействия
     std::unordered_map<model::PlayerId, std::chrono::milliseconds, util::TaggedHasher<model::PlayerId>> idle_time_;
-    
-    // Мьютекс для защиты операций с retirement
-    std::mutex retirement_mutex_;
 };
 
 } // namespace game

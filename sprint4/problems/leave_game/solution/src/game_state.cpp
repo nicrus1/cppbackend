@@ -133,11 +133,9 @@ void GameState::CollectLootForDog(model::Dog& dog, const model::Map& map) {
 }
 
 void GameState::CheckDogInactivity(int64_t time_delta_ms) {
-    std::lock_guard<std::mutex> lock(retirement_mutex_);
-    
     std::vector<model::PlayerId> players_to_remove;
     
-    // Обновляем время бездействия и собираем игроков для удаления
+    // Обновляем время бездействия для всех собак
     for (auto& [player_id, dog] : dogs_) {
         model::Player* player = players_.FindPlayer(player_id);
         if (!player) continue;
@@ -155,25 +153,7 @@ void GameState::CheckDogInactivity(int64_t time_delta_ms) {
         
         // Проверяем, не превысило ли время бездействия лимит
         if (idle_time_[player_id] >= dog_retirement_time_) {
-            // Сохраняем рекорд до удаления
-            int score = dog.GetScore();
-            double play_time = std::chrono::duration<double>(
-                dog.GetTotalPlayTime()
-            ).count();
-            
-            logger::LogDebug("Retiring dog: " + player->GetName() + 
-                           ", score: " + std::to_string(score) + 
-                           ", play_time: " + std::to_string(play_time));
-            
-            if (record_manager_) {
-                try {
-                    record_manager_->AddRecord(player->GetName(), score, play_time);
-                    logger::LogDebug("Record saved successfully");
-                } catch (const std::exception& e) {
-                    logger::LogError(0, "Failed to save record: " + std::string(e.what()), "CheckDogInactivity");
-                }
-            }
-            
+            RetireDog(dog, *player);
             players_to_remove.push_back(player_id);
         }
     }
@@ -190,14 +170,22 @@ void GameState::CheckDogInactivity(int64_t time_delta_ms) {
         }
         // Удаляем игрока
         players_.RemovePlayer(player_id);
-        
-        logger::LogDebug("Player removed due to inactivity: " + std::to_string(*player_id));
     }
 }
 
 void GameState::RetireDog(model::Dog& dog, const model::Player& player) {
-    // Этот метод больше не используется, логика перенесена в CheckDogInactivity
-    // Оставлен для совместимости
+    if (record_manager_) {
+        int score = dog.GetScore();
+        double play_time = std::chrono::duration<double>(
+            dog.GetTotalPlayTime()
+        ).count();
+        
+        try {
+            record_manager_->AddRecord(player.GetName(), score, play_time);
+        } catch (const std::exception& e) {
+            std::cerr << "Failed to save record: " << e.what() << std::endl;
+        }
+    }
 }
 
 GameState::JoinResult GameState::JoinGame(const std::string& user_name, const model::Map::Id& map_id) {
@@ -276,7 +264,6 @@ void GameState::SetDogDirection(const model::Token& token, model::Direction dir)
     // Сбрасываем время бездействия при начале движения
     model::Player* player = players_.FindPlayerByToken(token);
     if (player) {
-        std::lock_guard<std::mutex> lock(retirement_mutex_);
         idle_time_[player->GetId()] = std::chrono::milliseconds(0);
     }
 }
@@ -322,7 +309,7 @@ void GameState::ProcessTick(int64_t time_delta_ms) {
         CollectLootForDog(dog, *map);
     }
     
-    // Проверяем бездействие (с мьютексом внутри)
+    // Проверяем бездействие
     CheckDogInactivity(time_delta_ms);
     
     // Обновляем генерацию трофеев
