@@ -60,7 +60,6 @@ std::vector<Record> RecordManager::GetRecords(int start, int max_items) {
         start = 0;
     }
     
-    // Если max_items == 0, возвращаем пустой результат
     if (max_items == 0) {
         return {};
     }

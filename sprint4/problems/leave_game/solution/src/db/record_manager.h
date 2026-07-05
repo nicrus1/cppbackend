@@ -21,7 +21,6 @@ public:
     
     void InitTable();
     void AddRecord(const std::string& name, int score, double play_time);
-    // max_items может быть 0, в этом случае возвращается пустой список
     std::vector<Record> GetRecords(int start, int max_items);
     
 private:

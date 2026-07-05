@@ -6,6 +6,7 @@
 #include "dog.h"
 #include "loot_manager.h"
 #include "db/record_manager.h"
+#include "logger.h"
 
 #include <unordered_map>
 #include <memory>
@@ -15,6 +16,7 @@
 #include <random>
 #include <chrono>
 #include <map>
+#include <mutex>
 
 namespace game {
 
@@ -58,10 +60,6 @@ public:
 
     model::Dog* GetDogByTokenMutable(
         const model::Token& token);
-
-    bool IsDogAlive(const model::Token& token) const {
-        return GetDogByToken(token) != nullptr;
-    }
 
     std::vector<PlayerState>
     GetGameState(const model::Token& token) const;
@@ -125,8 +123,9 @@ private:
     
     // Для отслеживания времени бездействия
     std::unordered_map<model::PlayerId, std::chrono::milliseconds, util::TaggedHasher<model::PlayerId>> idle_time_;
-    // Флаг, была ли собака остановлена игроком
-    std::unordered_map<model::PlayerId, bool, util::TaggedHasher<model::PlayerId>> is_stopped_by_player_;
+    
+    // Мьютекс для защиты операций с retirement
+    std::mutex retirement_mutex_;
 };
 
 } // namespace game
