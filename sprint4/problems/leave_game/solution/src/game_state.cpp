@@ -290,7 +290,8 @@ void GameState::ProcessTick(int64_t time_delta_ms) {
     }
     
     // Фиксируем, двигалась ли собака в начале тика
-    std::unordered_map<model::PlayerId, bool> was_moving;
+    // Используем TaggedHasher для корректной работы с model::PlayerId в unordered_map
+    std::unordered_map<model::PlayerId, bool, util::TaggedHasher<model::PlayerId>> was_moving;
     for (auto& [player_id, dog] : dogs_) {
         auto speed = dog.GetSpeed();
         was_moving[player_id] = (speed.vx != 0.0 || speed.vy != 0.0);
