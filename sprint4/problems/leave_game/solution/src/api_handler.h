@@ -299,53 +299,30 @@ public:
     }
 
     template <typename Body, typename Allocator, typename Send>
-    void HandleRecords(http::request<Body, http::basic_fields<Allocator>>&& req, Send&& send) {
-        if (req.method() != http::verb::get && req.method() != http::verb::head) {
-            SendErrorWithAllow(std::move(req), send, http::status::method_not_allowed,
-                              "invalidMethod", "Invalid method", "GET, HEAD");
-            return;
-        }
+void HandleRecords(http::request<Body, http::basic_fields<Allocator>>&& req, Send&& send) {
+    if (req.method() != http::verb::get && req.method() != http::verb::head) {
+        SendErrorWithAllow(std::move(req), send, http::status::method_not_allowed,
+                          "invalidMethod", "Invalid method", "GET, HEAD");
+        return;
+    }
 
-        if (req.method() == http::verb::head) {
-            SendResponse(std::move(req), send, http::status::ok, "");
-            return;
-        }
+    if (req.method() == http::verb::head) {
+        SendResponse(std::move(req), send, http::status::ok, "");
+        return;
+    }
 
-        // Парсим параметры
-        std::string target = std::string(req.target());
-        int start = 0;
-        int max_items = 100;
-        
-        auto query_pos = target.find('?');
-        if (query_pos != std::string::npos) {
-            std::string query = target.substr(query_pos + 1);
-            // Парсим параметры start и maxItems
-            std::string param;
-            for (char c : query) {
-                if (c == '&') {
-                    auto eq_pos = param.find('=');
-                    if (eq_pos != std::string::npos) {
-                        std::string key = param.substr(0, eq_pos);
-                        std::string value = param.substr(eq_pos + 1);
-                        if (key == "start") {
-                            start = std::stoi(value);
-                            if (start < 0) start = 0;
-                        } else if (key == "maxItems") {
-                            max_items = std::stoi(value);
-                            if (max_items < 1) max_items = 1;
-                            if (max_items > 100) {
-                                SendError(std::move(req), send, http::status::bad_request,
-                                         "badRequest", "maxItems exceeds 100");
-                                return;
-                            }
-                        }
-                    }
-                    param.clear();
-                } else {
-                    param += c;
-                }
-            }
-            if (!param.empty()) {
+    // Парсим параметры
+    std::string target = std::string(req.target());
+    int start = 0;
+    int max_items = 100;
+    
+    auto query_pos = target.find('?');
+    if (query_pos != std::string::npos) {
+        std::string query = target.substr(query_pos + 1);
+        // Парсим параметры start и maxItems
+        std::string param;
+        for (char c : query) {
+            if (c == '&') {
                 auto eq_pos = param.find('=');
                 if (eq_pos != std::string::npos) {
                     std::string key = param.substr(0, eq_pos);
@@ -355,7 +332,11 @@ public:
                         if (start < 0) start = 0;
                     } else if (key == "maxItems") {
                         max_items = std::stoi(value);
-                        if (max_items < 1) max_items = 1;
+                        if (max_items < 0) {
+                            SendError(std::move(req), send, http::status::bad_request,
+                                     "badRequest", "maxItems cannot be negative");
+                            return;
+                        }
                         if (max_items > 100) {
                             SendError(std::move(req), send, http::status::bad_request,
                                      "badRequest", "maxItems exceeds 100");
@@ -363,35 +344,68 @@ public:
                         }
                     }
                 }
+                param.clear();
+            } else {
+                param += c;
             }
         }
-        
-        if (!record_manager_) {
-            SendError(std::move(req), send, http::status::internal_server_error,
-                     "internalError", "Record manager not initialized");
+        if (!param.empty()) {
+            auto eq_pos = param.find('=');
+            if (eq_pos != std::string::npos) {
+                std::string key = param.substr(0, eq_pos);
+                std::string value = param.substr(eq_pos + 1);
+                if (key == "start") {
+                    start = std::stoi(value);
+                    if (start < 0) start = 0;
+                } else if (key == "maxItems") {
+                    max_items = std::stoi(value);
+                    if (max_items < 0) {
+                        SendError(std::move(req), send, http::status::bad_request,
+                                 "badRequest", "maxItems cannot be negative");
+                        return;
+                    }
+                    if (max_items > 100) {
+                        SendError(std::move(req), send, http::status::bad_request,
+                                 "badRequest", "maxItems exceeds 100");
+                        return;
+                    }
+                }
+            }
+        }
+    }
+    
+    if (!record_manager_) {
+        SendError(std::move(req), send, http::status::internal_server_error,
+                 "internalError", "Record manager not initialized");
+        return;
+    }
+    
+    try {
+        // Если max_items == 0, возвращаем пустой массив
+        if (max_items == 0) {
+            SendResponse(std::move(req), send, http::status::ok, "[]");
             return;
         }
         
-        try {
-            auto records = record_manager_->GetRecords(start, max_items);
-            
-            boost::json::array records_array;
-            for (const auto& rec : records) {
-                records_array.push_back(boost::json::object{
-                    {"name", rec.name},
-                    {"score", rec.score},
-                    {"playTime", rec.play_time}
-                });
-            }
-            
-            SendResponse(std::move(req), send, http::status::ok, 
-                        boost::json::serialize(records_array));
-        } catch (const std::exception& e) {
-            logger::LogError(0, "Records error: " + std::string(e.what()), "HandleRecords");
-            SendError(std::move(req), send, http::status::internal_server_error,
-                     "internalError", "Failed to get records");
+        auto records = record_manager_->GetRecords(start, max_items);
+        
+        boost::json::array records_array;
+        for (const auto& rec : records) {
+            records_array.push_back(boost::json::object{
+                {"name", rec.name},
+                {"score", rec.score},
+                {"playTime", rec.play_time}
+            });
         }
+        
+        SendResponse(std::move(req), send, http::status::ok, 
+                    boost::json::serialize(records_array));
+    } catch (const std::exception& e) {
+        logger::LogError(0, "Records error: " + std::string(e.what()), "HandleRecords");
+        SendError(std::move(req), send, http::status::internal_server_error,
+                 "internalError", "Failed to get records");
     }
+}
 
 private:
     template <typename Body, typename Allocator>

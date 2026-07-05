@@ -59,6 +59,12 @@ std::vector<Record> RecordManager::GetRecords(int start, int max_items) {
     if (start < 0) {
         start = 0;
     }
+    
+    // Если max_items == 0, возвращаем пустой результат
+    if (max_items == 0) {
+        return {};
+    }
+    
     if (max_items < 1 || max_items > 100) {
         throw std::runtime_error("max_items must be between 1 and 100");
     }
@@ -77,7 +83,6 @@ std::vector<Record> RecordManager::GetRecords(int start, int max_items) {
         std::vector<Record> records;
         records.reserve(result.size());
         
-        // Используем индексный доступ вместо range-based for
         for (size_t i = 0; i < result.size(); ++i) {
             Record rec;
             rec.name = result[i][0].as<std::string>();
