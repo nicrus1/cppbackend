@@ -63,7 +63,7 @@ public:
             path = path.substr(1);
         }
 
-        if (target.find("/api/v") == 0 && target.find("/api/v1/") != 0) {
+        if (target.starts_with("/api/v") && !target.starts_with("/api/v1/")) {
             SendError(std::move(req), send, http::status::bad_request,
                       "badRequest", "Invalid API version");
             return;
@@ -120,7 +120,7 @@ public:
         }
 
         const std::string prefix = "/api/v1/maps/";
-        if (target.find(prefix) == 0) {
+        if (target.starts_with(prefix)) {
             if (method != "GET" && method != "HEAD") {
                 SendErrorWithAllow(std::move(req), send, http::status::method_not_allowed,
                           "invalidMethod", "Method not allowed", "GET, HEAD");

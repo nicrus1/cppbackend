@@ -3,6 +3,7 @@
 #include <string>
 #include <unordered_map>
 #include <cctype>
+#include <algorithm>
 
 std::string HtmlDecode(std::string_view str) {
     static const std::unordered_map<std::string, char> entities = {
@@ -28,9 +29,8 @@ std::string HtmlDecode(std::string_view str) {
             if (entity_end > entity_start) {
                 std::string entity = std::string(str.substr(entity_start, entity_end - entity_start));
                 std::string lower_entity = entity;
-                for (char& c : lower_entity) {
-                    c = std::tolower(c);
-                }
+                std::transform(lower_entity.begin(), lower_entity.end(), 
+                              lower_entity.begin(), ::tolower);
 
                 auto it = entities.find(lower_entity);
                 if (it != entities.end()) {

@@ -94,8 +94,7 @@ public:
     }
 
 private:
-    model::Position GenerateStartPosition(
-        const model::Map& map);
+    static model::Position GenerateStartPosition(const model::Map& map);
 
     void MoveDog(
         model::Dog& dog,

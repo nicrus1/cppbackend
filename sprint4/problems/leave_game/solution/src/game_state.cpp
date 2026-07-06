@@ -41,8 +41,8 @@ void GameState::MoveDog(model::Dog& dog, const model::Map& map, int64_t time_del
         return;
     }
 
-    double target_x = pos.x + speed.vx * dt;
-    double target_y = pos.y + speed.vy * dt;
+    const double target_x = pos.x + speed.vx * dt;
+    const double target_y = pos.y + speed.vy * dt;
 
     double min_bound = 0.0;
     double max_bound = 0.0;
@@ -84,23 +84,25 @@ void GameState::MoveDog(model::Dog& dog, const model::Map& map, int64_t time_del
     }
 
     if (speed.vx != 0) {
-        if (target_x < min_bound) {
-            target_x = min_bound;
+        double clamped_x = target_x;
+        if (clamped_x < min_bound) {
+            clamped_x = min_bound;
             dog.SetSpeed({0.0, 0.0});
-        } else if (target_x > max_bound) {
-            target_x = max_bound;
+        } else if (clamped_x > max_bound) {
+            clamped_x = max_bound;
             dog.SetSpeed({0.0, 0.0});
         }
-        dog.SetPosition(target_x, pos.y);
+        dog.SetPosition(clamped_x, pos.y);
     } else if (speed.vy != 0) {
-        if (target_y < min_bound) {
-            target_y = min_bound;
+        double clamped_y = target_y;
+        if (clamped_y < min_bound) {
+            clamped_y = min_bound;
             dog.SetSpeed({0.0, 0.0});
-        } else if (target_y > max_bound) {
-            target_y = max_bound;
+        } else if (clamped_y > max_bound) {
+            clamped_y = max_bound;
             dog.SetSpeed({0.0, 0.0});
         }
-        dog.SetPosition(pos.x, target_y);
+        dog.SetPosition(pos.x, clamped_y);
     }
 }
 

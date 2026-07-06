@@ -81,11 +81,12 @@ public:
             res_obj["playerId"] = *join_result.player_id;
 
             SendResponse(std::move(req), send, http::status::ok, boost::json::serialize(res_obj));
+        } catch (const boost::system::system_error& e) {
+            logger::LogError(0, "Join game system error: " + std::string(e.what()), "HandleJoin");
+            SendError(std::move(req), send, http::status::bad_request,
+                      "invalidArgument", "System error processing join request");
         } catch (const std::exception& e) {
             logger::LogError(0, "Join game error: " + std::string(e.what()), "HandleJoin");
-            SendError(std::move(req), send, http::status::bad_request,
-                      "invalidArgument", "Join game request parses but misses fields");
-        } catch (...) {
             SendError(std::move(req), send, http::status::bad_request,
                       "invalidArgument", "Join game request parses but misses fields");
         }
@@ -246,7 +247,12 @@ public:
 
             boost::json::object res_obj;
             SendResponse(std::move(req), send, http::status::ok, boost::json::serialize(res_obj));
-        } catch (...) {
+        } catch (const boost::system::system_error& e) {
+            logger::LogError(0, "Player action system error: " + std::string(e.what()), "HandlePlayerAction");
+            SendError(std::move(req), send, http::status::bad_request,
+                      "invalidArgument", "System error processing action");
+        } catch (const std::exception& e) {
+            logger::LogError(0, "Player action error: " + std::string(e.what()), "HandlePlayerAction");
             SendError(std::move(req), send, http::status::bad_request,
                       "invalidArgument", "Failed to parse action");
         }
@@ -286,11 +292,12 @@ public:
 
             boost::json::object res_obj;
             SendResponse(std::move(req), send, http::status::ok, boost::json::serialize(res_obj));
+        } catch (const boost::system::system_error& e) {
+            logger::LogError(0, "Tick system error: " + std::string(e.what()), "HandleTick");
+            SendError(std::move(req), send, http::status::bad_request,
+                      "invalidArgument", "System error processing tick");
         } catch (const std::exception& e) {
             logger::LogError(0, "Tick error: " + std::string(e.what()), "HandleTick");
-            SendError(std::move(req), send, http::status::bad_request,
-                      "invalidArgument", "Failed to parse tick request JSON");
-        } catch (...) {
             SendError(std::move(req), send, http::status::bad_request,
                       "invalidArgument", "Failed to parse tick request JSON");
         }

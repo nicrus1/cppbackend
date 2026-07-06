@@ -116,7 +116,7 @@ int main(int argc, const char* argv[]) {
         http_server::ServeHttp(ioc, {address, port}, [&handler, api_strand](auto&& req, auto&& send) {
             std::string target = std::string(req.target());
 
-            if (target.find("/api/") == 0) {
+            if (target.starts_with("/api/")) {
                 net::dispatch(api_strand, [&handler, req = std::move(req), send = std::move(send)]() mutable {
                     handler(std::move(req), std::move(send));
                 });
