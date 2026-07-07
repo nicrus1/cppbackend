@@ -9,7 +9,6 @@ conan_basic_setup(TARGETS)
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
 
-# Создаем директорию для исходников
 file(MAKE_DIRECTORY ${CMAKE_SOURCE_DIR}/src/db)
 
 add_library(game_model STATIC
@@ -38,6 +37,7 @@ add_executable(game_server
     src/http_server.cpp
     src/command_line.h
     src/boost_json.cpp
+    src/game_state.h
 )
 
 target_link_libraries(game_server game_model CONAN_PKG::boost Threads::Threads)

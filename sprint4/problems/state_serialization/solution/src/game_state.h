@@ -8,6 +8,7 @@
 #include <random>
 #include <chrono>
 #include <algorithm>
+#include <iostream>
 
 #include "model.h"
 #include "game.h"
@@ -35,9 +36,16 @@ public:
     };
     
     JoinResult JoinGame(const std::string& user_name, const std::string& map_id) {
+        std::cout << "JoinGame called: user=" << user_name << ", map_id=" << map_id << std::endl;
+        
         auto map_state = game_.GetMapState(map_id);
         if (!map_state) {
-            throw std::runtime_error("Map not found");
+            std::cerr << "Map not found: " << map_id << std::endl;
+            std::cerr << "Available maps:" << std::endl;
+            for (const auto& pair : game_.GetMaps()) {
+                std::cerr << "  " << pair.first << std::endl;
+            }
+            throw std::runtime_error("Map not found: " + map_id);
         }
         
         std::string token_str = GenerateToken();

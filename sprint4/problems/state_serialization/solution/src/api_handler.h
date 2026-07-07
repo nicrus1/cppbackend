@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <memory>
 #include <chrono>
+#include <iostream>
 
 namespace http_handler {
 
@@ -40,6 +41,8 @@ public:
 
     template <typename Body, typename Allocator, typename Send>
     void HandleJoin(http::request<Body, http::basic_fields<Allocator>>&& req, Send&& send) {
+        std::cout << "HandleJoin called" << std::endl;
+        
         if (req.method() != http::verb::post) {
             SendErrorWithAllow(std::move(req), send, http::status::method_not_allowed,
                                "invalidMethod", "Only POST method is expected", "POST");
@@ -54,7 +57,10 @@ public:
         }
 
         try {
-            auto obj = boost::json::parse(req.body()).as_object();
+            std::string body_str(req.body());
+            std::cout << "Request body: " << body_str << std::endl;
+            
+            auto obj = boost::json::parse(body_str).as_object();
             if (!obj.contains("userName") || !obj.contains("mapId")) {
                 SendError(std::move(req), send, http::status::bad_request,
                           "invalidArgument", "Join game request parses but misses fields");
@@ -69,8 +75,12 @@ public:
             }
 
             std::string map_id = std::string(obj.at("mapId").as_string());
+            
+            std::cout << "User: " << user_name << ", Map: " << map_id << std::endl;
 
             auto join_result = game_state_->JoinGame(user_name, map_id);
+            
+            std::cout << "Join result: token=" << join_result.token << ", player_id=" << join_result.player_id << std::endl;
             
             boost::json::object res_obj;
             res_obj["authToken"] = join_result.token;
@@ -78,9 +88,11 @@ public:
 
             SendResponse(std::move(req), send, http::status::ok, boost::json::serialize(res_obj));
         } catch (const std::exception& e) {
+            std::cerr << "Exception in HandleJoin: " << e.what() << std::endl;
             SendError(std::move(req), send, http::status::bad_request,
-                      "invalidArgument", "Join game request parses but misses fields");
+                      "invalidArgument", e.what());
         } catch (...) {
+            std::cerr << "Unknown exception in HandleJoin" << std::endl;
             SendError(std::move(req), send, http::status::bad_request,
                       "invalidArgument", "Join game request parses but misses fields");
         }

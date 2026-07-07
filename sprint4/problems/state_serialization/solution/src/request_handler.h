@@ -3,6 +3,7 @@
 #include "http_server.h"
 #include "model.h"
 #include "api_handler.h"
+#include "game_state.h"
 #include "logger.h"
 #include <boost/json.hpp>
 #include <optional>
@@ -166,7 +167,6 @@ private:
         map_obj["id"] = map_state->map_id;
         map_obj["name"] = map_state->name;
         
-        // Дороги
         boost::json::array roads_array;
         for (const auto& road : map_state->roads) {
             boost::json::object road_obj;
@@ -178,7 +178,6 @@ private:
         }
         map_obj["roads"] = roads_array;
         
-        // Здания
         boost::json::array buildings_array;
         for (const auto& building : map_state->buildings) {
             boost::json::object building_obj;
@@ -190,7 +189,6 @@ private:
         }
         map_obj["buildings"] = buildings_array;
         
-        // Офисы
         boost::json::array offices_array;
         for (const auto& office : map_state->offices) {
             boost::json::object office_obj;
@@ -203,7 +201,6 @@ private:
         }
         map_obj["offices"] = offices_array;
         
-        // Типы лута
         boost::json::array loot_array;
         for (const auto& loot : map_state->loot_types) {
             boost::json::object loot_obj;

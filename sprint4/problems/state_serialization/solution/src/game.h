@@ -17,7 +17,6 @@
 
 namespace model {
 
-// Структура для дороги
 struct RoadSegment {
     double x0 = 0, y0 = 0;
     double x1 = 0, y1 = 0;
@@ -25,20 +24,17 @@ struct RoadSegment {
     bool has_y1 = false;
 };
 
-// Структура для здания
 struct Building {
     double x = 0, y = 0;
     double w = 0, h = 0;
 };
 
-// Структура для офиса
 struct Office {
     std::string id;
     double x = 0, y = 0;
     double offsetX = 0, offsetY = 0;
 };
 
-// Структура для типа лута
 struct LootType {
     std::string name;
     std::string file;
@@ -49,7 +45,6 @@ struct LootType {
     uint32_t value = 0;
 };
 
-// Структура для хранения предмета на карте
 struct LootItem {
     uint32_t id = 0;
     uint32_t type = 0;
@@ -57,7 +52,6 @@ struct LootItem {
     bool is_collected = false;
 };
 
-// Структура для хранения информации об игроке
 struct PlayerInfo {
     std::string token;
     std::string user_id;
@@ -65,7 +59,6 @@ struct PlayerInfo {
     std::string map_id;
 };
 
-// Структура для хранения состояния карты
 struct MapState {
     std::string map_id;
     std::string name;
@@ -82,12 +75,10 @@ struct MapState {
     double loot_probability = 0.5;
     uint64_t next_loot_id = 1;
     
-    // Границы карты
     double map_width = 40.0;
     double map_height = 30.0;
 };
 
-// Класс для хранения токена (для совместимости с api_handler)
 class Token {
 public:
     Token() = default;
@@ -103,7 +94,6 @@ private:
     std::string token_;
 };
 
-// Класс Map для совместимости с api_handler
 class Map {
 public:
     using Id = util::Tagged<std::string, Map>;
@@ -146,7 +136,6 @@ public:
         }
     }
     
-    // Методы для работы с картами
     void AddMap(const std::string& map_id, double dog_speed = 3.0) {
         if (maps_.find(map_id) != maps_.end()) {
             throw std::runtime_error("Map already exists: " + map_id);
@@ -186,12 +175,10 @@ public:
         return &it->second;
     }
     
-    // Метод для поиска карты (для совместимости с api_handler)
     const MapState* FindMap(const std::string& map_id) const {
         return GetMapState(map_id);
     }
     
-    // Методы для работы с собаками
     void AddDog(const std::string& map_id, std::shared_ptr<Dog> dog) {
         auto it = maps_.find(map_id);
         if (it == maps_.end()) {
@@ -218,7 +205,6 @@ public:
         return all_dogs;
     }
     
-    // Методы для работы с предметами
     void AddLootItem(const std::string& map_id, const LootItem& item) {
         auto it = maps_.find(map_id);
         if (it == maps_.end()) {
@@ -247,7 +233,6 @@ public:
         return all_items;
     }
     
-    // Методы для работы с игроками
     void AddPlayer(const std::string& token, const std::string& user_id, 
                    const std::string& map_id, std::shared_ptr<Dog> dog) {
         PlayerInfo player;
@@ -288,16 +273,13 @@ public:
         return game_time_ms_;
     }
     
-    // Методы для сохранения и восстановления состояния
     void SaveState(serialization::GameState& state) const {
         state.game_time_ms = game_time_ms_;
         
-        // Сохраняем список карт
         for (const auto& map_pair : maps_) {
             state.map_ids.push_back(map_pair.first);
         }
         
-        // Сохраняем собак
         for (const auto& map_pair : maps_) {
             for (const auto& dog : map_pair.second.dogs) {
                 if (dog) {
@@ -307,7 +289,6 @@ public:
             }
         }
         
-        // Сохраняем предметы
         for (const auto& map_pair : maps_) {
             for (const auto& item : map_pair.second.loot_items) {
                 if (!item.is_collected) {
@@ -321,7 +302,6 @@ public:
             }
         }
         
-        // Сохраняем игроков
         for (const auto& player_pair : players_) {
             const auto& player = player_pair.second;
             serialization::PlayerRepr player_repr;
@@ -336,14 +316,12 @@ public:
     }
     
     void RestoreState(const serialization::GameState& state) {
-        // Сохраняем существующие карты
         auto existing_maps = maps_;
         maps_.clear();
         players_.clear();
         
         game_time_ms_ = state.game_time_ms;
         
-        // Восстанавливаем карты
         for (const auto& map_id : state.map_ids) {
             if (existing_maps.find(map_id) != existing_maps.end()) {
                 maps_[map_id] = existing_maps[map_id];
@@ -352,16 +330,13 @@ public:
             }
         }
         
-        // Создаем маппинг ID собаки -> объект
         std::unordered_map<uint32_t, std::shared_ptr<Dog>> dog_map;
         
-        // Восстанавливаем собак
         for (const auto& dog_repr : state.dogs) {
             auto dog = std::make_shared<model::Dog>(dog_repr.Restore());
             uint32_t dog_id = *dog->GetId();
             dog_map[dog_id] = dog;
             
-            // Добавляем собаку на соответствующую карту
             auto it = state.dog_to_map.find(dog_id);
             if (it != state.dog_to_map.end()) {
                 auto map_it = maps_.find(it->second);
@@ -371,7 +346,6 @@ public:
             }
         }
         
-        // Восстанавливаем предметы
         for (const auto& item_repr : state.loot_items) {
             LootItem item;
             item.id = item_repr.id;
@@ -388,7 +362,6 @@ public:
             }
         }
         
-        // Восстанавливаем игроков
         for (const auto& player_repr : state.players) {
             PlayerInfo player;
             player.token = player_repr.token;
@@ -405,7 +378,6 @@ public:
     }
     
     void UpdateMap(MapState& map_state, app::milliseconds delta) {
-        // Обновляем позиции собак
         for (auto& dog : map_state.dogs) {
             if (dog) {
                 double speed_x = dog->GetSpeed().x;
@@ -418,7 +390,6 @@ public:
                     pos.x += speed_x * delta_seconds * map_state.dog_speed;
                     pos.y += speed_y * delta_seconds * map_state.dog_speed;
                     
-                    // Ограничиваем движение границами карты
                     pos.x = std::max(0.0, std::min(map_state.map_width, pos.x));
                     pos.y = std::max(0.0, std::min(map_state.map_height, pos.y));
                     
@@ -427,24 +398,20 @@ public:
             }
         }
         
-        // Генерируем предметы
         if (map_state.loot_period_ms > 0 && !map_state.loot_types.empty()) {
             map_state.last_loot_generation_time += delta.count();
             
             while (map_state.last_loot_generation_time >= map_state.loot_period_ms) {
                 map_state.last_loot_generation_time -= map_state.loot_period_ms;
                 
-                // Генерация на основе вероятности
                 std::uniform_real_distribution<double> dist(0.0, 1.0);
                 if (dist(rng_) < map_state.loot_probability) {
                     LootItem item;
                     item.id = map_state.next_loot_id++;
                     
-                    // Случайный тип лута
                     std::uniform_int_distribution<size_t> type_dist(0, map_state.loot_types.size() - 1);
                     item.type = type_dist(rng_);
                     
-                    // Случайная позиция на карте
                     std::uniform_real_distribution<double> x_dist(1.0, map_state.map_width - 1.0);
                     std::uniform_real_distribution<double> y_dist(1.0, map_state.map_height - 1.0);
                     item.position.x = x_dist(rng_);

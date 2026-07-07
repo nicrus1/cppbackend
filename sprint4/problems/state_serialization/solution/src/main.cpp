@@ -42,13 +42,28 @@ void SignalHandler(int signal) {
     }
 }
 
-// Функция для загрузки карт из конфигурационного файла
 void LoadMapsFromConfig(const std::string& config_path, std::shared_ptr<model::Game> game) {
     try {
         if (!std::filesystem::exists(config_path)) {
             std::cerr << "Config file not found: " << config_path << std::endl;
             if (!game->HasMap("map1")) {
                 game->AddMap("map1", 3.0);
+                auto map_state = game->GetMapState("map1");
+                if (map_state) {
+                    map_state->name = "Map 1";
+                    model::Office office;
+                    office.id = "o0";
+                    office.x = 0;
+                    office.y = 0;
+                    office.offsetX = 5;
+                    office.offsetY = 5;
+                    map_state->offices.push_back(office);
+                    
+                    model::LootType loot;
+                    loot.name = "key";
+                    loot.value = 10;
+                    map_state->loot_types.push_back(loot);
+                }
                 std::cout << "Created default map1" << std::endl;
             }
             return;
@@ -57,14 +72,12 @@ void LoadMapsFromConfig(const std::string& config_path, std::shared_ptr<model::G
         pt::ptree root;
         pt::read_json(config_path, root);
         
-        // Загружаем настройки генерации лута
         double loot_period = root.get<double>("lootGeneratorConfig.period", 5.0);
         double loot_probability = root.get<double>("lootGeneratorConfig.probability", 0.5);
         double default_dog_speed = root.get<double>("defaultDogSpeed", 3.0);
         
         std::cout << "Loot config: period=" << loot_period << ", probability=" << loot_probability << std::endl;
         
-        // Парсим карты
         if (root.count("maps") > 0) {
             for (const auto& map_node : root.get_child("maps")) {
                 const auto& map_data = map_node.second;
@@ -75,7 +88,6 @@ void LoadMapsFromConfig(const std::string& config_path, std::shared_ptr<model::G
                 
                 std::cout << "Loading map: " << map_id << " (" << map_name << ")" << std::endl;
                 
-                // Добавляем карту
                 if (!game->HasMap(map_id)) {
                     game->AddMap(map_id, dog_speed);
                     std::cout << "  Created map: " << map_id << std::endl;
@@ -87,15 +99,14 @@ void LoadMapsFromConfig(const std::string& config_path, std::shared_ptr<model::G
                     map_state->dog_speed = dog_speed;
                     map_state->default_dog_speed = dog_speed;
                     
-                    // Загружаем типы лута
                     if (map_data.count("lootTypes") > 0) {
                         for (const auto& loot_node : map_data.get_child("lootTypes")) {
                             model::LootType loot_type;
                             loot_type.name = loot_node.second.get<std::string>("name");
-                            loot_type.file = loot_node.second.get<std::string>("file");
-                            loot_type.type = loot_node.second.get<std::string>("type");
+                            loot_type.file = loot_node.second.get<std::string>("file", "");
+                            loot_type.type = loot_node.second.get<std::string>("type", "obj");
                             loot_type.rotation = loot_node.second.get<double>("rotation", 0);
-                            loot_type.color = loot_node.second.get<std::string>("color");
+                            loot_type.color = loot_node.second.get<std::string>("color", "#ffffff");
                             loot_type.scale = loot_node.second.get<double>("scale", 0.01);
                             loot_type.value = loot_node.second.get<uint32_t>("value", 0);
                             map_state->loot_types.push_back(loot_type);
@@ -103,7 +114,6 @@ void LoadMapsFromConfig(const std::string& config_path, std::shared_ptr<model::G
                         }
                     }
                     
-                    // Загружаем дороги
                     if (map_data.count("roads") > 0) {
                         for (const auto& road_node : map_data.get_child("roads")) {
                             model::RoadSegment road;
@@ -123,7 +133,6 @@ void LoadMapsFromConfig(const std::string& config_path, std::shared_ptr<model::G
                         std::cout << "  Roads: " << map_state->roads.size() << std::endl;
                     }
                     
-                    // Загружаем здания
                     if (map_data.count("buildings") > 0) {
                         for (const auto& building_node : map_data.get_child("buildings")) {
                             model::Building building;
@@ -136,7 +145,6 @@ void LoadMapsFromConfig(const std::string& config_path, std::shared_ptr<model::G
                         std::cout << "  Buildings: " << map_state->buildings.size() << std::endl;
                     }
                     
-                    // Загружаем офисы
                     if (map_data.count("offices") > 0) {
                         for (const auto& office_node : map_data.get_child("offices")) {
                             model::Office office;
@@ -150,7 +158,6 @@ void LoadMapsFromConfig(const std::string& config_path, std::shared_ptr<model::G
                         }
                     }
                     
-                    // Устанавливаем настройки генерации лута
                     map_state->loot_period_ms = static_cast<uint64_t>(loot_period * 1000);
                     map_state->loot_probability = loot_probability;
                     
@@ -164,7 +171,6 @@ void LoadMapsFromConfig(const std::string& config_path, std::shared_ptr<model::G
         std::cout << "Loaded " << root.get_child("maps").size() << " maps from config" << std::endl;
         std::cout << "Total maps in game: " << game->GetMaps().size() << std::endl;
         
-        // Выводим все загруженные карты
         for (const auto& map_pair : game->GetMaps()) {
             std::cout << "Map in game: " << map_pair.first << " (" << map_pair.second.name << ")" << std::endl;
         }
@@ -173,6 +179,22 @@ void LoadMapsFromConfig(const std::string& config_path, std::shared_ptr<model::G
         std::cerr << "Error loading config: " << e.what() << std::endl;
         if (!game->HasMap("map1")) {
             game->AddMap("map1", 3.0);
+            auto map_state = game->GetMapState("map1");
+            if (map_state) {
+                map_state->name = "Map 1";
+                model::Office office;
+                office.id = "o0";
+                office.x = 0;
+                office.y = 0;
+                office.offsetX = 5;
+                office.offsetY = 5;
+                map_state->offices.push_back(office);
+                
+                model::LootType loot;
+                loot.name = "key";
+                loot.value = 10;
+                map_state->loot_types.push_back(loot);
+            }
             std::cout << "Created default map1 due to config error" << std::endl;
         }
     }
@@ -180,7 +202,6 @@ void LoadMapsFromConfig(const std::string& config_path, std::shared_ptr<model::G
 
 int main(int argc, char* argv[]) {
     try {
-        // 1. Парсим аргументы через правильный модуль
         auto args_opt = ParseCommandLine(argc, argv);
         if (!args_opt) return 0;
         auto args = *args_opt;
@@ -188,30 +209,28 @@ int main(int argc, char* argv[]) {
         auto game = std::make_shared<model::Game>();
         global_game = game;
         
-        // 2. Загружаем конфигурацию
         LoadMapsFromConfig(args.config_file, game);
 
-        // 3. Восстанавливаем состояние из файла, если он указан и существует
         if (!args.state_file.empty() && std::filesystem::exists(args.state_file)) {
             serialization::GameState loaded_state;
             if (serialization::StateSerializer::LoadFromFile(loaded_state, args.state_file)) {
                 game->RestoreState(loaded_state);
                 std::cout << "State restored from " << args.state_file << std::endl;
+            } else {
+                std::cerr << "Failed to restore state from " << args.state_file << std::endl;
+                return EXIT_FAILURE;
             }
         }
 
-        // 4. Подключаем слушателя автосохранения
         auto listener = std::make_shared<infrastructure::SerializingListener>(
             game, args.state_file, std::chrono::milliseconds(args.save_state_period)
         );
         global_listener = listener;
         game->AddListener(listener);
 
-        // 5. Настраиваем сигналы
         std::signal(SIGINT, SignalHandler);
         std::signal(SIGTERM, SignalHandler);
 
-        // 6. Инициализируем Asio и запускаем поток таймера (если tick_period > 0)
         net::io_context ioc(1);
         global_ioc = &ioc;
 
@@ -230,11 +249,9 @@ int main(int argc, char* argv[]) {
             game_thread.detach();
         }
 
-        // 7. Создаем правильный RequestHandler
         bool manual_tick = (args.tick_period == 0);
         auto handler = std::make_shared<http_handler::RequestHandler>(*game, args.www_root, manual_tick);
 
-        // 8. Запускаем HTTP-сервер через готовую архитектуру!
         const auto address = net::ip::make_address("0.0.0.0");
         constexpr unsigned short port = 8080;
         
@@ -250,7 +267,6 @@ int main(int argc, char* argv[]) {
         
         ioc.run();
 
-        // Сохраняем состояние при штатном завершении
         if (!args.state_file.empty()) {
             std::cout << "Saving state on shutdown..." << std::endl;
             listener->OnShutdown();
