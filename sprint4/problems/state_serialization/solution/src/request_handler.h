@@ -181,40 +181,40 @@ private:
         // Здания
         boost::json::array buildings_array;
         for (const auto& building : map_state->buildings) {
-            buildings_array.push_back(boost::json::object{
-                {"x", building.x},
-                {"y", building.y},
-                {"w", building.w},
-                {"h", building.h}
-            });
+            boost::json::object building_obj;
+            building_obj["x"] = building.x;
+            building_obj["y"] = building.y;
+            building_obj["w"] = building.w;
+            building_obj["h"] = building.h;
+            buildings_array.push_back(building_obj);
         }
         map_obj["buildings"] = buildings_array;
         
         // Офисы
         boost::json::array offices_array;
         for (const auto& office : map_state->offices) {
-            offices_array.push_back(boost::json::object{
-                {"id", office.id},
-                {"x", office.x},
-                {"y", office.y},
-                {"offsetX", office.offsetX},
-                {"offsetY", office.offsetY}
-            });
+            boost::json::object office_obj;
+            office_obj["id"] = office.id;
+            office_obj["x"] = office.x;
+            office_obj["y"] = office.y;
+            office_obj["offsetX"] = office.offsetX;
+            office_obj["offsetY"] = office.offsetY;
+            offices_array.push_back(office_obj);
         }
         map_obj["offices"] = offices_array;
         
         // Типы лута
         boost::json::array loot_array;
         for (const auto& loot : map_state->loot_types) {
-            loot_array.push_back(boost::json::object{
-                {"name", loot.name},
-                {"file", loot.file},
-                {"type", loot.type},
-                {"rotation", loot.rotation},
-                {"color", loot.color},
-                {"scale", loot.scale},
-                {"value", loot.value}
-            });
+            boost::json::object loot_obj;
+            loot_obj["name"] = loot.name;
+            loot_obj["file"] = loot.file;
+            loot_obj["type"] = loot.type;
+            loot_obj["rotation"] = loot.rotation;
+            loot_obj["color"] = loot.color;
+            loot_obj["scale"] = loot.scale;
+            loot_obj["value"] = loot.value;
+            loot_array.push_back(loot_obj);
         }
         map_obj["lootTypes"] = loot_array;
 
@@ -286,8 +286,8 @@ private:
     void SendResponse(http::request<Body, http::basic_fields<Allocator>>&& req,
                       Send&& send,
                       http::status status,
-                      std::string_view content_type,
-                      std::string_view body) {
+                      const std::string& content_type,
+                      const std::string& body) {
         http::response<http::string_body> response(status, req.version());
         response.set(http::field::content_type, content_type);
         response.set(http::field::cache_control, "no-cache");
@@ -301,8 +301,8 @@ private:
     void SendError(http::request<Body, http::basic_fields<Allocator>>&& req,
                    Send&& send,
                    http::status status,
-                   std::string_view code,
-                   std::string_view message) {
+                   const std::string& code,
+                   const std::string& message) {
         std::string body = boost::json::serialize(
             boost::json::object{
                 {"code", code},
@@ -315,9 +315,9 @@ private:
     void SendErrorWithAllow(http::request<Body, http::basic_fields<Allocator>>&& req,
                             Send&& send,
                             http::status status,
-                            std::string_view code,
-                            std::string_view message,
-                            std::string_view allow_methods) {
+                            const std::string& code,
+                            const std::string& message,
+                            const std::string& allow_methods) {
         std::string body = boost::json::serialize(
             boost::json::object{
                 {"code", code},
@@ -327,7 +327,7 @@ private:
         http::response<http::string_body> response(status, req.version());
         response.set(http::field::content_type, "application/json");
         response.set(http::field::cache_control, "no-cache");
-        response.set(http::field::allow, std::string(allow_methods));
+        response.set(http::field::allow, allow_methods);
         response.body() = body;
         response.prepare_payload();
         response.keep_alive(req.keep_alive());
