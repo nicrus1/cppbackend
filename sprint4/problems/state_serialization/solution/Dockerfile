@@ -1,26 +1,25 @@
 FROM ubuntu:22.04 AS build
 
-# Установка необходимых пакетов с retry
+# Установка всех зависимостей
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-        python3-pip \
-        cmake \
         g++ \
+        cmake \
         make \
-        wget \
-        ca-certificates \
+        python3-pip \
+        libboost-all-dev \
+        libpqxx-dev \
+        libpq-dev \
         && \
+    pip3 install conan==1.* --no-cache-dir && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-# Установка Conan через pip
-RUN pip3 install conan==1.* --no-cache-dir
-
-# Настройка профиля Conan
+# Настройка Conan
 RUN conan profile new default --detect --force && \
     conan profile update settings.compiler.libcxx=libstdc++11 default
 
-# Копирование файлов проекта
+# Копирование исходников
 COPY conanfile.txt /app/
 COPY CMakeLists.txt /app/
 COPY src/ /app/src/
@@ -28,12 +27,12 @@ COPY tests/ /app/tests/
 COPY data/ /app/data/
 COPY static/ /app/static/
 
-# Сборка проекта
+# Сборка с выводом ошибок
 RUN mkdir -p /app/build && \
     cd /app/build && \
-    conan install .. --build=missing && \
-    cmake -DCMAKE_BUILD_TYPE=Release .. && \
-    cmake --build . --target game_server
+    conan install .. --build=missing || true && \
+    cmake -DCMAKE_BUILD_TYPE=Release .. 2>&1 && \
+    cmake --build . --target game_server --verbose 2>&1
 
 # Финальный образ
 FROM ubuntu:22.04

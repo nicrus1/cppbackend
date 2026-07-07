@@ -7,13 +7,13 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # Find Threads first
 find_package(Threads REQUIRED)
 
+# Для отладки - используем системные библиотеки
+find_package(Boost REQUIRED COMPONENTS json program_options)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(PQXX REQUIRED libpqxx)
+
 # Включаем директорию с исходниками
 set(SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src)
-
-# Если в вашем conanfile.txt указан генератор "cmake", а не "cmake_multi", 
-# замените эту строку на: include(${CMAKE_BINARY_DIR}/conanbuildinfo.cmake)
-include(${CMAKE_BINARY_DIR}/conanbuildinfo_multi.cmake)
-conan_basic_setup(TARGETS)
 
 # Основной исполняемый файл сервера
 add_executable(game_server
@@ -32,12 +32,17 @@ add_executable(game_server
 
 target_include_directories(game_server PRIVATE 
     ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${Boost_INCLUDE_DIRS}
+    ${PQXX_INCLUDE_DIRS}
 )
 
-# Правильные имена целей от Conan
 target_link_libraries(game_server PRIVATE 
-    ${CONAN_TARGETS}
+    ${Boost_LIBRARIES}
+    ${PQXX_LIBRARIES}
     Threads::Threads
+    pqxx
+    boost_json
+    boost_program_options
 )
 
 # Тесты
@@ -46,21 +51,17 @@ add_executable(game_server_tests
     ${SOURCE_DIR}/game_state.cpp
     ${SOURCE_DIR}/loot_manager.cpp
     ${SOURCE_DIR}/loot_generator.cpp
-    ${SOURCE_DIR}/model_serialization.h
-    ${SOURCE_DIR}/player.h
-    ${SOURCE_DIR}/players.h
-    ${SOURCE_DIR}/player_tokens.h
-    ${SOURCE_DIR}/tagged.h
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/state-serialization-tests.cpp
 )
 
 target_include_directories(game_server_tests PRIVATE 
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${CMAKE_CURRENT_SOURCE_DIR}/tests
+    ${Boost_INCLUDE_DIRS}
 )
 
 target_link_libraries(game_server_tests PRIVATE 
-    ${CONAN_TARGETS}
+    ${Boost_LIBRARIES}
     Threads::Threads
 )
 
@@ -69,6 +70,5 @@ set_target_properties(game_server game_server_tests PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
 )
 
-# Включение тестирования
 enable_testing()
 add_test(NAME game_server_tests COMMAND game_server_tests)
