@@ -14,6 +14,8 @@ COPY conanfile.txt /app/
 COPY CMakeLists.txt /app/
 COPY src/ /app/src/
 COPY tests/ /app/tests/
+COPY data/ /app/data/
+COPY static/ /app/static/
 
 # Сборка проекта
 RUN mkdir -p /app/build && \
@@ -36,8 +38,8 @@ RUN apt update && \
 # Создание пользователя для запуска
 RUN groupadd -r www && useradd -r -g www www
 
-# Копирование исполняемого файла (проверьте правильный путь!)
-COPY --from=build /app/build/game_server /app/game_server
+# Копирование исполняемого файла
+COPY --from=build /app/build/bin/game_server /app/game_server
 
 # Копирование файлов конфигурации и статики
 COPY data/ /app/data/

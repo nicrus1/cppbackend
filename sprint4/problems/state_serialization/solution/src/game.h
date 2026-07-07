@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <stdexcept>
 #include <chrono>
+#include <fstream>
 
 #include "model.h"
 #include "app_listener.h"
