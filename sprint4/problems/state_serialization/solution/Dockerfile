@@ -1,3 +1,6 @@
+# ---------------------------------
+# Этап 1: Сборка
+# ---------------------------------
 FROM gcc:11.3 AS build
 
 # Установка необходимых пакетов
@@ -24,7 +27,9 @@ RUN mkdir -p /app/build && \
     cmake -DCMAKE_BUILD_TYPE=Release .. && \
     cmake --build . --target game_server
 
-# Финальный образ
+# ---------------------------------
+# Этап 2: Финальный образ
+# ---------------------------------
 FROM ubuntu:22.04
 
 # Установка runtime зависимостей
@@ -38,14 +43,15 @@ RUN apt update && \
 # Создание пользователя для запуска
 RUN groupadd -r www && useradd -r -g www www
 
-# Копирование исполняемого файла
-COPY --from=build /app/build/game_server /app/game_server
+# ВАЖНО: Если cmake складывает бинарник в bin/, используем этот путь.
+# Если он лежит прямо в build, измени на /app/build/game_server
+COPY --from=build /app/build/bin/game_server /app/game_server
 
 # Копирование файлов конфигурации и статики
 COPY data/ /app/data/
 COPY static/ /app/static/
 
-# Создаем директорию для состояния
+# Создаем директорию для состояния и выдаем права
 RUN mkdir -p /tmp/volume && chown -R www:www /tmp/volume
 
 # Настройка рабочей директории
@@ -54,9 +60,9 @@ WORKDIR /app
 # Права на выполнение
 RUN chmod +x /app/game_server
 
-# Запуск сервера с параметрами
+# ❗️ ПЕРЕКЛЮЧЕНИЕ ПОЛЬЗОВАТЕЛЯ (Исправляет падение тестов безопасности)
+USER www
+
+# Запуск сервера с параметрами (лучше в одну строку)
 ENTRYPOINT ["/app/game_server"]
-CMD ["--config-file", "/app/data/config.json", \
-     "--www-root", "/app/static", \
-     "--state-file", "/tmp/volume/state.dat", \
-     "--save-state-period", "5000"]
+CMD ["--config-file", "/app/data/config.json", "--www-root", "/app/static", "--state-file", "/tmp/volume/state.dat", "--save-state-period", "5000"]
