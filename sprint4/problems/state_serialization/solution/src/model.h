@@ -1,9 +1,12 @@
 #pragma once
-#include <memory>
 #include <string>
+#include <unordered_map>
 #include <vector>
+#include <optional>
+#include <chrono>
+#include <algorithm>
+#include <stdexcept>
 
-#include "geom.h"
 #include "tagged.h"
 
 namespace model {
@@ -13,126 +16,325 @@ using Coord = Dimension;
 
 struct Point {
     Coord x, y;
-
-    constexpr auto operator<=>(const Point&) const = default;
 };
 
 struct Size {
     Dimension width, height;
 };
 
-using LostObjectType = unsigned;
-using Score = unsigned;
+struct Rectangle {
+    Point position;
+    Size size;
+};
 
-struct FoundObject {
-    using Id = util::Tagged<uint32_t, FoundObject>;
+struct Offset {
+    Dimension dx, dy;
+};
 
-    Id id{0u};
-    LostObjectType type{0u};
+struct Position {
+    double x = 0.0;
+    double y = 0.0;
+};
 
-    [[nodiscard]] auto operator<=>(const FoundObject&) const = default;
+struct Speed {
+    double vx = 0.0;
+    double vy = 0.0;
 };
 
 enum class Direction {
     NORTH,
-    EAST,
-    WEST,
     SOUTH,
+    WEST,
+    EAST
 };
+
+inline std::string DirectionToString(Direction dir) {
+    switch (dir) {
+        case Direction::NORTH: return "U";
+        case Direction::SOUTH: return "D";
+        case Direction::WEST:  return "L";
+        case Direction::EAST:  return "R";
+    }
+    return "U";
+}
+
+inline Direction StringToDirection(const std::string& str) {
+    if (str == "U") return Direction::NORTH;
+    if (str == "D") return Direction::SOUTH;
+    if (str == "L") return Direction::WEST;
+    if (str == "R") return Direction::EAST;
+    return Direction::NORTH;
+}
 
 class Dog {
 public:
-    using Id = util::Tagged<uint32_t, Dog>;
-    using BagContent = std::vector<FoundObject>;
+    using Id = uint64_t;
 
-    Dog(Id id, std::string name, geom::Point2D pos, size_t bag_cap)
-        : id_(std::move(id))
-        , name_(std::move(name))
-        , position_(pos)
-        , bag_cap_(bag_cap) {
-        bag_.reserve(bag_cap);
+    Dog(Id id, Point pos, double speed)
+        : id_(id)
+        , pos_{static_cast<double>(pos.x), static_cast<double>(pos.y)}
+        , default_speed_(speed) {
     }
 
-    const Id& GetId() const noexcept {
+    Dog(Id id, Position pos, double speed)
+        : id_(id)
+        , pos_(pos)
+        , default_speed_(speed) {
+    }
+
+    Id GetId() const {
         return id_;
     }
 
-    const std::string GetName() const noexcept {
-        return name_;
+    const Position& GetPosition() const {
+        return pos_;
     }
 
-    const geom::Point2D& GetPosition() const noexcept {
-        return position_;
+    void SetPosition(Position pos) {
+        pos_ = pos;
+    }
+    
+    void SetPosition(double x, double y) {
+        pos_ = {x, y};
     }
 
-    const geom::Vec2D& GetSpeed() const noexcept {
+    const Speed& GetSpeed() const {
         return speed_;
     }
 
-    void SetSpeed(geom::Vec2D speed) noexcept {
+    void SetSpeed(Speed speed) {
         speed_ = speed;
     }
 
-    void SetPosition(geom::Point2D position) noexcept {
-        position_ = position;
-    }
-
-    void SetDirection(Direction direction) noexcept {
-        direction_ = direction;
-    }
-
-    size_t GetBagCapacity() const noexcept {
-        return bag_cap_;
-    }
-
-    Direction GetDirection() const noexcept {
+    Direction GetDirection() const {
         return direction_;
     }
 
-    Score GetScore() const noexcept {
+    void SetDirection(Direction dir) {
+        direction_ = dir;
+    }
+
+    double GetDefaultSpeed() const {
+        return default_speed_;
+    }
+
+    void SetRetirementTime(std::chrono::milliseconds time) {
+        retirement_time_ = time;
+    }
+    
+    std::chrono::milliseconds GetRetirementTime() const {
+        return retirement_time_;
+    }
+    
+    void SetTotalPlayTime(std::chrono::milliseconds time) {
+        total_play_time_ = time;
+    }
+    
+    std::chrono::milliseconds GetTotalPlayTime() const {
+        return total_play_time_;
+    }
+    
+    int GetScore() const {
         return score_;
     }
-
-    [[nodiscard]] bool PutToBag(FoundObject item) {
-        if (IsBagFull()) {
-            return false;
-        }
-
-        bag_.push_back(item);
-        return true;
-    }
-
-    size_t EmptyBag() noexcept {
-        auto res = bag_.size();
-        bag_.clear();
-
-        return res;
-    }
-
-    bool IsBagFull() const noexcept {
-        return bag_.size() >= bag_cap_;
-    }
-
-    const BagContent& GetBagContent() const noexcept {
-        return bag_;
-    }
-
-    void AddScore(Score score) noexcept {
-        score_ += score;
+    
+    void AddScore(int value) {
+        score_ += value;
     }
 
 private:
     Id id_;
-    std::string name_;
-    geom::Point2D position_;
-    geom::Vec2D speed_;
-    Direction direction_{Direction::NORTH};
-    std::vector<FoundObject> bag_;
-    size_t bag_cap_;
-    Score score_{};
+    Position pos_;
+    Speed speed_{0.0, 0.0};
+    Direction direction_ = Direction::NORTH;
+    double default_speed_;
+    int score_ = 0;
+    
+    std::chrono::milliseconds retirement_time_{60000};
+    std::chrono::milliseconds total_play_time_{0};
 };
 
-using DogPtr = std::shared_ptr<Dog>;
-using ConstDogPtr = std::shared_ptr<const Dog>;
+// --- Road ---
+class Road {
+public:
+    using Id = uint64_t;
+    static constexpr int HORIZONTAL = 0;
+    static constexpr int VERTICAL = 1;
+
+    Road(int type, Point start, Coord end)
+        : type_(type)
+        , start_(start)
+        , end_((type == HORIZONTAL) ? Point{end, start.y} : Point{start.x, end}) {
+    }
+
+    bool IsHorizontal() const {
+        return type_ == HORIZONTAL;
+    }
+
+    bool IsVertical() const {
+        return type_ == VERTICAL;
+    }
+
+    const Point& GetStart() const {
+        return start_;
+    }
+
+    const Point& GetEnd() const {
+        return end_;
+    }
+
+private:
+    int type_;
+    Point start_;
+    Point end_;
+};
+
+// --- Building ---
+class Building {
+public:
+    Building(Rectangle rect)
+        : bounds_(rect) {
+    }
+
+    const Rectangle& GetBounds() const {
+        return bounds_;
+    }
+
+private:
+    Rectangle bounds_;
+};
+
+// --- Office ---
+class Office {
+public:
+    struct Id : public util::Tagged<std::string, Office> {
+        using Tagged::Tagged;
+    };
+
+    Office(Id id, Point pos, Offset offset)
+        : id_(std::move(id))
+        , pos_(pos)
+        , offset_(offset) {
+    }
+
+    const Id& GetId() const {
+        return id_;
+    }
+
+    const Point& GetPosition() const {
+        return pos_;
+    }
+
+    const Offset& GetOffset() const {
+        return offset_;
+    }
+
+private:
+    Id id_;
+    Point pos_;
+    Offset offset_;
+};
+
+// --- Map ---
+class Map {
+public:
+    struct Id : public util::Tagged<std::string, Map> {
+        using Tagged::Tagged;
+    };
+
+    Map(Id id, std::string name)
+        : id_(std::move(id))
+        , name_(std::move(name)) {
+    }
+
+    const Id& GetId() const {
+        return id_;
+    }
+
+    const std::string& GetName() const {
+        return name_;
+    }
+
+    void AddRoad(Road road) {
+        roads_.push_back(std::move(road));
+    }
+
+    const std::vector<Road>& GetRoads() const {
+        return roads_;
+    }
+
+    void AddBuilding(Building building) {
+        buildings_.push_back(std::move(building));
+    }
+
+    const std::vector<Building>& GetBuildings() const {
+        return buildings_;
+    }
+
+    void AddOffice(Office office);
+
+    const std::vector<Office>& GetOffices() const {
+        return offices_;
+    }
+
+    void SetDogSpeed(double speed) {
+        dog_speed_ = speed;
+    }
+
+    void SetDefaultDogSpeed(double speed) {
+        default_dog_speed_ = speed;
+    }
+
+    double GetDogSpeed() const {
+        return dog_speed_.value_or(default_dog_speed_);
+    }
+
+    void SetLootTypesCount(size_t count) {
+        loot_types_count_ = count;
+    }
+
+    size_t GetLootTypesCount() const {
+        return loot_types_count_;
+    }
+
+private:
+    using OfficeIdToIndex = std::unordered_map<Office::Id, size_t, util::TaggedHasher<Office::Id>>;
+
+    Id id_;
+    std::string name_;
+    std::vector<Road> roads_;
+    std::vector<Building> buildings_;
+    std::vector<Office> offices_;
+    OfficeIdToIndex warehouse_id_to_index_;
+    double default_dog_speed_ = 1.0;
+    std::optional<double> dog_speed_;
+    size_t loot_types_count_ = 0;
+};
+
+// --- Game ---
+class Game {
+public:
+    using Maps = std::vector<Map>;
+
+    void AddMap(Map map);
+
+    const Maps& GetMaps() const {
+        return maps_;
+    }
+
+    const Map* FindMap(const Map::Id& id) const {
+        auto it = map_id_to_index_.find(id);
+        if (it == map_id_to_index_.end()) {
+            return nullptr;
+        }
+        return &maps_.at(it->second);
+    }
+
+private:
+    using MapIdToIndex = std::unordered_map<Map::Id, size_t, util::TaggedHasher<Map::Id>>;
+
+    Maps maps_;
+    MapIdToIndex map_id_to_index_;
+};
 
 }  // namespace model

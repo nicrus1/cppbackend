@@ -6,37 +6,17 @@
 #include <boost/serialization/string.hpp>
 #include <boost/serialization/unordered_map.hpp>
 #include <boost/serialization/shared_ptr.hpp>
+#include <boost/serialization/optional.hpp>
 #include <fstream>
 #include <filesystem>
 #include <iostream>
 
 #include "model.h"
-
-namespace geom {
-
-template <typename Archive>
-void serialize(Archive& ar, Point2D& point, [[maybe_unused]] const unsigned version) {
-    ar& point.x;
-    ar& point.y;
-}
-
-template <typename Archive>
-void serialize(Archive& ar, Vec2D& vec, [[maybe_unused]] const unsigned version) {
-    ar& vec.x;
-    ar& vec.y;
-}
-
-}  // namespace geom
-
-namespace model {
-
-template <typename Archive>
-void serialize(Archive& ar, FoundObject& obj, [[maybe_unused]] const unsigned version) {
-    ar& *obj.id;
-    ar& obj.type;
-}
-
-}  // namespace model
+#include "player.h"
+#include "players.h"
+#include "player_tokens.h"
+#include "dog.h"
+#include "loot_manager.h"
 
 namespace serialization {
 
@@ -47,93 +27,120 @@ public:
     
     explicit DogRepr(const model::Dog& dog)
         : id_(*dog.GetId())
-        , name_(dog.GetName())
         , pos_(dog.GetPosition())
-        , bag_capacity_(dog.GetBagCapacity())
         , speed_(dog.GetSpeed())
         , direction_(dog.GetDirection())
         , score_(dog.GetScore())
-        , bag_content_(dog.GetBagContent()) {
+        , retirement_time_(dog.GetRetirementTime().count())
+        , total_play_time_(dog.GetTotalPlayTime().count()) {
     }
     
     model::Dog Restore() const {
-        model::Dog dog{model::Dog::Id{id_}, name_, pos_, bag_capacity_};
+        model::Dog dog{model::Dog::Id{id_}, pos_, 1.0}; // скорость будет установлена из карты
         dog.SetSpeed(speed_);
         dog.SetDirection(direction_);
         dog.AddScore(score_);
-        for (const auto& item : bag_content_) {
-            dog.PutToBag(item);
-        }
+        dog.SetRetirementTime(std::chrono::milliseconds(retirement_time_));
+        dog.SetTotalPlayTime(std::chrono::milliseconds(total_play_time_));
         return dog;
     }
     
     template <typename Archive>
     void serialize(Archive& ar, [[maybe_unused]] const unsigned version) {
         ar& id_;
-        ar& name_;
         ar& pos_;
-        ar& bag_capacity_;
         ar& speed_;
         ar& direction_;
         ar& score_;
-        ar& bag_content_;
+        ar& retirement_time_;
+        ar& total_play_time_;
     }
+    
+    uint32_t GetId() const { return id_; }
     
 private:
     uint32_t id_ = 0;
-    std::string name_;
-    geom::Point2D pos_;
-    size_t bag_capacity_ = 0;
-    geom::Vec2D speed_;
+    model::Position pos_;
+    model::Speed speed_;
     model::Direction direction_ = model::Direction::NORTH;
-    model::Score score_ = 0;
-    model::Dog::BagContent bag_content_;
+    int score_ = 0;
+    int64_t retirement_time_ = 60000;
+    int64_t total_play_time_ = 0;
 };
 
+// Структура для сериализации LootItem
 struct LootItemRepr {
-    uint32_t id = 0;
-    uint32_t type = 0;
-    geom::Point2D position;
+    uint64_t id = 0;
+    int type = 0;
+    model::Position pos;
     
     template <typename Archive>
     void serialize(Archive& ar, [[maybe_unused]] const unsigned version) {
         ar& id;
         ar& type;
-        ar& position;
+        ar& pos;
     }
 };
 
+// Структура для сериализации Player
 struct PlayerRepr {
     std::string token;
-    std::string user_id;
-    uint32_t dog_id = 0;
+    std::string name;
     std::string map_id;
+    uint32_t dog_id = 0;
     
     template <typename Archive>
     void serialize(Archive& ar, [[maybe_unused]] const unsigned version) {
         ar& token;
-        ar& user_id;
-        ar& dog_id;
+        ar& name;
         ar& map_id;
+        ar& dog_id;
     }
 };
 
+// Полное состояние игры
 struct GameState {
     uint64_t game_time_ms = 0;
-    std::vector<std::string> map_ids;
+    
+    // Собаки с привязкой к картам
     std::vector<DogRepr> dogs;
-    std::vector<LootItemRepr> loot_items;
-    std::vector<PlayerRepr> players;
     std::unordered_map<uint32_t, std::string> dog_to_map;
+    
+    // Предметы с привязкой к картам
+    std::vector<LootItemRepr> loot_items;
+    std::unordered_map<uint64_t, std::string> loot_to_map;
+    
+    // Игроки
+    std::vector<PlayerRepr> players;
+    
+    // Время бездействия собак
+    std::unordered_map<uint32_t, int64_t> idle_time; // player_id -> ms
+    
+    // Генерация трофеев
+    struct LootManagerState {
+        std::string map_id;
+        uint64_t next_id = 0;
+        int64_t time_without_loot = 0;
+        
+        template <typename Archive>
+        void serialize(Archive& ar, [[maybe_unused]] const unsigned version) {
+            ar& map_id;
+            ar& next_id;
+            ar& time_without_loot;
+        }
+    };
+    std::vector<LootManagerState> loot_managers;
     
     template <typename Archive>
     void serialize(Archive& ar, [[maybe_unused]] const unsigned version) {
         ar& game_time_ms;
-        ar& map_ids;
         ar& dogs;
-        ar& loot_items;
-        ar& players;
         ar& dog_to_map;
+        ar& loot_items;
+        ar& loot_to_map;
+        ar& players;
+        ar& idle_time;
+        ar& loot_managers;
     }
 };
 
@@ -179,4 +186,4 @@ public:
     }
 };
 
-}  // namespace serialization
+} // namespace serialization

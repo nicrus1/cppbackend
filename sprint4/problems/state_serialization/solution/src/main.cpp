@@ -1,219 +1,191 @@
+#include "sdk.h"
+#include <boost/asio/io_context.hpp>
+#include <boost/asio/signal_set.hpp>
 #include <iostream>
-#include <boost/asio.hpp>
-#include <boost/program_options.hpp>
-#include <boost/property_tree/ptree.hpp>
-#include <boost/property_tree/json_parser.hpp>
-#include <filesystem>
-#include <csignal>
 #include <thread>
 #include <chrono>
-#include <atomic>
+#include <cstdlib>
 
-#include "game.h"
-#include "serializing_listener.h"
+#include "json_loader.h"
+#include "request_handler.h"
+#include "logger.h"
+#include "command_line.h"
+#include "ticker.h"
+#include "db/db_connection_pool.h"
+#include "db/record_manager.h"
+#include "model_serialization.h"
 
+using namespace std::literals;
 namespace net = boost::asio;
-namespace po = boost::program_options;
-namespace pt = boost::property_tree;
+using tcp = net::ip::tcp;
 
-std::shared_ptr<infrastructure::SerializingListener> global_listener;
-std::shared_ptr<model::Game> global_game;
-std::atomic<bool> running{true};
+namespace {
 
-void SignalHandler(int signal) {
-    std::cout << "Received signal " << signal << std::endl;
-    running = false;
-    if (global_listener) {
-        global_listener->OnShutdown();
+template <typename Fn>
+void RunWorkers(unsigned n, const Fn& fn) {
+    n = std::max(1u, n);
+    std::vector<std::jthread> workers;
+    workers.reserve(n - 1);
+    while (--n) {
+        workers.emplace_back(fn);
     }
+    fn();
 }
 
-// Функция для загрузки карт из конфигурационного файла
-void LoadMapsFromConfig(const std::string& config_path, std::shared_ptr<model::Game> game) {
-    try {
-        if (!std::filesystem::exists(config_path)) {
-            std::cerr << "Config file not found: " << config_path << std::endl;
-            // Создаем тестовую карту для демонстрации
-            if (!game->HasMap("map1")) {
-                game->AddMap("map1");
-                std::cout << "Created default map1" << std::endl;
-            }
-            return;
-        }
-        
-        pt::ptree root;
-        pt::read_json(config_path, root);
-        
-        // Парсим карты
-        if (root.count("maps") > 0) {
-            for (const auto& map_node : root.get_child("maps")) {
-                const auto& map_data = map_node.second;
-                
-                std::string map_id = map_data.get<std::string>("id");
-                std::string map_name = map_data.get<std::string>("name", map_id);
-                
-                std::cout << "Loading map: " << map_id << " (" << map_name << ")" << std::endl;
-                
-                // Добавляем карту в игру
-                if (!game->HasMap(map_id)) {
-                    game->AddMap(map_id);
-                }
-            }
-        }
-        
-        std::cout << "Loaded " << root.get_child("maps").size() << " maps from config" << std::endl;
-    } catch (const std::exception& e) {
-        std::cerr << "Error loading config: " << e.what() << std::endl;
-        // Создаем тестовую карту в случае ошибки
-        if (!game->HasMap("map1")) {
-            game->AddMap("map1");
-            std::cout << "Created default map1 due to config error" << std::endl;
-        }
-    }
-}
+}  // namespace
 
-int main(int argc, char* argv[]) {
+int main(int argc, const char* argv[]) {
+    logger::InitLogging();
+    
+    std::cerr << "=== Game Server Starting ===" << std::endl;
+    
+    int exit_code = EXIT_SUCCESS;
+    std::string exception_msg;
+    
     try {
-        std::cout << "Starting game server..." << std::endl;
-        
-        po::options_description desc("Allowed options");
-        desc.add_options()
-            ("help", "Show help message")
-            ("state-file", po::value<std::string>(), "Path to state file")
-            ("save-state-period", po::value<int>(), "Auto-save period in milliseconds")
-            ("tick-period", po::value<int>(), "Tick period in milliseconds")
-            ("config-file", po::value<std::string>(), "Path to config file")
-            ("www-root", po::value<std::string>(), "Path to www root");
-        
-        po::variables_map vm;
-        po::store(po::parse_command_line(argc, argv, desc), vm);
-        po::notify(vm);
-        
-        if (vm.count("help")) {
-            std::cout << desc << std::endl;
-            return 0;
+        auto args = ParseCommandLine(argc, argv);
+        if (!args) {
+            return EXIT_SUCCESS;
         }
 
-        bool has_state_file = vm.count("state-file") > 0;
-        bool has_save_period = vm.count("save-state-period") > 0;
-        bool has_config_file = vm.count("config-file") > 0;
+        std::cerr << "Loading game config from: " << args->config_file << std::endl;
+        model::Game game = json_loader::LoadGame(args->config_file);
+        std::cerr << "Game config loaded successfully" << std::endl;
+
+        const unsigned num_threads = std::thread::hardware_concurrency();
+        std::cerr << "Using " << num_threads << " threads" << std::endl;
         
-        std::string state_file;
-        std::chrono::milliseconds save_period(0);
+        net::io_context ioc(num_threads);
+
+        net::signal_set signals(ioc, SIGINT, SIGTERM);
+        signals.async_wait([&ioc](const boost::system::error_code&, int signal) {
+            std::cerr << "Received signal " << signal << ", stopping server..." << std::endl;
+            ioc.stop();
+        });
+
+        auto api_strand = net::make_strand(ioc);
+
+        std::cerr << "Creating RequestHandler..." << std::endl;
+        bool manual_tick_allowed = (args->tick_period == 0);
+        auto handler = std::make_shared<http_handler::RequestHandler>(game, args->www_root, manual_tick_allowed);
         
-        if (has_state_file) {
-            state_file = vm["state-file"].as<std::string>();
-            std::cout << "State file: " << state_file << std::endl;
+        // Настройка сохранения состояния
+        if (!args->state_file.empty()) {
+            handler->SetStateFile(args->state_file);
+            if (args->save_state_period > 0) {
+                handler->SetSavePeriod(std::chrono::milliseconds(args->save_state_period));
+            }
             
-            if (has_save_period) {
-                int period_ms = vm["save-state-period"].as<int>();
-                if (period_ms < 0) {
-                    throw std::runtime_error("Save period must be non-negative");
-                }
-                save_period = std::chrono::milliseconds(period_ms);
-                std::cout << "Save period: " << period_ms << " ms" << std::endl;
-            }
-        }
-
-        auto game = std::make_shared<model::Game>();
-        global_game = game;
-        
-        // Загружаем карты из конфигурационного файла
-        if (has_config_file) {
-            std::string config_path = vm["config-file"].as<std::string>();
-            std::cout << "Config file: " << config_path << std::endl;
-            LoadMapsFromConfig(config_path, game);
-        } else {
-            // Если конфиг не указан, создаем тестовую карту для демонстрации
-            std::cout << "No config file specified, creating test map" << std::endl;
-            if (!game->HasMap("map1")) {
-                game->AddMap("map1");
-            }
-        }
-        
-        // Восстанавливаем состояние из файла если он существует
-        if (!state_file.empty() && std::filesystem::exists(state_file)) {
-            serialization::GameState loaded_state;
-            if (serialization::StateSerializer::LoadFromFile(loaded_state, state_file)) {
+            // Восстановление состояния из файла
+            if (std::filesystem::exists(args->state_file)) {
+                std::cerr << "Restoring state from: " << args->state_file << std::endl;
                 try {
-                    game->RestoreState(loaded_state);
-                    std::cout << "State restored from " << state_file << std::endl;
-                    
-                    // Выводим информацию о восстановленном состоянии
-                    std::cout << "Restored " << game->GetMaps().size() << " maps" << std::endl;
-                    std::cout << "Restored " << game->GetAllDogs().size() << " dogs" << std::endl;
-                    std::cout << "Restored " << game->GetAllLootItems().size() << " loot items" << std::endl;
-                    std::cout << "Restored " << game->GetPlayers().size() << " players" << std::endl;
+                    serialization::GameState state;
+                    if (serialization::StateSerializer::LoadFromFile(state, args->state_file)) {
+                        handler->RestoreState(state);
+                        std::cerr << "State restored successfully" << std::endl;
+                    } else {
+                        std::cerr << "Failed to restore state from file" << std::endl;
+                        return EXIT_FAILURE;
+                    }
                 } catch (const std::exception& e) {
-                    std::cerr << "Failed to restore state: " << e.what() << std::endl;
+                    std::cerr << "Error restoring state: " << e.what() << std::endl;
+                    logger::LogError(0, "Failed to restore state: " + std::string(e.what()), "main");
                     return EXIT_FAILURE;
                 }
             } else {
-                std::cerr << "Failed to restore state from " << state_file << std::endl;
-                return EXIT_FAILURE;
-            }
-        } else if (!state_file.empty()) {
-            std::cout << "Starting with clean state" << std::endl;
-        }
-
-        // Создаем слушатель для автоматического сохранения
-        auto listener = std::make_shared<infrastructure::SerializingListener>(
-            game, state_file, save_period
-        );
-        global_listener = listener;
-        game->AddListener(listener);
-
-        // Настраиваем обработчики сигналов
-        std::signal(SIGINT, SignalHandler);
-        std::signal(SIGTERM, SignalHandler);
-
-        std::cout << "Server started. Press Ctrl+C to stop." << std::endl;
-        std::cout << "Game time: " << game->GetGameTime() << " ms" << std::endl;
-        std::cout << "Number of maps: " << game->GetMaps().size() << std::endl;
-        std::cout << "Number of dogs: " << game->GetAllDogs().size() << std::endl;
-        
-        // Основной игровой цикл
-        int tick_period_ms = 50; // 50ms по умолчанию
-        if (vm.count("tick-period")) {
-            tick_period_ms = vm["tick-period"].as<int>();
-            if (tick_period_ms <= 0) {
-                throw std::runtime_error("Tick period must be positive");
-            }
-        }
-        std::cout << "Tick period: " << tick_period_ms << " ms" << std::endl;
-        
-        int tick_count = 0;
-        while (running) {
-            auto start = std::chrono::steady_clock::now();
-            
-            // Выполняем тик игры
-            game->Tick(app::milliseconds(tick_period_ms));
-            
-            // Логируем каждый 100-й тик
-            tick_count++;
-            if (tick_count % 100 == 0) {
-                std::cout << "Tick " << tick_count << ", game time: " << game->GetGameTime() << " ms" << std::endl;
-            }
-            
-            auto end = std::chrono::steady_clock::now();
-            auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
-            
-            // Если тик выполнился быстрее, чем tick_period, ждем
-            if (elapsed.count() < tick_period_ms) {
-                std::this_thread::sleep_for(std::chrono::milliseconds(tick_period_ms - elapsed.count()));
+                std::cerr << "State file does not exist, starting fresh" << std::endl;
             }
         }
         
-        // Сохраняем состояние при завершении
-        if (!state_file.empty()) {
-            std::cout << "Saving state on shutdown..." << std::endl;
-            listener->OnShutdown();
+        handler->LoadExtraData(args->config_file);
+        std::cerr << "RequestHandler created" << std::endl;
+        
+        // Инициализация базы данных
+        const char* db_url = std::getenv("GAME_DB_URL");
+        if (db_url) {
+            std::cerr << "Initializing database connection pool..." << std::endl;
+            try {
+                size_t pool_size = 2;
+                auto pool = std::make_shared<db::ConnectionPool>(
+                    pool_size,
+                    [db_url]() {
+                        return std::make_shared<pqxx::connection>(db_url);
+                    }
+                );
+                
+                auto record_manager = std::make_shared<db::RecordManager>(pool);
+                record_manager->InitTable();
+                
+                handler->SetRecordManager(record_manager);
+                std::cerr << "Database initialized successfully with pool size " << pool_size << std::endl;
+            } catch (const std::exception& e) {
+                std::cerr << "Failed to initialize database: " << e.what() << std::endl;
+            }
+        } else {
+            std::cerr << "GAME_DB_URL environment variable not set, records will not be saved" << std::endl;
         }
 
-        std::cout << "Server stopped." << std::endl;
-        return 0;
-    } catch (const std::exception& e) {
-        std::cerr << "Error: " << e.what() << std::endl;
-        return EXIT_FAILURE;
+        std::shared_ptr<Ticker> ticker;
+        if (!manual_tick_allowed) {
+            ticker = std::make_shared<Ticker>(
+                api_strand,
+                std::chrono::milliseconds(args->tick_period),
+                [handler](std::chrono::milliseconds delta) {
+                    handler->Tick(delta);
+                }
+            );
+            ticker->Start();
+        }
+
+        const auto address = net::ip::make_address("0.0.0.0");
+        const unsigned short port = 8080;
+        
+        logger::LogServerStarted(address.to_string(), port);
+        std::cerr << "Starting HTTP server on " << address.to_string() << ":" << port << std::endl;
+        
+        http_server::ServeHttp(ioc, {address, port}, 
+            [handler, api_strand](auto&& req, auto&& send) {
+                std::string target = std::string(req.target());
+
+                if (target.find("/api/") == 0) {
+                    net::dispatch(api_strand, 
+                        [handler, req = std::move(req), send = std::move(send)]() mutable {
+                            (*handler)(std::move(req), std::move(send));
+                        });
+                } else {
+                    (*handler)(std::move(req), std::move(send));
+                }
+            });
+
+        std::cerr << "Server is running. Press Ctrl+C to stop." << std::endl;
+        
+        RunWorkers(std::max(1u, num_threads), [&ioc] {
+            ioc.run();
+        });
+        
+        std::cerr << "Server stopped" << std::endl;
+        
+        // Сохранение состояния при завершении
+        if (!args->state_file.empty()) {
+            std::cerr << "Saving state to: " << args->state_file << std::endl;
+            try {
+                handler->SaveStateToFile();
+                std::cerr << "State saved successfully" << std::endl;
+            } catch (const std::exception& e) {
+                std::cerr << "Error saving state: " << e.what() << std::endl;
+                logger::LogError(0, "Failed to save state: " + std::string(e.what()), "main");
+            }
+        }
+        
+    } catch (const std::exception& ex) {
+        exit_code = EXIT_FAILURE;
+        exception_msg = ex.what();
+        std::cerr << "FATAL ERROR: " << exception_msg << std::endl;
     }
+    
+    logger::LogServerExited(exit_code, exception_msg);
+    std::cerr << "Server exited with code " << exit_code << std::endl;
+    
+    return exit_code;
 }

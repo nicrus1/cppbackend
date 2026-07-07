@@ -25,22 +25,24 @@ RUN mkdir -p /app/build && \
 # Финальный образ
 FROM ubuntu:22.04
 
-# Установка runtime зависимостей
+# Установка runtime зависимостей и PostgreSQL клиента
 RUN apt update && \
     apt install -y \
         libstdc++6 \
         ca-certificates \
+        postgresql-client \
         && \
     rm -rf /var/lib/apt/lists/*
 
 # Создание пользователя для запуска
 RUN groupadd -r www && useradd -r -g www www
 
-# Копирование исполняемого файла (исправленный путь)
-COPY --from=build /app/build/game_server /app/game_server
+# Копирование исполняемого файла
+COPY --from=build /app/build/bin/game_server /app/game_server
 
-# Создаем директорию для состояния
-RUN mkdir -p /tmp/volume && chown www:www /tmp/volume
+# Копирование файлов конфигурации и статики
+COPY data/ /app/data/
+COPY static/ /app/static/
 
 # Настройка рабочей директории
 WORKDIR /app
@@ -48,6 +50,9 @@ WORKDIR /app
 # Права на выполнение
 RUN chmod +x /app/game_server
 
-# Запуск сервера с параметрами
+# Установка переменных окружения для подключения к PostgreSQL
+ENV GAME_DB_URL="postgresql://postgres:Mys3Cr3t@postgres:5432/game_db"
+
+# Запуск сервера с параметрами по умолчанию
 ENTRYPOINT ["/app/game_server"]
-CMD ["--state-file", "/tmp/volume/state.dat", "--save-state-period", "5000"]
+CMD ["--config-file", "/app/data/config.json", "--www-root", "/app/static"]

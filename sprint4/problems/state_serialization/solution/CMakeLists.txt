@@ -2,39 +2,65 @@ cmake_minimum_required(VERSION 3.11)
 
 project(game_server CXX)
 set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# Find Threads first
+find_package(Threads REQUIRED)
+
+# Если в вашем conanfile.txt указан генератор "cmake", а не "cmake_multi", 
+# замените эту строку на: include(${CMAKE_BINARY_DIR}/conanbuildinfo.cmake)
 include(${CMAKE_BINARY_DIR}/conanbuildinfo_multi.cmake)
 conan_basic_setup(TARGETS)
 
-set(THREADS_PREFER_PTHREAD_FLAG ON)
-find_package(Threads REQUIRED)
-
-add_library(game_model STATIC
-    src/geom.h
-    src/model_serialization.h
-    src/model.h
-    src/model.cpp
-    src/tagged.h
-    src/game.h
-    src/app_listener.h
-)
-
-target_link_libraries(game_model PUBLIC CONAN_PKG::boost Threads::Threads)
-
+# Основной исполняемый файл сервера
 add_executable(game_server
     src/main.cpp
-    src/serializing_listener.h
+    src/model.cpp
+    src/json_loader.cpp
+    src/request_handler.cpp
+    src/game_state.cpp
+    src/loot_manager.cpp
+    src/loot_generator.cpp
+    src/http_server.cpp
+    src/logger.cpp
+    src/htmldecode.cpp
+    src/boost_json.cpp
 )
 
-# Устанавливаем путь для исполняемого файла
-set_target_properties(game_server PROPERTIES
-    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}
+target_include_directories(game_server PRIVATE 
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
-target_link_libraries(game_server game_model CONAN_PKG::boost Threads::Threads)
+# Правильные имена целей от Conan (изменено с CONAN_LIBS на CONAN_TARGETS)
+target_link_libraries(game_server PRIVATE 
+    ${CONAN_TARGETS}
+    Threads::Threads
+)
 
+# Тесты
 add_executable(game_server_tests
+    src/model.cpp
+    src/game_state.cpp
+    src/loot_manager.cpp
+    src/loot_generator.cpp
     tests/state-serialization-tests.cpp
 )
 
-target_link_libraries(game_server_tests CONAN_PKG::catch2 game_model)
+target_include_directories(game_server_tests PRIVATE 
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests
+)
+
+target_link_libraries(game_server_tests PRIVATE 
+    ${CONAN_TARGETS}
+    Threads::Threads
+)
+
+# Настройка выходных директорий
+set_target_properties(game_server game_server_tests PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
+)
+
+# Включение тестирования
+enable_testing()
+add_test(NAME game_server_tests COMMAND game_server_tests)
