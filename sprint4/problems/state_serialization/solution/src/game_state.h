@@ -5,6 +5,7 @@
 #include "player_tokens.h"
 #include "loot_manager.h"
 #include "model_serialization.h"
+#include "logger.h"
 
 #include <unordered_map>
 #include <memory>
@@ -88,10 +89,6 @@ public:
         );
     }
     
-    void SetRecordManager(std::shared_ptr<db::RecordManager> manager) {
-        record_manager_ = std::move(manager);
-    }
-    
     // Методы для сохранения и восстановления состояния
     void SaveState(serialization::GameState& state) const;
     void RestoreState(const serialization::GameState& state);
@@ -123,7 +120,6 @@ private:
     std::unordered_map<model::Map::Id, std::unique_ptr<LootManager>, util::TaggedHasher<model::Map::Id>> loot_managers_;
     
     std::chrono::milliseconds dog_retirement_time_{60000}; // 1 минута по умолчанию
-    std::shared_ptr<db::RecordManager> record_manager_;
     
     // Для отслеживания времени бездействия
     std::unordered_map<model::PlayerId, std::chrono::milliseconds, util::TaggedHasher<model::PlayerId>> idle_time_;

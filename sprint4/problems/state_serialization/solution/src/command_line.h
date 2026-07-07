@@ -46,7 +46,6 @@ struct Args {
         throw std::runtime_error("Static files root is not specified");
     }
 
-    // Проверка: save-state-period имеет смысл только с state-file
     if (vm.contains("save-state-period") && !vm.contains("state-file")) {
         throw std::runtime_error("--save-state-period requires --state-file");
     }

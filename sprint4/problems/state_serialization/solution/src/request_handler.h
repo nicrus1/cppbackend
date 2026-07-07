@@ -4,7 +4,6 @@
 #include "api_handler.h"
 #include "logger.h"
 #include "extra_data.h"
-#include "db/record_manager.h"
 #include "model_serialization.h"
 #include <boost/json.hpp>
 #include <optional>
@@ -51,11 +50,6 @@ public:
         api_handler_.SetDogRetirementTime(seconds);
     }
     
-    void SetRecordManager(std::shared_ptr<db::RecordManager> manager) {
-        record_manager_ = manager;
-        api_handler_.SetRecordManager(manager);
-    }
-    
     void LoadExtraData(const std::filesystem::path& config_path);
     
     // Методы для управления состоянием
@@ -96,7 +90,7 @@ public:
             path = path.substr(1);
         }
 
-        // Исправленная проверка API версии
+        // Проверка API версии
         if (target.find("/api/v") == 0 && target.find("/api/v1/") != 0) {
             SendError(std::move(req), send, http::status::bad_request,
                       "badRequest", "Invalid API version");
@@ -316,7 +310,6 @@ private:
     std::string static_dir_;
     bool manual_tick_allowed_;
     extra_data::ExtraData extra_data_;
-    std::shared_ptr<db::RecordManager> record_manager_;
     
     // Параметры сохранения состояния
     std::string state_file_;

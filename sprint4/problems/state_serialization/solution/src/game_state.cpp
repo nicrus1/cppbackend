@@ -174,18 +174,9 @@ void GameState::CheckDogInactivity(int64_t time_delta_ms) {
 }
 
 void GameState::RetireDog(model::Dog& dog, const model::Player& player) {
-    if (record_manager_) {
-        int score = dog.GetScore();
-        double play_time = std::chrono::duration<double>(
-            dog.GetTotalPlayTime()
-        ).count();
-        
-        try {
-            record_manager_->AddRecord(player.GetName(), score, play_time);
-        } catch (const std::exception& e) {
-            std::cerr << "Failed to save record: " << e.what() << std::endl;
-        }
-    }
+    // Логируем уход собаки на покой
+    logger::LogDebug("Dog retired for player: " + player.GetName() + 
+                    " with score: " + std::to_string(dog.GetScore()));
 }
 
 GameState::JoinResult GameState::JoinGame(const std::string& user_name, const model::Map::Id& map_id) {
