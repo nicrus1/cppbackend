@@ -1,56 +1,40 @@
-cmake_minimum_required(VERSION 3.15)
+cmake_minimum_required(VERSION 3.11)
+
 project(game_server CXX)
-
-# Используем современный стандарт C++20
 set(CMAKE_CXX_STANDARD 20)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_EXTENSIONS OFF)
 
-# Включаем строгие предупреждения компилятора для чистоты кода
-if(MSVC)
-    add_compile_options(/W4)
-else()
-    add_compile_options(-Wall -Wextra -pedantic)
-endif()
+include(${CMAKE_BINARY_DIR}/conanbuildinfo_multi.cmake)
+conan_basic_setup(TARGETS)
 
-# 1. Поиск системных потоков (pthread)
+set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
 
-# 2. Поиск необходимых компонент Boost
-# Обратите внимание: для работы Boost.Log также нужны компоненты log_setup и thread
-find_package(Boost REQUIRED COMPONENTS
-    system
-    program_options
-    serialization
-    log
-    log_setup
-    thread
-)
-
-# 3. Список исходных файлов (добавьте сюда все ваши .cpp файлы)
-set(SOURCES
-    src/main.cpp
+add_library(game_model STATIC
+    src/geom.h
+    src/model_serialization.h
+    src/model.h
     src/model.cpp
-    # src/http_server.cpp
-    # src/json_loader.cpp
+    src/tagged.h
+    src/game.h
+    src/app_listener.h
 )
 
-# 4. Создаем исполняемый файл
-add_executable(game_server ${SOURCES})
+target_link_libraries(game_model PUBLIC CONAN_PKG::boost Threads::Threads)
 
-# Подключаем директорию с заголовочными файлами (.h файлы лежат в src/)
-target_include_directories(game_server PRIVATE src)
-
-# 5. Линкуем библиотеки к нашему серверу
-target_link_libraries(game_server PRIVATE
-    Boost::system
-    Boost::program_options
-    Boost::serialization
-    Boost::log
-    Boost::log_setup
-    Boost::thread
-    Threads::Threads
+add_executable(game_server
+    src/main.cpp
+    src/serializing_listener.h
 )
 
-# Важно: для корректной работы Boost.Log при динамической линковке на Linux
-target_compile_definitions(game_server PRIVATE BOOST_LOG_DYN_LINK)
+# Устанавливаем путь для исполняемого файла
+set_target_properties(game_server PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}
+)
+
+target_link_libraries(game_server game_model CONAN_PKG::boost Threads::Threads)
+
+add_executable(game_server_tests
+    tests/state-serialization-tests.cpp
+)
+
+target_link_libraries(game_server_tests CONAN_PKG::catch2 game_model)
