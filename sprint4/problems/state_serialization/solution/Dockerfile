@@ -27,10 +27,10 @@ COPY tests/ /app/tests/
 COPY data/ /app/data/
 COPY static/ /app/static/
 
-# Сборка с выводом ошибок
+# Сборка с выводом ошибок (без || true, чтобы падать при реальных ошибках)
 RUN mkdir -p /app/build && \
     cd /app/build && \
-    conan install .. --build=missing || true && \
+    conan install .. --build=missing && \
     cmake -DCMAKE_BUILD_TYPE=Release .. 2>&1 && \
     cmake --build . --target game_server --verbose 2>&1
 
@@ -53,7 +53,7 @@ RUN groupadd -r www && useradd -r -g www www
 # Копирование исполняемого файла
 COPY --from=build /app/build/bin/game_server /app/game_server
 
-# Копируем конфиг и статику из сборки
+# Копируем конфиг и статику из сборки (исправлен перенос строки в COPY)
 COPY --from=build /app/data /app/data
 COPY --from=build /app/static /app/static
 
