@@ -1,29 +1,29 @@
 FROM ubuntu:22.04
 
-# Установка зависимостей
+# Устанавливаем зависимости
 RUN apt-get update && apt-get install -y \
     build-essential \
     cmake \
     libboost-all-dev \
-    python3-pip \
-    git \
-    wget \
     && rm -rf /var/lib/apt/lists/*
-
-# Установка conan
-RUN pip3 install conan
 
 # Создаем рабочую директорию
 WORKDIR /app
 
 # Копируем исходники
-COPY . .
+COPY . /app
 
-# Сборка проекта
-RUN mkdir -p build && cd build && \
-    conan install .. --build missing && \
+# Собираем проект
+RUN mkdir build && cd build && \
     cmake .. && \
-    make -j$(nproc)
+    make
 
-# Точка входа
-ENTRYPOINT ["/app/build/game_server"]
+# Копируем конфиг и статику
+COPY config.json /app/data/config.json
+COPY static /app/static/
+
+# Открываем порт
+EXPOSE 8080
+
+# Запускаем сервер
+CMD ["./build/game_server", "--config-file", "/app/data/config.json", "--www-root", "/app/static/"]

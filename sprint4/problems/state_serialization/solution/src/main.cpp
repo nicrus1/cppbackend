@@ -13,7 +13,6 @@
 #include "serializing_listener.h"
 
 namespace net = boost::asio;
-namespace sys = boost::system;
 namespace po = boost::program_options;
 namespace pt = boost::property_tree;
 
@@ -34,6 +33,11 @@ void LoadMapsFromConfig(const std::string& config_path, std::shared_ptr<model::G
     try {
         if (!std::filesystem::exists(config_path)) {
             std::cerr << "Config file not found: " << config_path << std::endl;
+            // Создаем тестовую карту для демонстрации
+            if (!game->HasMap("map1")) {
+                game->AddMap("map1");
+                std::cout << "Created default map1" << std::endl;
+            }
             return;
         }
         
@@ -41,31 +45,37 @@ void LoadMapsFromConfig(const std::string& config_path, std::shared_ptr<model::G
         pt::read_json(config_path, root);
         
         // Парсим карты
-        for (const auto& map_node : root.get_child("maps")) {
-            const auto& map_data = map_node.second;
-            
-            std::string map_id = map_data.get<std::string>("id");
-            std::string map_name = map_data.get<std::string>("name");
-            
-            std::cout << "Loading map: " << map_id << " (" << map_name << ")" << std::endl;
-            
-            // Добавляем карту в игру
-            if (!game->HasMap(map_id)) {
-                game->AddMap(map_id);
+        if (root.count("maps") > 0) {
+            for (const auto& map_node : root.get_child("maps")) {
+                const auto& map_data = map_node.second;
+                
+                std::string map_id = map_data.get<std::string>("id");
+                std::string map_name = map_data.get<std::string>("name", map_id);
+                
+                std::cout << "Loading map: " << map_id << " (" << map_name << ")" << std::endl;
+                
+                // Добавляем карту в игру
+                if (!game->HasMap(map_id)) {
+                    game->AddMap(map_id);
+                }
             }
-            
-            // Здесь можно добавить парсинг roads, buildings, offices и т.д.
-            // для полной инициализации карты
         }
         
         std::cout << "Loaded " << root.get_child("maps").size() << " maps from config" << std::endl;
     } catch (const std::exception& e) {
         std::cerr << "Error loading config: " << e.what() << std::endl;
+        // Создаем тестовую карту в случае ошибки
+        if (!game->HasMap("map1")) {
+            game->AddMap("map1");
+            std::cout << "Created default map1 due to config error" << std::endl;
+        }
     }
 }
 
 int main(int argc, char* argv[]) {
     try {
+        std::cout << "Starting game server..." << std::endl;
+        
         po::options_description desc("Allowed options");
         desc.add_options()
             ("help", "Show help message")
@@ -93,6 +103,7 @@ int main(int argc, char* argv[]) {
         
         if (has_state_file) {
             state_file = vm["state-file"].as<std::string>();
+            std::cout << "State file: " << state_file << std::endl;
             
             if (has_save_period) {
                 int period_ms = vm["save-state-period"].as<int>();
@@ -100,6 +111,7 @@ int main(int argc, char* argv[]) {
                     throw std::runtime_error("Save period must be non-negative");
                 }
                 save_period = std::chrono::milliseconds(period_ms);
+                std::cout << "Save period: " << period_ms << " ms" << std::endl;
             }
         }
 
@@ -109,6 +121,7 @@ int main(int argc, char* argv[]) {
         // Загружаем карты из конфигурационного файла
         if (has_config_file) {
             std::string config_path = vm["config-file"].as<std::string>();
+            std::cout << "Config file: " << config_path << std::endl;
             LoadMapsFromConfig(config_path, game);
         } else {
             // Если конфиг не указан, создаем тестовую карту для демонстрации
@@ -118,24 +131,19 @@ int main(int argc, char* argv[]) {
             }
         }
         
-        // Добавляем тестовую собаку, если карты пустые
-        bool has_dogs = false;
+        // Создаем тестовую собаку для каждой карты, если собаки нет
         for (const auto& map_pair : game->GetMaps()) {
-            if (!game->GetDogs(map_pair.first).empty()) {
-                has_dogs = true;
-                break;
+            const std::string& map_id = map_pair.first;
+            if (game->GetDogs(map_id).empty()) {
+                auto dog = std::make_shared<model::Dog>(
+                    model::Dog::Id{static_cast<uint32_t>(map_pair.first.length() + 1)}, 
+                    "TestDog_" + map_id, 
+                    geom::Point2D{10, 10}, 
+                    5
+                );
+                game->AddDog(map_id, dog);
+                std::cout << "Created test dog on map: " << map_id << std::endl;
             }
-        }
-        
-        if (!has_dogs && game->HasMap("map1")) {
-            auto dog = std::make_shared<model::Dog>(
-                model::Dog::Id{1}, 
-                "TestDog", 
-                geom::Point2D{10, 10}, 
-                5
-            );
-            game->AddDog("map1", dog);
-            std::cout << "Created test dog on map1" << std::endl;
         }
         
         // Восстанавливаем состояние из файла если он существует
@@ -174,6 +182,8 @@ int main(int argc, char* argv[]) {
 
         std::cout << "Server started. Press Ctrl+C to stop." << std::endl;
         std::cout << "Game time: " << game->GetGameTime() << " ms" << std::endl;
+        std::cout << "Number of maps: " << game->GetMaps().size() << std::endl;
+        std::cout << "Number of dogs: " << game->GetAllDogs().size() << std::endl;
         
         // Основной игровой цикл
         int tick_period_ms = 50; // 50ms по умолчанию
@@ -185,11 +195,18 @@ int main(int argc, char* argv[]) {
         }
         std::cout << "Tick period: " << tick_period_ms << " ms" << std::endl;
         
+        int tick_count = 0;
         while (running) {
             auto start = std::chrono::steady_clock::now();
             
             // Выполняем тик игры
             game->Tick(app::milliseconds(tick_period_ms));
+            
+            // Логируем каждый 100-й тик
+            tick_count++;
+            if (tick_count % 100 == 0) {
+                std::cout << "Tick " << tick_count << ", game time: " << game->GetGameTime() << " ms" << std::endl;
+            }
             
             auto end = std::chrono::steady_clock::now();
             auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
