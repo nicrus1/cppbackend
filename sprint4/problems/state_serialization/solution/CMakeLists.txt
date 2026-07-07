@@ -4,10 +4,18 @@ project(game_server CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# Подключение интеграции с Conan
+if(EXISTS ${CMAKE_BINARY_DIR}/conanbuildinfo.cmake)
+    include(${CMAKE_BINARY_DIR}/conanbuildinfo.cmake)
+    conan_basic_setup(TARGETS)
+else()
+    message(WARNING "Conan build info not found, expect missing dependencies!")
+endif()
+
 # Find Threads first
 find_package(Threads REQUIRED)
 
-# Для отладки - используем системные библиотеки
+# Поиск пакетов
 find_package(Boost REQUIRED COMPONENTS json program_options)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(PQXX REQUIRED libpqxx)
@@ -41,6 +49,7 @@ target_link_libraries(game_server PRIVATE
     ${PQXX_LIBRARIES}
     Threads::Threads
     pqxx
+    CONAN_PKG::boost # Используем цели conan, если настроены через CONAN_PKG
     boost_json
     boost_program_options
 )
