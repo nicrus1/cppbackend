@@ -87,6 +87,37 @@ struct MapState {
     double map_height = 30.0;
 };
 
+// Класс для хранения токена (для совместимости с api_handler)
+class Token {
+public:
+    Token() = default;
+    explicit Token(const std::string& token) : token_(token) {}
+    
+    const std::string& operator*() const { return token_; }
+    operator std::string() const { return token_; }
+    
+    bool operator==(const Token& other) const { return token_ == other.token_; }
+    bool operator!=(const Token& other) const { return token_ != other.token_; }
+    
+private:
+    std::string token_;
+};
+
+// Класс Map для совместимости с api_handler
+class Map {
+public:
+    using Id = util::Tagged<std::string, Map>;
+    
+    Map(Id id, std::string name) : id_(std::move(id)), name_(std::move(name)) {}
+    
+    const Id& GetId() const { return id_; }
+    const std::string& GetName() const { return name_; }
+    
+private:
+    Id id_;
+    std::string name_;
+};
+
 class Game {
 public:
     using ListenerPtr = std::shared_ptr<app::ApplicationListener>;
@@ -135,12 +166,29 @@ public:
         return maps_;
     }
     
+    std::unordered_map<std::string, MapState>& GetMaps() {
+        return maps_;
+    }
+    
     MapState* GetMapState(const std::string& map_id) {
         auto it = maps_.find(map_id);
         if (it == maps_.end()) {
             return nullptr;
         }
         return &it->second;
+    }
+    
+    const MapState* GetMapState(const std::string& map_id) const {
+        auto it = maps_.find(map_id);
+        if (it == maps_.end()) {
+            return nullptr;
+        }
+        return &it->second;
+    }
+    
+    // Метод для поиска карты (для совместимости с api_handler)
+    const MapState* FindMap(const std::string& map_id) const {
+        return GetMapState(map_id);
     }
     
     // Методы для работы с собаками
@@ -229,6 +277,10 @@ public:
     }
     
     const std::unordered_map<std::string, PlayerInfo>& GetPlayers() const {
+        return players_;
+    }
+    
+    std::unordered_map<std::string, PlayerInfo>& GetPlayers() {
         return players_;
     }
     
