@@ -17,6 +17,7 @@ add_library(game_model STATIC
     src/tagged.h
     src/app_listener.h
     src/serializing_listener.h
+    src/game.h
 )
 
 target_link_libraries(game_model PUBLIC CONAN_PKG::boost Threads::Threads)
@@ -25,7 +26,7 @@ add_executable(game_server
     src/main.cpp
 )
 
-target_link_libraries(game_server game_model CONAN_PKG::boost CONAN_PKG::catch2)
+target_link_libraries(game_server game_model CONAN_PKG::boost)
 
 add_executable(game_server_tests
     tests/state-serialization-tests.cpp
