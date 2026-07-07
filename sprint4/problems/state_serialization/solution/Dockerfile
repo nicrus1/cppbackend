@@ -1,11 +1,12 @@
 FROM ubuntu:22.04 AS build
 
-# Установка всех зависимостей
+# Установка всех зависимостей (добавлен pkg-config)
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         g++ \
         cmake \
         make \
+        pkg-config \
         python3-pip \
         libboost-all-dev \
         libpqxx-dev \
