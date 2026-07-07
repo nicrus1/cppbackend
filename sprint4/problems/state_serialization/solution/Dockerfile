@@ -1,6 +1,6 @@
 FROM ubuntu:22.04 AS build
 
-# Установка всех зависимостей (добавлен pkg-config)
+# Установка всех зависимостей для сборки
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         g++ \
@@ -16,11 +16,11 @@ RUN apt-get update && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-# Настройка Conan
+# Настройка Conan (фиксируем профиль)
 RUN conan profile new default --detect --force && \
     conan profile update settings.compiler.libcxx=libstdc++11 default
 
-# Копирование исходников
+# Копирование файлов конфигурации и исходников
 COPY conanfile.txt /app/
 COPY CMakeLists.txt /app/
 COPY ./src /app/src
@@ -28,7 +28,7 @@ COPY ./tests/ /app/tests
 COPY ./data/ /app/data
 COPY ./static/ /app/static
 
-# Сборка проекта
+# Сборка проекта с отладкой Conan (установкой прекомпиляции для отсутствующих пакетов)
 RUN mkdir -p /app/build && \
     cd /app/build && \
     conan install .. --build=missing && \
@@ -43,7 +43,7 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         libstdc++6 \
         ca-certificates \
-        libpq-dev \
+        libpq5 \
         && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
@@ -51,7 +51,7 @@ RUN apt-get update && \
 # Создание пользователя для запуска
 RUN groupadd -r www && useradd -r -g www www
 
-# Копирование исполняемого файла и статики
+# Копирование исполняемого файла и ресурсов
 COPY --from=build /app/build/bin/game_server /app/game_server
 COPY --from=build /app/data /app/data
 COPY --from=build /app/static /app/static
