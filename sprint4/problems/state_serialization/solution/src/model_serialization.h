@@ -17,14 +17,14 @@ namespace geom {
 
 template <typename Archive>
 void serialize(Archive& ar, Point2D& point, [[maybe_unused]] const unsigned version) {
-    ar& point.x;
-    ar& point.y;
+    ar & point.x;
+    ar & point.y;
 }
 
 template <typename Archive>
 void serialize(Archive& ar, Vec2D& vec, [[maybe_unused]] const unsigned version) {
-    ar& vec.x;
-    ar& vec.y;
+    ar & vec.x;
+    ar & vec.y;
 }
 
 }  // namespace geom
@@ -33,15 +33,15 @@ namespace model {
 
 template <typename Archive>
 void serialize(Archive& ar, FoundObject& obj, [[maybe_unused]] const unsigned version) {
-    ar& (*obj.id);
-    ar& obj.type;
+    ar & (*obj.id);
+    ar & obj.type;
 }
 
-// Исправленная сериализация Dog::Id
+// ИСПРАВЛЕНО: правильная сериализация Dog::Id
 template <typename Archive>
 void serialize(Archive& ar, Dog::Id& id, [[maybe_unused]] const unsigned version) {
     uint32_t value = *id;
-    ar& value;
+    ar & value;
     id = Dog::Id{value};
 }
 
@@ -79,15 +79,15 @@ public:
 
     template <typename Archive>
     void serialize(Archive& ar, [[maybe_unused]] const unsigned version) {
-        // Исправлено: ar& id_ вместо ar&* id_
-        ar& id_;
-        ar& name_;
-        ar& pos_;
-        ar& bag_capacity_;
-        ar& speed_;
-        ar& direction_;
-        ar& score_;
-        ar& bag_content_;
+        // ИСПРАВЛЕНО: ar& id_ вместо ar&* id_
+        ar & id_;
+        ar & name_;
+        ar & pos_;
+        ar & bag_capacity_;
+        ar & speed_;
+        ar & direction_;
+        ar & score_;
+        ar & bag_content_;
     }
 
 private:
@@ -108,9 +108,9 @@ struct PlayerRepr {
 
     template <typename Archive>
     void serialize(Archive& ar, [[maybe_unused]] const unsigned version) {
-        ar& token;
-        ar& dog_id;
-        ar& user_id;
+        ar & token;
+        ar & dog_id;
+        ar & user_id;
     }
 };
 
@@ -121,9 +121,9 @@ struct LootItemRepr {
 
     template <typename Archive>
     void serialize(Archive& ar, [[maybe_unused]] const unsigned version) {
-        ar& id;
-        ar& type;
-        ar& position;
+        ar & id;
+        ar & type;
+        ar & position;
     }
 };
 
@@ -140,20 +140,20 @@ struct GameState {
         
         template <typename Archive>
         void serialize(Archive& ar, [[maybe_unused]] const unsigned version) {
-            ar& map_id;
-            ar& map_dogs;
-            ar& map_loot;
+            ar & map_id;
+            ar & map_dogs;
+            ar & map_loot;
         }
     };
     std::vector<MapState> maps;
 
     template <typename Archive>
     void serialize(Archive& ar, [[maybe_unused]] const unsigned version) {
-        ar& dogs;
-        ar& loot_items;
-        ar& players;
-        ar& game_time_ms;
-        ar& maps;
+        ar & dogs;
+        ar & loot_items;
+        ar & players;
+        ar & game_time_ms;
+        ar & maps;
     }
 };
 

@@ -1,10 +1,13 @@
 #include <iostream>
 #include <boost/asio.hpp>
 #include <boost/program_options.hpp>
+#include <boost/property_tree/ptree.hpp>
+#include <boost/property_tree/json_parser.hpp>
 #include <filesystem>
 #include <csignal>
 #include <thread>
 #include <chrono>
+#include <atomic>
 
 #include "game.h"
 #include "serializing_listener.h"
@@ -12,6 +15,7 @@
 namespace net = boost::asio;
 namespace sys = boost::system;
 namespace po = boost::program_options;
+namespace pt = boost::property_tree;
 
 std::shared_ptr<infrastructure::SerializingListener> global_listener;
 std::shared_ptr<model::Game> global_game;
@@ -22,6 +26,41 @@ void SignalHandler(int signal) {
     running = false;
     if (global_listener) {
         global_listener->OnShutdown();
+    }
+}
+
+// Функция для загрузки карт из конфигурационного файла
+void LoadMapsFromConfig(const std::string& config_path, std::shared_ptr<model::Game> game) {
+    try {
+        if (!std::filesystem::exists(config_path)) {
+            std::cerr << "Config file not found: " << config_path << std::endl;
+            return;
+        }
+        
+        pt::ptree root;
+        pt::read_json(config_path, root);
+        
+        // Парсим карты
+        for (const auto& map_node : root.get_child("maps")) {
+            const auto& map_data = map_node.second;
+            
+            std::string map_id = map_data.get<std::string>("id");
+            std::string map_name = map_data.get<std::string>("name");
+            
+            std::cout << "Loading map: " << map_id << " (" << map_name << ")" << std::endl;
+            
+            // Добавляем карту в игру
+            if (!game->HasMap(map_id)) {
+                game->AddMap(map_id);
+            }
+            
+            // Здесь можно добавить парсинг roads, buildings, offices и т.д.
+            // для полной инициализации карты
+        }
+        
+        std::cout << "Loaded " << root.get_child("maps").size() << " maps from config" << std::endl;
+    } catch (const std::exception& e) {
+        std::cerr << "Error loading config: " << e.what() << std::endl;
     }
 }
 
@@ -47,6 +86,7 @@ int main(int argc, char* argv[]) {
 
         bool has_state_file = vm.count("state-file") > 0;
         bool has_save_period = vm.count("save-state-period") > 0;
+        bool has_config_file = vm.count("config-file") > 0;
         
         std::string state_file;
         std::chrono::milliseconds save_period(0);
@@ -66,13 +106,28 @@ int main(int argc, char* argv[]) {
         auto game = std::make_shared<model::Game>();
         global_game = game;
         
-        // Создаем тестовую карту для демонстрации
-        if (!game->HasMap("map1")) {
-            game->AddMap("map1");
+        // Загружаем карты из конфигурационного файла
+        if (has_config_file) {
+            std::string config_path = vm["config-file"].as<std::string>();
+            LoadMapsFromConfig(config_path, game);
+        } else {
+            // Если конфиг не указан, создаем тестовую карту для демонстрации
+            std::cout << "No config file specified, creating test map" << std::endl;
+            if (!game->HasMap("map1")) {
+                game->AddMap("map1");
+            }
         }
         
-        // Добавляем тестовую собаку
-        if (game->GetDogs("map1").empty()) {
+        // Добавляем тестовую собаку, если карты пустые
+        bool has_dogs = false;
+        for (const auto& map_pair : game->GetMaps()) {
+            if (!game->GetDogs(map_pair.first).empty()) {
+                has_dogs = true;
+                break;
+            }
+        }
+        
+        if (!has_dogs && game->HasMap("map1")) {
             auto dog = std::make_shared<model::Dog>(
                 model::Dog::Id{1}, 
                 "TestDog", 
@@ -80,13 +135,25 @@ int main(int argc, char* argv[]) {
                 5
             );
             game->AddDog("map1", dog);
+            std::cout << "Created test dog on map1" << std::endl;
         }
         
+        // Восстанавливаем состояние из файла если он существует
         if (!state_file.empty() && std::filesystem::exists(state_file)) {
             serialization::GameState loaded_state;
             if (serialization::StateSerializer::LoadFromFile(loaded_state, state_file)) {
-                game->RestoreState(loaded_state);
-                std::cout << "State restored from " << state_file << std::endl;
+                try {
+                    game->RestoreState(loaded_state);
+                    std::cout << "State restored from " << state_file << std::endl;
+                    
+                    // Выводим информацию о восстановленном состоянии
+                    std::cout << "Restored " << game->GetMaps().size() << " maps" << std::endl;
+                    std::cout << "Restored " << game->GetAllDogs().size() << " dogs" << std::endl;
+                    std::cout << "Restored " << game->GetAllLootItems().size() << " loot items" << std::endl;
+                    std::cout << "Restored " << game->GetPlayers().size() << " players" << std::endl;
+                } catch (const std::exception& e) {
+                    std::cerr << "Failed to restore state: " << e.what() << std::endl;
+                }
             } else {
                 std::cerr << "Failed to restore state from " << state_file << std::endl;
             }
@@ -94,38 +161,48 @@ int main(int argc, char* argv[]) {
             std::cout << "Starting with clean state" << std::endl;
         }
 
+        // Создаем слушатель для автоматического сохранения
         auto listener = std::make_shared<infrastructure::SerializingListener>(
             game, state_file, save_period
         );
         global_listener = listener;
-
         game->AddListener(listener);
 
+        // Настраиваем обработчики сигналов
         std::signal(SIGINT, SignalHandler);
         std::signal(SIGTERM, SignalHandler);
 
         std::cout << "Server started. Press Ctrl+C to stop." << std::endl;
+        std::cout << "Game time: " << game->GetGameTime() << " ms" << std::endl;
         
         // Основной игровой цикл
         int tick_period_ms = 50; // 50ms по умолчанию
         if (vm.count("tick-period")) {
             tick_period_ms = vm["tick-period"].as<int>();
+            if (tick_period_ms <= 0) {
+                throw std::runtime_error("Tick period must be positive");
+            }
         }
+        std::cout << "Tick period: " << tick_period_ms << " ms" << std::endl;
         
         while (running) {
             auto start = std::chrono::steady_clock::now();
             
+            // Выполняем тик игры
             game->Tick(app::milliseconds(tick_period_ms));
             
             auto end = std::chrono::steady_clock::now();
             auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
             
+            // Если тик выполнился быстрее, чем tick_period, ждем
             if (elapsed.count() < tick_period_ms) {
                 std::this_thread::sleep_for(std::chrono::milliseconds(tick_period_ms - elapsed.count()));
             }
         }
         
+        // Сохраняем состояние при завершении
         if (!state_file.empty()) {
+            std::cout << "Saving state on shutdown..." << std::endl;
             listener->OnShutdown();
         }
 

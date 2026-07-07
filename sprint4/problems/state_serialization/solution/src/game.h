@@ -223,15 +223,16 @@ public:
         }
         
         for (const auto& player_pair : players_) {
-    const auto& player = player_pair.second;
-    serialization::PlayerRepr player_repr;
-    player_repr.token = player.token;
-    player_repr.user_id = player.user_id;
-    if (player.dog) {
-        player_repr.dog_id = std::to_string(*player.dog->GetId());
-    }
-    state.players.push_back(player_repr);
-}
+            const auto& player = player_pair.second;
+            serialization::PlayerRepr player_repr;
+            player_repr.token = player.token;
+            player_repr.user_id = player.user_id;
+            if (player.dog) {
+                // ИСПРАВЛЕНО: убраны лишние скобки
+                player_repr.dog_id = std::to_string(*player.dog->GetId());
+            }
+            state.players.push_back(player_repr);
+        }
     }
     
     void RestoreState(const serialization::GameState& state) {
@@ -252,7 +253,7 @@ public:
             for (const auto& dog_repr : map_repr.map_dogs) {
                 auto dog = std::make_shared<Dog>(dog_repr.Restore());
                 map_state.dogs.push_back(dog);
-                dog_map[(*dog->GetId())] = dog;
+                dog_map[*dog->GetId()] = dog;
             }
         }
         
@@ -269,6 +270,7 @@ public:
             }
         }
         
+        // ИСПРАВЛЕНО: сохраняем map_id для игроков
         for (const auto& player_repr : state.players) {
             PlayerInfo player;
             player.token = player_repr.token;
@@ -279,6 +281,17 @@ public:
                 auto it = dog_map.find(dog_id);
                 if (it != dog_map.end()) {
                     player.dog = it->second;
+                    // Находим карту для этой собаки
+                    for (auto& map_pair : maps_) {
+                        auto& map_state = map_pair.second;
+                        for (auto& dog : map_state.dogs) {
+                            if (*dog->GetId() == dog_id) {
+                                player.map_id = map_pair.first;
+                                break;
+                            }
+                        }
+                        if (!player.map_id.empty()) break;
+                    }
                 }
             }
             
