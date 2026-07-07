@@ -4,15 +4,13 @@
 #include <boost/archive/text_iarchive.hpp>
 #include <boost/serialization/vector.hpp>
 #include <boost/serialization/string.hpp>
-#include <boost/serialization/map.hpp>
 #include <boost/serialization/unordered_map.hpp>
 #include <boost/serialization/shared_ptr.hpp>
-#include <boost/serialization/optional.hpp>
 #include <fstream>
+#include <filesystem>
 #include <iostream>
 
 #include "model.h"
-#include "game.h"
 
 namespace geom {
 
@@ -38,20 +36,15 @@ void serialize(Archive& ar, FoundObject& obj, [[maybe_unused]] const unsigned ve
     ar& obj.type;
 }
 
-template <typename Archive>
-void serialize(Archive& ar, Dog::Id& id, [[maybe_unused]] const unsigned version) {
-    ar& *id;
-}
-
 }  // namespace model
 
 namespace serialization {
 
-// DogRepr - сериализованное представление класса Dog
+// Структура для сериализации Dog
 class DogRepr {
 public:
     DogRepr() = default;
-
+    
     explicit DogRepr(const model::Dog& dog)
         : id_(*dog.GetId())
         , name_(dog.GetName())
@@ -62,20 +55,18 @@ public:
         , score_(dog.GetScore())
         , bag_content_(dog.GetBagContent()) {
     }
-
-    [[nodiscard]] model::Dog Restore() const {
+    
+    model::Dog Restore() const {
         model::Dog dog{model::Dog::Id{id_}, name_, pos_, bag_capacity_};
         dog.SetSpeed(speed_);
         dog.SetDirection(direction_);
         dog.AddScore(score_);
         for (const auto& item : bag_content_) {
-            if (!dog.PutToBag(item)) {
-                throw std::runtime_error("Failed to put bag content");
-            }
+            dog.PutToBag(item);
         }
         return dog;
     }
-
+    
     template <typename Archive>
     void serialize(Archive& ar, [[maybe_unused]] const unsigned version) {
         ar& id_;
@@ -87,7 +78,7 @@ public:
         ar& score_;
         ar& bag_content_;
     }
-
+    
 private:
     uint32_t id_ = 0;
     std::string name_;
@@ -99,12 +90,11 @@ private:
     model::Dog::BagContent bag_content_;
 };
 
-// LootItemRepr - сериализованное представление предмета
 struct LootItemRepr {
     uint32_t id = 0;
     uint32_t type = 0;
     geom::Point2D position;
-
+    
     template <typename Archive>
     void serialize(Archive& ar, [[maybe_unused]] const unsigned version) {
         ar& id;
@@ -113,13 +103,12 @@ struct LootItemRepr {
     }
 };
 
-// PlayerRepr - сериализованное представление игрока
 struct PlayerRepr {
     std::string token;
     std::string user_id;
     uint32_t dog_id = 0;
     std::string map_id;
-
+    
     template <typename Archive>
     void serialize(Archive& ar, [[maybe_unused]] const unsigned version) {
         ar& token;
@@ -129,17 +118,14 @@ struct PlayerRepr {
     }
 };
 
-// GameState - полное состояние игры
 struct GameState {
     uint64_t game_time_ms = 0;
     std::vector<std::string> map_ids;
     std::vector<DogRepr> dogs;
     std::vector<LootItemRepr> loot_items;
     std::vector<PlayerRepr> players;
-    
-    // Для восстановления соответствия собака->карта
     std::unordered_map<uint32_t, std::string> dog_to_map;
-
+    
     template <typename Archive>
     void serialize(Archive& ar, [[maybe_unused]] const unsigned version) {
         ar& game_time_ms;
@@ -151,16 +137,13 @@ struct GameState {
     }
 };
 
-// StateSerializer - утилиты для сохранения/загрузки
 class StateSerializer {
 public:
     static bool SaveToFile(const GameState& state, const std::string& filepath) {
         try {
-            // Сначала сохраняем во временный файл
             std::string temp_path = filepath + ".tmp";
             std::ofstream ofs(temp_path);
             if (!ofs) {
-                std::cerr << "Failed to open temporary file: " << temp_path << std::endl;
                 return false;
             }
             
@@ -168,17 +151,10 @@ public:
             oa << state;
             ofs.close();
             
-            // Атомарно переименовываем
             std::error_code ec;
             std::filesystem::rename(temp_path, filepath, ec);
-            if (ec) {
-                std::cerr << "Failed to rename file: " << ec.message() << std::endl;
-                return false;
-            }
-            
-            return true;
-        } catch (const std::exception& e) {
-            std::cerr << "Exception during save: " << e.what() << std::endl;
+            return !ec;
+        } catch (...) {
             return false;
         }
     }
@@ -191,15 +167,13 @@ public:
             
             std::ifstream ifs(filepath);
             if (!ifs) {
-                std::cerr << "Failed to open file: " << filepath << std::endl;
                 return false;
             }
             
             boost::archive::text_iarchive ia(ifs);
             ia >> state;
             return true;
-        } catch (const std::exception& e) {
-            std::cerr << "Exception during load: " << e.what() << std::endl;
+        } catch (...) {
             return false;
         }
     }
