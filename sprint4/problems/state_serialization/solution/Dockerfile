@@ -1,56 +1,78 @@
-FROM gcc:11.3 AS build
+# ==========================================
+# Этап 1: Сборка (Builder)
+# ==========================================
+FROM ubuntu:22.04 AS builder
 
-# Установка необходимых пакетов
-RUN apt update && \
-    apt install -y python3-pip cmake libboost-all-dev && \
-    pip3 install conan==1.*
+# Отключаем интерактивные запросы при установке пакетов через apt
+ENV DEBIAN_FRONTEND=noninteractive
 
-# Настройка профиля Conan
-RUN conan profile new default --detect --force && \
-    conan profile update settings.compiler.libcxx=libstdc++11 default
+# Устанавливаем компилятор, CMake и полный набор библиотек Boost для сборки
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    cmake \
+    libboost-all-dev \
+    && rm -rf /var/lib/apt/lists/*
 
-# Копирование файлов проекта
-COPY conanfile.txt /app/
-COPY CMakeLists.txt /app/
-COPY src/ /app/src/
-COPY tests/ /app/tests/
-
-# Сборка проекта
-RUN mkdir -p /app/build && \
-    cd /app/build && \
-    conan install .. --build=missing && \
-    cmake -DCMAKE_BUILD_TYPE=Release .. && \
-    cmake --build . --target game_server
-
-# Финальный образ
-FROM ubuntu:22.04
-
-# Установка runtime зависимостей
-RUN apt update && \
-    apt install -y \
-        libstdc++6 \
-        ca-certificates \
-        libboost-system1.74.0 \
-        libboost-filesystem1.74.0 \
-        libboost-program-options1.74.0 \
-        && \
-    rm -rf /var/lib/apt/lists/*
-
-# Создание пользователя для запуска
-RUN groupadd -r www && useradd -r -g www www
-
-# Копирование исполняемого файла
-COPY --from=build /app/build/game_server /app/game_server
-
-# Создаем директорию для состояния
-RUN mkdir -p /tmp/volume && chown www:www /tmp/volume
-
-# Настройка рабочей директории
 WORKDIR /app
 
-# Права на выполнение
-RUN chmod +x /app/game_server
+# Копируем файлы сборки и исходный код
+COPY CMakeLists.txt .
+COPY src/ ./src/
 
-# Запуск сервера с параметрами
+# Если у вас есть папка с веб-ресурсами (статика) или конфигами, раскомментируйте:
+# COPY www/ ./www/
+# COPY data/ ./data/
+
+# Собираем проект в режиме Release с максимальной оптимизацией
+RUN mkdir build && cd build && \
+    cmake -DCMAKE_BUILD_TYPE=Release .. && \
+    cmake --build . --parallel $(nproc)
+
+# ==========================================
+# Этап 2: Запуск (Runtime)
+# ==========================================
+FROM ubuntu:22.04 AS runtime
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Устанавливаем ТОЛЬКО runtime-библиотеки Boost (без компиляторов и .hpp файлов)
+RUN apt-get update && apt-get install -y \
+    libboost-system1.74.0 \
+    libboost-program-options1.74.0 \
+    libboost-serialization1.74.0 \
+    libboost-log1.74.0 \
+    libboost-thread1.74.0 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Создаем непривилегированного пользователя для безопасности (best practice)
+RUN groupadd -r gameserver && useradd -r -g gameserver gameserver
+
+WORKDIR /app
+
+# Копируем собранный исполняемый файл из первого этапа
+COPY --from=builder /app/build/game_server /app/game_server
+
+# Копируем ресурсы и конфигурации (если они нужны вашему серверу)
+# COPY --from=builder /app/www /app/www
+# COPY --from=builder /app/data /app/data
+
+# Создаем папку для сохранения файла состояния игры (--state-file) и даем права
+RUN mkdir -p /app/state && chown -R gameserver:gameserver /app
+
+# Переключаемся на безопасного пользователя
+USER gameserver
+
+# Открываем порт, на котором слушает игровой сервер (например, 8080)
+EXPOSE 8080
+
+# Объявляем volume для папки с состоянием игры, чтобы данные не терялись при перезапуске
+VOLUME ["/app/state"]
+
+# Точка входа: запускаем сервер
 ENTRYPOINT ["/app/game_server"]
-CMD ["--config-file", "/app/data/config.json", "--www-root", "/app/static/", "--state-file", "/tmp/volume/state.dat", "--save-state-period", "5000"]
+
+# Аргументы по умолчанию (можно переопределить при вызове docker run)
+CMD ["--config-file", "/app/data/config.json", \
+     "--www-root", "/app/www", \
+     "--state-file", "/app/state/gamestate.bin", \
+     "--save-state-period", "5000"]

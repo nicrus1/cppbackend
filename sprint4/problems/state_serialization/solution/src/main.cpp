@@ -1,125 +1,163 @@
-#include <iostream>
-#include <boost/asio.hpp>
+#include <boost/asio/io_context.hpp>
+#include <boost/asio/signal_set.hpp>
 #include <boost/program_options.hpp>
-#include <filesystem>
-#include <csignal>
-#include <thread>
-#include <chrono>
-#include <atomic>
+#include <boost/log/trivial.hpp>
+#include <iostream>
 #include <memory>
+#include <thread>
+#include <vector>
+#include <optional>
+#include <chrono>
 
-#include "game.h"
-#include "request_handler.h"
-#include "json_loader.h"
-#include "http_server.h"
-#include "logger.h"
-#include "command_line.h"
-#include "ticker.h"
+// Предполагается, что эти заголовки уже есть в вашем проекте
+#include "model.h"
+#include "model_serialization.h"
+#include "state_manager.h" 
 
 namespace net = boost::asio;
+namespace sys = boost::system;
+namespace po = boost::program_options;
 
-std::shared_ptr<http_handler::RequestHandler> global_handler;
-std::shared_ptr<model::Game> global_game;
-std::atomic<bool> running{true};
+struct Args {
+    std::string config_file;
+    std::string www_root;
+    std::optional<std::string> state_file;
+    std::optional<int> save_state_period;
+    std::optional<int> tick_period; // Период автоматического тика, если есть
+};
 
-void SignalHandler(int signal) {
-    std::cout << "Received signal " << signal << std::endl;
-    running = false;
-    if (global_game) {
-        global_game->Shutdown();
+// Функция разбора аргументов командной строки
+Args ParseCommandLine(int argc, const char* argv[]) {
+    po::options_description desc{"Allowed options"};
+    desc.add_options()
+        ("help,h", "produce help message")
+        ("config-file,c", po::value<std::string>()->required(), "path to config file")
+        ("www-root,w", po::value<std::string>()->required(), "path to www root")
+        ("state-file", po::value<std::string>(), "path to game state save file")
+        ("save-state-period", po::value<int>(), "state saving period in milliseconds")
+        ("tick-period,t", po::value<int>(), "tick period in milliseconds");
+
+    po::variables_map vm;
+    po::store(po::parse_command_line(argc, argv, desc), vm);
+    po::notify(vm);
+
+    Args args;
+    args.config_file = vm["config-file"].as<std::string>();
+    args.www_root = vm["www-root"].as<std::string>();
+
+    if (vm.count("state-file")) {
+        args.state_file = vm["state-file"].as<std::string>();
+    }
+    if (vm.count("save-state-period")) {
+        args.save_state_period = vm["save-state-period"].as<int>();
+    }
+    if (vm.count("tick-period")) {
+        args.tick_period = vm["tick-period"].as<int>();
+    }
+
+    return args;
+}
+
+// Запуск многопоточного выполнения io_context
+template <typename Fn>
+void RunWorkers(unsigned num_threads, const Fn& fn) {
+    std::vector<std::thread> v;
+    v.reserve(num_threads - 1);
+    for (auto i = num_threads - 1; i > 0; --i) {
+        v.emplace_back(fn);
+    }
+    fn();
+    for (auto& t : v) {
+        t.join();
     }
 }
 
-int main(int argc, char* argv[]) {
+int main(int argc, const char* argv[]) {
     try {
-        logger::InitLogging();
-        
-        auto args = ParseCommandLine(argc, argv);
-        if (!args) {
-            return 0;
+        // 1. Разбираем аргументы командной строки
+        Args args;
+        try {
+            args = ParseCommandLine(argc, argv);
+        } catch (const std::exception& e) {
+            std::cerr << "Error parsing command line: " << e.what() << std::endl;
+            return EXIT_FAILURE;
         }
 
-        // Загружаем игру из конфигурации
-        model::Game game = json_loader::LoadGame(args->config_file);
-        global_game = std::make_shared<model::Game>(std::move(game));
+        // 2. Инициализируем прикладной слой (Application) и модель игры
+        // Здесь загружается ваш JSON-конфиг карт и настраивается окружение
+        auto config = model::LoadConfig(args.config_file); 
+        app::Application app(std::move(config));
 
-        // Создаем обработчик запросов
-        bool manual_tick_allowed = (args->tick_period == 0);
-        auto handler = std::make_shared<http_handler::RequestHandler>(
-            *global_game, 
-            args->www_root, 
-            manual_tick_allowed
-        );
-        global_handler = handler;
+        std::shared_ptr<infrastructure::StateManager> state_manager;
 
-        // Загружаем дополнительные данные из конфига
-        handler->LoadExtraData(args->config_file);
-
-        // Настраиваем сохранение состояния
-        if (!args->state_file.empty()) {
-            handler->SetStateFile(args->state_file);
-            
-            // Восстанавливаем состояние, если файл существует
-            if (std::filesystem::exists(args->state_file)) {
-                serialization::GameState state;
-                if (serialization::StateSerializer::LoadFromFile(state, args->state_file)) {
-                    handler->RestoreState(state);
-                    logger::LogDebug("State restored from " + args->state_file);
-                }
+        // 3. Настройка инфраструктуры сохранения состояния, если передан --state-file
+        if (args.state_file.has_value()) {
+            std::optional<std::chrono::milliseconds> period;
+            if (args.save_state_period.has_value()) {
+                period = std::chrono::milliseconds(*args.save_state_period);
             }
-            
-            if (args->save_state_period > 0) {
-                handler->SetSavePeriod(std::chrono::milliseconds(args->save_state_period));
+
+            state_manager = std::make_shared<infrastructure::StateManager>(
+                *args.state_file, period, app
+            );
+
+            // Восстановление состояния из файла при старте
+            try {
+                state_manager->Load();
+                BOOST_LOG_TRIVIAL(info) << "Game state successfully initialized.";
+            } catch (const std::exception& ex) {
+                // ТЗ: При ошибке восстановления вывести в log и вернуть EXIT_FAILURE
+                BOOST_LOG_TRIVIAL(error) << "Critical error restoring state: " << ex.what();
+                return EXIT_FAILURE;
             }
+
+            // Регистрируем лямбду в Application, которая будет дергать менеджер при каждом тике времени
+            app.DoOnTick([state_manager](std::chrono::milliseconds delta) {
+                state_manager->OnTick(delta);
+            });
         }
 
-        // Настраиваем обработку сигналов
-        std::signal(SIGINT, SignalHandler);
-        std::signal(SIGTERM, SignalHandler);
+        // 4. Инициализация асинхронного контекста Asio
+        const unsigned num_threads = std::max(1u, std::thread::hardware_concurrency());
+        net::io_context ioc(num_threads);
 
-        // Настраиваем сеть
-        net::io_context ioc(1);
-        auto address = net::ip::make_address("0.0.0.0");
-        unsigned short port = 8080;
-        
-        http_server::ServeHttp(ioc, {address, port}, [handler](auto&& req, auto&& send) {
-            (*handler)(std::move(req), std::forward<decltype(send)>(send));
+        // 5. Подписка на системные сигналы SIGINT и SIGTERM для штатного завершения
+        net::signal_set signals(ioc, SIGINT, SIGTERM);
+        signals.async_wait([&ioc](const sys::error_code& ec, [[maybe_unused]] int signal_number) {
+            if (!ec) {
+                BOOST_LOG_TRIVIAL(info) << "Shutdown signal received. Stopping server...";
+                ioc.stop(); // Останавливаем цикл обработки событий Asio
+            }
         });
 
-        logger::LogServerStarted("0.0.0.0", port);
-        std::cout << "Server started on port " << port << std::endl;
-        std::cout << "Config file: " << args->config_file << std::endl;
-        std::cout << "Static root: " << args->www_root << std::endl;
+        // 6. Инициализация и запуск сетевой подсистемы (HTTP API и статика)
+        // Здесь должен быть ваш код создания HttpServer / API ручек, например:
+        // auto handler = std::make_shared<http_handler::RequestHandler>(app, args.www_root);
+        // http_server::ServeHttp(ioc, {address, port}, handler);
 
-        // Запускаем таймер тиков, если задан период
-        std::unique_ptr<Ticker> ticker;
-        if (args->tick_period > 0) {
-            auto strand = net::make_strand(ioc);
-            ticker = std::make_unique<Ticker>(
-                strand,
-                std::chrono::milliseconds(args->tick_period),
-                [handler](std::chrono::milliseconds delta) {
-                    handler->Tick(delta);
-                }
-            );
-            ticker->Start();
+        BOOST_LOG_TRIVIAL(info) << "Game server started. Running workers...";
+
+        // 7. Передаем управление воркерам (блокирующий вызов)
+        RunWorkers(num_threads, [&ioc] {
+            ioc.run();
+        });
+
+        // --- ТОЧКА ШТАТНОГО ВЫХОДА ИЗ ЦИКЛА СОБЫТИЙ ---
+        // Сюда мы попадаем, когда все асинхронные потоки завершили работу после ioc.stop()
+        if (state_manager) {
+            try {
+                state_manager->Save();
+                BOOST_LOG_TRIVIAL(info) << "Game state successfully saved on shutdown.";
+            } catch (const std::exception& ex) {
+                BOOST_LOG_TRIVIAL(error) << "Failed to save state during shutdown: " << ex.what();
+                return EXIT_FAILURE;
+            }
         }
 
-        // Запускаем I/O контекст
-        ioc.run();
-
-        // Сохраняем состояние при завершении
-        if (!args->state_file.empty()) {
-            logger::LogDebug("Saving state on shutdown...");
-            handler->SaveStateToFile();
-        }
-
-        logger::LogServerExited(0);
-        return 0;
-    } catch (const std::exception& e) {
-        logger::LogError(0, e.what(), "main");
-        logger::LogServerExited(EXIT_FAILURE, e.what());
-        std::cerr << "Error: " << e.what() << std::endl;
+    } catch (const std::exception& ex) {
+        BOOST_LOG_TRIVIAL(fatal) << "Uncaught exception in main: " << ex.what();
         return EXIT_FAILURE;
     }
+
+    return EXIT_SUCCESS;
 }

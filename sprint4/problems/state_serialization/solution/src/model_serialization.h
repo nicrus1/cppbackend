@@ -1,189 +1,189 @@
 #pragma once
 
-#include <boost/archive/text_oarchive.hpp>
-#include <boost/archive/text_iarchive.hpp>
 #include <boost/serialization/vector.hpp>
 #include <boost/serialization/string.hpp>
-#include <boost/serialization/unordered_map.hpp>
-#include <boost/serialization/shared_ptr.hpp>
-#include <boost/serialization/optional.hpp>
-#include <fstream>
-#include <filesystem>
-#include <iostream>
+#include <boost/serialization/map.hpp>
+#include <memory>
+#include <string>
+#include <vector>
 
 #include "model.h"
-#include "player.h"
-#include "players.h"
-#include "player_tokens.h"
-#include "dog.h"
-#include "loot_manager.h"
+#include "geom.h"
+
+namespace geom {
+
+template <typename Archive>
+void serialize(Archive& ar, Point2D& point, [[maybe_unused]] const unsigned version) {
+    ar & point.x;
+    ar & point.y;
+}
+
+template <typename Archive>
+void serialize(Archive& ar, Vec2D& vec, [[maybe_unused]] const unsigned version) {
+    ar & vec.x;
+    ar & vec.y;
+}
+
+}  // namespace geom
+
+namespace model {
+
+template <typename Archive>
+void serialize(Archive& ar, FoundObject& obj, [[maybe_unused]] const unsigned version) {
+    ar & (*obj.id);
+    ar & (obj.type);
+}
+
+}  // namespace model
 
 namespace serialization {
 
-// Структура для сериализации Dog
+// DogRepr (DogRepresentation) - сериализованное представление класса Dog
 class DogRepr {
 public:
     DogRepr() = default;
-    
+
     explicit DogRepr(const model::Dog& dog)
-        : id_(*dog.GetId())
+        : id_(dog.GetId())
+        , name_(dog.GetName())
         , pos_(dog.GetPosition())
+        , bag_capacity_(dog.GetBagCapacity())
         , speed_(dog.GetSpeed())
         , direction_(dog.GetDirection())
         , score_(dog.GetScore())
-        , retirement_time_(dog.GetRetirementTime().count())
-        , total_play_time_(dog.GetTotalPlayTime().count()) {
+        , bag_content_(dog.GetBagContent()) {
     }
-    
-    model::Dog Restore() const {
-        model::Dog dog{model::Dog::Id{id_}, pos_, 1.0}; // скорость будет установлена из карты
+
+    [[nodiscard]] model::Dog Restore() const {
+        model::Dog dog{id_, name_, pos_, bag_capacity_};
         dog.SetSpeed(speed_);
         dog.SetDirection(direction_);
         dog.AddScore(score_);
-        dog.SetRetirementTime(std::chrono::milliseconds(retirement_time_));
-        dog.SetTotalPlayTime(std::chrono::milliseconds(total_play_time_));
+        for (const auto& item : bag_content_) {
+            if (!dog.PutToBag(item)) {
+                throw std::runtime_error("Failed to put bag content during restoration");
+            }
+        }
         return dog;
     }
-    
+
     template <typename Archive>
     void serialize(Archive& ar, [[maybe_unused]] const unsigned version) {
-        ar& id_;
-        ar& pos_;
-        ar& speed_;
-        ar& direction_;
-        ar& score_;
-        ar& retirement_time_;
-        ar& total_play_time_;
+        ar & *id_;
+        ar & name_;
+        ar & pos_;
+        ar & bag_capacity_;
+        ar & speed_;
+        ar & direction_;
+        ar & score_;
+        ar & bag_content_;
     }
-    
-    uint32_t GetId() const { return id_; }
-    
+
+private:
+    model::Dog::Id id_ = model::Dog::Id{0u};
+    std::string name_;
+    geom::Point2D pos_;
+    size_t bag_capacity_ = 0;
+    geom::Vec2D speed_;
+    model::Direction direction_ = model::Direction::NORTH;
+    model::Score score_ = 0;
+    model::Dog::BagContent bag_content_;
+};
+
+// LostObjectRepr - сериализованное представление потерянного на карте предмета
+class LostObjectRepr {
+public:
+    LostObjectRepr() = default;
+
+    LostObjectRepr(uint32_t id, unsigned type, geom::Point2D pos)
+        : id_(id)
+        , type_(type)
+        , pos_(pos) {}
+
+    [[nodiscard]] uint32_t GetId() const { return id_; }
+    [[nodiscard]] unsigned GetType() const { return type_; }
+    [[nodiscard]] geom::Point2D GetPosition() const { return pos_; }
+
+    template <typename Archive>
+    void serialize(Archive& ar, [[maybe_unused]] const unsigned version) {
+        ar & id_;
+        ar & type_;
+        ar & pos_;
+    }
+
 private:
     uint32_t id_ = 0;
-    model::Position pos_;
-    model::Speed speed_;
-    model::Direction direction_ = model::Direction::NORTH;
-    int score_ = 0;
-    int64_t retirement_time_ = 60000;
-    int64_t total_play_time_ = 0;
+    unsigned type_ = 0;
+    geom::Point2D pos_;
 };
 
-// Структура для сериализации LootItem
-struct LootItemRepr {
-    uint64_t id = 0;
-    int type = 0;
-    model::Position pos;
-    
-    template <typename Archive>
-    void serialize(Archive& ar, [[maybe_unused]] const unsigned version) {
-        ar& id;
-        ar& type;
-        ar& pos;
-    }
-};
-
-// Структура для сериализации Player
-struct PlayerRepr {
-    std::string token;
-    std::string name;
-    std::string map_id;
-    uint32_t dog_id = 0;
-    
-    template <typename Archive>
-    void serialize(Archive& ar, [[maybe_unused]] const unsigned version) {
-        ar& token;
-        ar& name;
-        ar& map_id;
-        ar& dog_id;
-    }
-};
-
-// Полное состояние игры
-struct GameState {
-    uint64_t game_time_ms = 0;
-    
-    // Собаки с привязкой к картам
-    std::vector<DogRepr> dogs;
-    std::unordered_map<uint32_t, std::string> dog_to_map;
-    
-    // Предметы с привязкой к картам
-    std::vector<LootItemRepr> loot_items;
-    std::unordered_map<uint64_t, std::string> loot_to_map;
-    
-    // Игроки
-    std::vector<PlayerRepr> players;
-    
-    // Время бездействия собак
-    std::unordered_map<uint32_t, int64_t> idle_time; // player_id -> ms
-    
-    // Генерация трофеев
-    struct LootManagerState {
-        std::string map_id;
-        uint64_t next_id = 0;
-        int64_t time_without_loot = 0;
-        
-        template <typename Archive>
-        void serialize(Archive& ar, [[maybe_unused]] const unsigned version) {
-            ar& map_id;
-            ar& next_id;
-            ar& time_without_loot;
-        }
-    };
-    std::vector<LootManagerState> loot_managers;
-    
-    template <typename Archive>
-    void serialize(Archive& ar, [[maybe_unused]] const unsigned version) {
-        ar& game_time_ms;
-        ar& dogs;
-        ar& dog_to_map;
-        ar& loot_items;
-        ar& loot_to_map;
-        ar& players;
-        ar& idle_time;
-        ar& loot_managers;
-    }
-};
-
-class StateSerializer {
+// PlayerRepr - сохраняет информацию об авторизованном пользователе и его токене
+class PlayerRepr {
 public:
-    static bool SaveToFile(const GameState& state, const std::string& filepath) {
-        try {
-            std::string temp_path = filepath + ".tmp";
-            std::ofstream ofs(temp_path);
-            if (!ofs) {
-                return false;
-            }
-            
-            boost::archive::text_oarchive oa(ofs);
-            oa << state;
-            ofs.close();
-            
-            std::error_code ec;
-            std::filesystem::rename(temp_path, filepath, ec);
-            return !ec;
-        } catch (...) {
-            return false;
-        }
+    PlayerRepr() = default;
+
+    PlayerRepr(std::string token, uint32_t dog_id, std::string map_id)
+        : token_(std::move(token))
+        , dog_id_(dog_id)
+        , map_id_(std::move(map_id)) {}
+
+    [[nodiscard]] const std::string& GetToken() const { return token_; }
+    [[nodiscard]] uint32_t GetDogId() const { return dog_id_; }
+    [[nodiscard]] const std::string& GetMapId() const { return map_id_; }
+
+    template <typename Archive>
+    void serialize(Archive& ar, [[maybe_unused]] const unsigned version) {
+        ar & token_;
+        ar & dog_id_;
+        ar & map_id_;
     }
-    
-    static bool LoadFromFile(GameState& state, const std::string& filepath) {
-        try {
-            if (!std::filesystem::exists(filepath)) {
-                return false;
-            }
-            
-            std::ifstream ifs(filepath);
-            if (!ifs) {
-                return false;
-            }
-            
-            boost::archive::text_iarchive ia(ifs);
-            ia >> state;
-            return true;
-        } catch (...) {
-            return false;
-        }
-    }
+
+private:
+    std::string token_;
+    uint32_t dog_id_ = 0;
+    std::string map_id_;
 };
 
-} // namespace serialization
+// SessionStateRepr - агрегирует состояние одной игровой сессии (конкретной карты)
+class SessionStateRepr {
+public:
+    SessionStateRepr() = default;
+
+    SessionStateRepr(std::string map_id, std::vector<DogRepr> dogs, std::vector<LostObjectRepr> lost_objects)
+        : map_id_(std::move(map_id))
+        , dogs_(std::move(dogs))
+        , lost_objects_(std::move(lost_objects)) {}
+
+    [[nodiscard]] const std::string& GetMapId() const { return map_id_; }
+    [[nodiscard]] const std::vector<DogRepr>& GetDogs() const { return dogs_; }
+    [[nodiscard]] const std::vector<LostObjectRepr>& GetLostObjects() const { return lost_objects_; }
+
+    template <typename Archive>
+    void serialize(Archive& ar, [[maybe_unused]] const unsigned version) {
+        ar & map_id_;
+        ar & dogs_;
+        ar & lost_objects_;
+    }
+
+private:
+    std::string map_id_;
+    std::vector<DogRepr> dogs_;
+    std::vector<LostObjectRepr> lost_objects_;
+};
+
+// GameStateRepr - корневой объект сериализации всего сервера
+class GameStateRepr {
+public:
+    GameStateRepr() = default;
+
+    template <typename Archive>
+    void serialize(Archive& ar, [[maybe_unused]] const unsigned version) {
+        ar & sessions_;
+        ar & players_;
+    }
+
+    std::vector<SessionStateRepr> sessions_;
+    std::vector<PlayerRepr> players_;
+};
+
+}  // namespace serialization
