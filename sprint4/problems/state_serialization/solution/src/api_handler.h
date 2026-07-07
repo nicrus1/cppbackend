@@ -1,14 +1,12 @@
 #pragma once
+
 #include "model.h"
 #include "game_state.h"
 #include "http_server.h"
 #include "logger.h"
-#include "extra_data.h"
-#include "db/record_manager.h"
 #include <boost/json.hpp>
 #include <optional>
 #include <string>
-#include <functional>
 #include <cctype>
 #include <algorithm>
 #include <memory>
@@ -36,9 +34,8 @@ public:
         game_state_->SetDogRetirementTime(seconds);
     }
     
-    void SetRecordManager(std::shared_ptr<db::RecordManager> manager) {
+    void SetRecordManager(std::shared_ptr<void> manager) {
         game_state_->SetRecordManager(manager);
-        record_manager_ = manager;
     }
 
     template <typename Body, typename Allocator, typename Send>
@@ -71,18 +68,16 @@ public:
                 return;
             }
 
-            std::string map_id_str = std::string(obj.at("mapId").as_string());
-            model::Map::Id map_id{map_id_str};
+            std::string map_id = std::string(obj.at("mapId").as_string());
 
             auto join_result = game_state_->JoinGame(user_name, map_id);
             
             boost::json::object res_obj;
-            res_obj["authToken"] = *join_result.token;
+            res_obj["authToken"] = join_result.token;
             res_obj["playerId"] = join_result.player_id;
 
             SendResponse(std::move(req), send, http::status::ok, boost::json::serialize(res_obj));
         } catch (const std::exception& e) {
-            logger::LogError(0, "Join game error: " + std::string(e.what()), "HandleJoin");
             SendError(std::move(req), send, http::status::bad_request,
                       "invalidArgument", "Join game request parses but misses fields");
         } catch (...) {
@@ -92,7 +87,7 @@ public:
     }
 
     template <typename Body, typename Allocator, typename Send>
-    void HandlePlayersList(http::request<Body, http::basic_fields<Allocator>>&& req, Send&& send) {
+    void HandleGetPlayers(http::request<Body, http::basic_fields<Allocator>>&& req, Send&& send) {
         if (req.method() != http::verb::get && req.method() != http::verb::head) {
             SendErrorWithAllow(std::move(req), send, http::status::method_not_allowed,
                                "invalidMethod", "Invalid method", "GET, HEAD");
@@ -126,11 +121,6 @@ public:
         }
 
         SendResponse(std::move(req), send, http::status::ok, boost::json::serialize(res_obj));
-    }
-
-    template <typename Body, typename Allocator, typename Send>
-    void HandleGetPlayers(http::request<Body, http::basic_fields<Allocator>>&& req, Send&& send) {
-        HandlePlayersList(std::move(req), std::forward<Send>(send));
     }
 
     template <typename Body, typename Allocator, typename Send>
@@ -176,7 +166,6 @@ public:
             player_info["speed"] = speed_arr;
 
             player_info["dir"] = game::DirectionToString(ps.dir);
-            
             player_info["score"] = ps.score;
 
             players_obj[ps.player_id] = player_info;
@@ -287,7 +276,6 @@ public:
             boost::json::object res_obj;
             SendResponse(std::move(req), send, http::status::ok, boost::json::serialize(res_obj));
         } catch (const std::exception& e) {
-            logger::LogError(0, "Tick error: " + std::string(e.what()), "HandleTick");
             SendError(std::move(req), send, http::status::bad_request,
                       "invalidArgument", "Failed to parse tick request JSON");
         } catch (...) {
@@ -298,114 +286,12 @@ public:
 
     template <typename Body, typename Allocator, typename Send>
     void HandleRecords(http::request<Body, http::basic_fields<Allocator>>&& req, Send&& send) {
-        if (req.method() != http::verb::get && req.method() != http::verb::head) {
-            SendErrorWithAllow(std::move(req), send, http::status::method_not_allowed,
-                              "invalidMethod", "Invalid method", "GET, HEAD");
-            return;
-        }
-
-        if (req.method() == http::verb::head) {
-            SendResponse(std::move(req), send, http::status::ok, "");
-            return;
-        }
-
-        // Парсим параметры
-        std::string target = std::string(req.target());
-        int start = 0;
-        int max_items = 100;
-        
-        auto query_pos = target.find('?');
-        if (query_pos != std::string::npos) {
-            std::string query = target.substr(query_pos + 1);
-            std::string param;
-            for (char c : query) {
-                if (c == '&') {
-                    auto eq_pos = param.find('=');
-                    if (eq_pos != std::string::npos) {
-                        std::string key = param.substr(0, eq_pos);
-                        std::string value = param.substr(eq_pos + 1);
-                        if (key == "start") {
-                            start = std::stoi(value);
-                            if (start < 0) start = 0;
-                        } else if (key == "maxItems") {
-                            max_items = std::stoi(value);
-                            if (max_items < 0) {
-                                SendError(std::move(req), send, http::status::bad_request,
-                                         "badRequest", "maxItems cannot be negative");
-                                return;
-                            }
-                            if (max_items > 100) {
-                                SendError(std::move(req), send, http::status::bad_request,
-                                         "badRequest", "maxItems exceeds 100");
-                                return;
-                            }
-                        }
-                    }
-                    param.clear();
-                } else {
-                    param += c;
-                }
-            }
-            if (!param.empty()) {
-                auto eq_pos = param.find('=');
-                if (eq_pos != std::string::npos) {
-                    std::string key = param.substr(0, eq_pos);
-                    std::string value = param.substr(eq_pos + 1);
-                    if (key == "start") {
-                        start = std::stoi(value);
-                        if (start < 0) start = 0;
-                    } else if (key == "maxItems") {
-                        max_items = std::stoi(value);
-                        if (max_items < 0) {
-                            SendError(std::move(req), send, http::status::bad_request,
-                                     "badRequest", "maxItems cannot be negative");
-                            return;
-                        }
-                        if (max_items > 100) {
-                            SendError(std::move(req), send, http::status::bad_request,
-                                     "badRequest", "maxItems exceeds 100");
-                            return;
-                        }
-                    }
-                }
-            }
-        }
-        
-        if (!record_manager_) {
-            SendError(std::move(req), send, http::status::internal_server_error,
-                     "internalError", "Record manager not initialized");
-            return;
-        }
-        
-        try {
-            if (max_items == 0) {
-                SendResponse(std::move(req), send, http::status::ok, "[]");
-                return;
-            }
-            
-            auto records = record_manager_->GetRecords(start, max_items);
-            
-            boost::json::array records_array;
-            for (const auto& rec : records) {
-                records_array.push_back(boost::json::object{
-                    {"name", rec.name},
-                    {"score", rec.score},
-                    {"playTime", rec.play_time}
-                });
-            }
-            
-            SendResponse(std::move(req), send, http::status::ok, 
-                        boost::json::serialize(records_array));
-        } catch (const std::exception& e) {
-            logger::LogError(0, "Records error: " + std::string(e.what()), "HandleRecords");
-            SendError(std::move(req), send, http::status::internal_server_error,
-                     "internalError", "Failed to get records");
-        }
+        SendResponse(std::move(req), send, http::status::ok, "[]");
     }
 
 private:
     template <typename Body, typename Allocator>
-    std::optional<model::Token> ExtractToken(const http::request<Body, http::basic_fields<Allocator>>& req) {
+    std::optional<std::string> ExtractToken(const http::request<Body, http::basic_fields<Allocator>>& req) {
         auto auth_it = req.find(http::field::authorization);
         if (auth_it == req.end()) {
             return std::nullopt;
@@ -429,7 +315,7 @@ private:
             return std::nullopt;
         }
 
-        return model::Token{token_str};
+        return token_str;
     }
 
     template <typename Body, typename Allocator, typename Send>
@@ -476,7 +362,7 @@ private:
         http::response<http::string_body> response(status, req.version());
         response.set(http::field::content_type, "application/json");
         response.set(http::field::cache_control, "no-cache");
-        response.set(http::field::allow, allow_methods);
+        response.set(http::field::allow, std::string(allow_methods));
         response.body() = body;
         response.prepare_payload();
         response.keep_alive(req.keep_alive());
@@ -485,7 +371,6 @@ private:
 
 private:
     std::unique_ptr<game::GameState> game_state_;
-    std::shared_ptr<db::RecordManager> record_manager_;
 };
 
 } // namespace http_handler

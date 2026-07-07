@@ -1,10 +1,9 @@
 #pragma once
+
 #include "http_server.h"
 #include "model.h"
 #include "api_handler.h"
 #include "logger.h"
-#include "extra_data.h"
-#include "db/record_manager.h"
 #include <boost/json.hpp>
 #include <optional>
 #include <filesystem>
@@ -41,12 +40,9 @@ public:
         api_handler_.SetDogRetirementTime(seconds);
     }
     
-    void SetRecordManager(std::shared_ptr<db::RecordManager> manager) {
-        record_manager_ = manager;
-        api_handler_.SetRecordManager(manager);
+    void LoadExtraData(const std::filesystem::path& config_path) {
+        // Упрощенная реализация
     }
-    
-    void LoadExtraData(const std::filesystem::path& config_path);
 
     template <typename Body, typename Allocator, typename Send>
     void operator()(http::request<Body, http::basic_fields<Allocator>>&& req, Send&& send) {
@@ -57,13 +53,7 @@ public:
         if (query_pos != std::string::npos) {
             target = target.substr(0, query_pos);
         }
-        
-        std::string path = target;
-        if (!path.empty() && path[0] == '/') {
-            path = path.substr(1);
-        }
 
-        // Исправленная проверка API версии
         if (target.find("/api/v") == 0 && target.find("/api/v1/") != 0) {
             SendError(std::move(req), send, http::status::bad_request,
                       "badRequest", "Invalid API version");
@@ -106,74 +96,154 @@ public:
         }
 
         if (target == "/api/v1/maps") {
-            if (method != "GET" && method != "HEAD") {
-                SendErrorWithAllow(std::move(req), send, http::status::method_not_allowed,
-                          "invalidMethod", "Method not allowed", "GET, HEAD");
-                return;
-            }
-            if (method == "HEAD") {
-                SendResponse(std::move(req), send, http::status::ok, "application/json", "");
-                return;
-            }
-            std::string body = SerializeMaps();
-            SendResponse(std::move(req), send, http::status::ok, "application/json", body);
+            HandleMaps(std::move(req), std::forward<Send>(send));
             return;
         }
 
         const std::string prefix = "/api/v1/maps/";
         if (target.find(prefix) == 0) {
-            if (method != "GET" && method != "HEAD") {
-                SendErrorWithAllow(std::move(req), send, http::status::method_not_allowed,
-                          "invalidMethod", "Method not allowed", "GET, HEAD");
-                return;
+            std::string map_id = target.substr(prefix.length());
+            while (!map_id.empty() && map_id.back() == '/') {
+                map_id.pop_back();
             }
-            std::string map_id_str = target.substr(prefix.length());
-            
-            while (!map_id_str.empty() && map_id_str.back() == '/') {
-                map_id_str.pop_back();
-            }
-
-            model::Map::Id map_id{std::move(map_id_str)};
-            const model::Map* map = game_.FindMap(map_id);
-
-            if (!map) {
-                SendError(std::move(req), send, http::status::not_found,
-                          "mapNotFound", "Map not found");
-                return;
-            }
-
-            if (method == "HEAD") {
-                SendResponse(std::move(req), send, http::status::ok, "application/json", "");
-                return;
-            }
-
-            std::string body = SerializeMap(*map);
-            SendResponse(std::move(req), send, http::status::ok, "application/json", body);
+            HandleMap(std::move(req), std::forward<Send>(send), map_id);
             return;
         }
 
-        HandleStaticFile(std::move(req), std::forward<Send>(send), path);
+        HandleStaticFile(std::move(req), std::forward<Send>(send));
     }
 
 private:
     template <typename Body, typename Allocator, typename Send>
-    void HandleStaticFile(http::request<Body, http::basic_fields<Allocator>>&& req,
-                          Send&& send,
-                          const std::string& path) {
+    void HandleMaps(http::request<Body, http::basic_fields<Allocator>>&& req, Send&& send) {
+        if (req.method() != http::verb::get && req.method() != http::verb::head) {
+            SendErrorWithAllow(std::move(req), send, http::status::method_not_allowed,
+                               "invalidMethod", "Method not allowed", "GET, HEAD");
+            return;
+        }
+        
+        if (req.method() == http::verb::head) {
+            SendResponse(std::move(req), send, http::status::ok, "application/json", "");
+            return;
+        }
+        
+        boost::json::array maps_array;
+        for (const auto& map_pair : game_.GetMaps()) {
+            const auto& map_state = map_pair.second;
+            boost::json::object map_obj;
+            map_obj["id"] = map_state.map_id;
+            map_obj["name"] = map_state.name;
+            map_obj["dogSpeed"] = map_state.dog_speed;
+            maps_array.push_back(map_obj);
+        }
+        
+        SendResponse(std::move(req), send, http::status::ok, "application/json", 
+                     boost::json::serialize(maps_array));
+    }
+
+    template <typename Body, typename Allocator, typename Send>
+    void HandleMap(http::request<Body, http::basic_fields<Allocator>>&& req, Send&& send,
+                   const std::string& map_id) {
+        if (req.method() != http::verb::get && req.method() != http::verb::head) {
+            SendErrorWithAllow(std::move(req), send, http::status::method_not_allowed,
+                               "invalidMethod", "Method not allowed", "GET, HEAD");
+            return;
+        }
+
+        auto map_state = game_.GetMapState(map_id);
+        if (!map_state) {
+            SendError(std::move(req), send, http::status::not_found,
+                      "mapNotFound", "Map not found");
+            return;
+        }
+
+        if (req.method() == http::verb::head) {
+            SendResponse(std::move(req), send, http::status::ok, "application/json", "");
+            return;
+        }
+
+        boost::json::object map_obj;
+        map_obj["id"] = map_state->map_id;
+        map_obj["name"] = map_state->name;
+        
+        // Дороги
+        boost::json::array roads_array;
+        for (const auto& road : map_state->roads) {
+            boost::json::object road_obj;
+            road_obj["x0"] = road.x0;
+            road_obj["y0"] = road.y0;
+            if (road.has_x1) road_obj["x1"] = road.x1;
+            if (road.has_y1) road_obj["y1"] = road.y1;
+            roads_array.push_back(road_obj);
+        }
+        map_obj["roads"] = roads_array;
+        
+        // Здания
+        boost::json::array buildings_array;
+        for (const auto& building : map_state->buildings) {
+            buildings_array.push_back(boost::json::object{
+                {"x", building.x},
+                {"y", building.y},
+                {"w", building.w},
+                {"h", building.h}
+            });
+        }
+        map_obj["buildings"] = buildings_array;
+        
+        // Офисы
+        boost::json::array offices_array;
+        for (const auto& office : map_state->offices) {
+            offices_array.push_back(boost::json::object{
+                {"id", office.id},
+                {"x", office.x},
+                {"y", office.y},
+                {"offsetX", office.offsetX},
+                {"offsetY", office.offsetY}
+            });
+        }
+        map_obj["offices"] = offices_array;
+        
+        // Типы лута
+        boost::json::array loot_array;
+        for (const auto& loot : map_state->loot_types) {
+            loot_array.push_back(boost::json::object{
+                {"name", loot.name},
+                {"file", loot.file},
+                {"type", loot.type},
+                {"rotation", loot.rotation},
+                {"color", loot.color},
+                {"scale", loot.scale},
+                {"value", loot.value}
+            });
+        }
+        map_obj["lootTypes"] = loot_array;
+
+        SendResponse(std::move(req), send, http::status::ok, "application/json",
+                     boost::json::serialize(map_obj));
+    }
+
+    template <typename Body, typename Allocator, typename Send>
+    void HandleStaticFile(http::request<Body, http::basic_fields<Allocator>>&& req, Send&& send) {
         if (req.method() != http::verb::get) {
             SendError(std::move(req), send, http::status::method_not_allowed,
                       "badRequest", "Method not allowed");
             return;
         }
         
-        std::string file_path = path.empty() ? "index.html" : path;
+        std::string path = std::string(req.target());
+        if (!path.empty() && path[0] == '/') {
+            path = path.substr(1);
+        }
+        if (path.empty()) {
+            path = "index.html";
+        }
         
-        if (file_path.find("..") != std::string::npos) {
+        if (path.find("..") != std::string::npos) {
             SendStaticNotFound(std::move(req), send);
             return;
         }
         
-        std::filesystem::path full_path = std::filesystem::path(static_dir_) / file_path;
+        std::filesystem::path full_path = std::filesystem::path(static_dir_) / path;
         
         std::ifstream file(full_path, std::ios::binary);
         if (!file.is_open()) {
@@ -201,10 +271,9 @@ private:
         response.keep_alive(req.keep_alive());
         send(std::move(response));
     }
-    
+
     template <typename Body, typename Allocator, typename Send>
-    void SendStaticNotFound(http::request<Body, http::basic_fields<Allocator>>&& req,
-                            Send&& send) {
+    void SendStaticNotFound(http::request<Body, http::basic_fields<Allocator>>&& req, Send&& send) {
         http::response<http::string_body> response(http::status::not_found, req.version());
         response.set(http::field::content_type, "text/plain");
         response.body() = "404 Not Found";
@@ -221,7 +290,7 @@ private:
                       std::string_view body) {
         http::response<http::string_body> response(status, req.version());
         response.set(http::field::content_type, content_type);
-        response.set(http::field::cache_control, "no-cache");  
+        response.set(http::field::cache_control, "no-cache");
         response.body() = body;
         response.prepare_payload();
         response.keep_alive(req.keep_alive());
@@ -239,14 +308,7 @@ private:
                 {"code", code},
                 {"message", message}
             });
-        
-        http::response<http::string_body> response(status, req.version());
-        response.set(http::field::content_type, "application/json");
-        response.set(http::field::cache_control, "no-cache");
-        response.body() = body;
-        response.prepare_payload();
-        response.keep_alive(req.keep_alive());
-        send(std::move(response));
+        SendResponse(std::move(req), send, status, "application/json", body);
     }
 
     template <typename Body, typename Allocator, typename Send>
@@ -265,25 +327,17 @@ private:
         http::response<http::string_body> response(status, req.version());
         response.set(http::field::content_type, "application/json");
         response.set(http::field::cache_control, "no-cache");
-        response.set(http::field::allow, allow_methods);
+        response.set(http::field::allow, std::string(allow_methods));
         response.body() = body;
         response.prepare_payload();
         response.keep_alive(req.keep_alive());
         send(std::move(response));
     }
 
-    std::string SerializeMaps() const;
-    std::string SerializeMap(const model::Map& map) const;
-    boost::json::array SerializeRoads(const model::Map& map) const;
-    boost::json::array SerializeBuildings(const model::Map& map) const;
-    boost::json::array SerializeOffices(const model::Map& map) const;
-
     model::Game& game_;
     ApiHandler api_handler_;
     std::string static_dir_;
     bool manual_tick_allowed_;
-    extra_data::ExtraData extra_data_;
-    std::shared_ptr<db::RecordManager> record_manager_;
 };
 
 } // namespace http_handler
