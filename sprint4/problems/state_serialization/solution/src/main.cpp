@@ -99,6 +99,7 @@ private:
             } else if (request_.method() == http::verb::get && target == "/api/v1/game/players") {
                 HandleGetPlayers();
             } else {
+                std::cout << "Not found: " << target << std::endl;
                 response_.result(http::status::not_found);
                 response_.body() = R"({"error":"Not found"})";
             }
@@ -116,6 +117,14 @@ private:
             std::string body = request_.body();
             std::cout << "Join body: " << body << std::endl;
             
+            // Проверяем, что тело не пустое
+            if (body.empty()) {
+                std::cerr << "Empty body in join request" << std::endl;
+                response_.result(http::status::bad_request);
+                response_.body() = R"({"error":"Empty body"})";
+                return;
+            }
+            
             pt::ptree root;
             std::stringstream ss(body);
             pt::read_json(ss, root);
@@ -125,19 +134,26 @@ private:
             
             std::cout << "User: " << user_name << ", Map: " << map_id << std::endl;
             
+            // Проверяем, что карта существует
             auto map_state = game_->GetMapState(map_id);
             if (!map_state) {
+                std::cerr << "Map not found: " << map_id << std::endl;
                 response_.result(http::status::not_found);
                 response_.body() = R"({"error":"Map not found"})";
                 return;
             }
             
+            std::cout << "Map found: " << map_state->name << std::endl;
+            std::cout << "Offices count: " << map_state->offices.size() << std::endl;
+            
             // Генерируем токен
             std::string token = GenerateToken();
+            std::cout << "Generated token: " << token << std::endl;
             
             // Создаем собаку
             uint32_t dog_id_num = game_->GetAllDogs().size() + 1;
             auto dog_id = model::Dog::Id{dog_id_num};
+            std::cout << "Dog ID: " << dog_id_num << std::endl;
             
             // Выбираем стартовую позицию из офиса
             geom::Point2D pos(5.0, 5.0);
@@ -145,12 +161,17 @@ private:
                 const auto& office = map_state->offices[0];
                 pos.x = office.x + office.offsetX;
                 pos.y = office.y + office.offsetY;
+                std::cout << "Start position from office: (" << pos.x << ", " << pos.y << ")" << std::endl;
+            } else {
+                std::cout << "No offices, using default position" << std::endl;
             }
             
             auto dog = std::make_shared<model::Dog>(dog_id, user_name, pos, 3);
+            std::cout << "Dog created" << std::endl;
             
             // Добавляем игрока
             game_->AddPlayer(token, user_name, map_id, dog);
+            std::cout << "Player added" << std::endl;
             
             // Формируем ответ
             pt::ptree response_root;
@@ -164,9 +185,16 @@ private:
             
             std::stringstream response_ss;
             pt::write_json(response_ss, response_root);
-            response_.body() = response_ss.str();
+            std::string response_body = response_ss.str();
+            std::cout << "Response body: " << response_body << std::endl;
+            
+            response_.body() = response_body;
             response_.result(http::status::ok);
             
+        } catch (const pt::ptree_error& e) {
+            std::cerr << "JSON parse error: " << e.what() << std::endl;
+            response_.result(http::status::bad_request);
+            response_.body() = R"({"error":"Invalid JSON"})";
         } catch (const std::exception& e) {
             std::cerr << "Join error: " << e.what() << std::endl;
             response_.result(http::status::bad_request);
@@ -178,6 +206,8 @@ private:
         pt::ptree response_root;
         pt::ptree maps_array;
         
+        std::cout << "GetMaps: " << game_->GetMaps().size() << " maps" << std::endl;
+        
         for (const auto& map_pair : game_->GetMaps()) {
             const auto& map_state = map_pair.second;
             pt::ptree map_node;
@@ -185,13 +215,17 @@ private:
             map_node.put("name", map_state.name);
             map_node.put("dogSpeed", map_state.dog_speed);
             maps_array.push_back(std::make_pair("", map_node));
+            std::cout << "  Map: " << map_state.map_id << " (" << map_state.name << ")" << std::endl;
         }
         
         response_root.add_child("maps", maps_array);
         
         std::stringstream ss;
         pt::write_json(ss, response_root);
-        response_.body() = ss.str();
+        std::string body = ss.str();
+        std::cout << "GetMaps response: " << body << std::endl;
+        
+        response_.body() = body;
         response_.result(http::status::ok);
     }
     
@@ -337,6 +371,8 @@ void LoadMapsFromConfig(const std::string& config_path, std::shared_ptr<model::G
         double loot_probability = root.get<double>("lootGeneratorConfig.probability", 0.5);
         double default_dog_speed = root.get<double>("defaultDogSpeed", 3.0);
         
+        std::cout << "Loot config: period=" << loot_period << ", probability=" << loot_probability << std::endl;
+        
         // Парсим карты
         if (root.count("maps") > 0) {
             for (const auto& map_node : root.get_child("maps")) {
@@ -351,6 +387,7 @@ void LoadMapsFromConfig(const std::string& config_path, std::shared_ptr<model::G
                 // Добавляем карту
                 if (!game->HasMap(map_id)) {
                     game->AddMap(map_id, dog_speed);
+                    std::cout << "  Created map: " << map_id << std::endl;
                 }
                 
                 auto map_state = game->GetMapState(map_id);
@@ -371,6 +408,7 @@ void LoadMapsFromConfig(const std::string& config_path, std::shared_ptr<model::G
                             loot_type.scale = loot_node.second.get<double>("scale", 0.01);
                             loot_type.value = loot_node.second.get<uint32_t>("value", 0);
                             map_state->loot_types.push_back(loot_type);
+                            std::cout << "  Loot type: " << loot_type.name << " (value=" << loot_type.value << ")" << std::endl;
                         }
                     }
                     
@@ -391,6 +429,7 @@ void LoadMapsFromConfig(const std::string& config_path, std::shared_ptr<model::G
                             }
                             map_state->roads.push_back(road);
                         }
+                        std::cout << "  Roads: " << map_state->roads.size() << std::endl;
                     }
                     
                     // Загружаем здания
@@ -403,6 +442,7 @@ void LoadMapsFromConfig(const std::string& config_path, std::shared_ptr<model::G
                             building.h = building_node.second.get<double>("h", 0);
                             map_state->buildings.push_back(building);
                         }
+                        std::cout << "  Buildings: " << map_state->buildings.size() << std::endl;
                     }
                     
                     // Загружаем офисы
@@ -415,6 +455,7 @@ void LoadMapsFromConfig(const std::string& config_path, std::shared_ptr<model::G
                             office.offsetX = office_node.second.get<double>("offsetX", 0);
                             office.offsetY = office_node.second.get<double>("offsetY", 0);
                             map_state->offices.push_back(office);
+                            std::cout << "  Office: " << office.id << " at (" << office.x << ", " << office.y << ")" << std::endl;
                         }
                     }
                     
@@ -430,6 +471,13 @@ void LoadMapsFromConfig(const std::string& config_path, std::shared_ptr<model::G
         }
         
         std::cout << "Loaded " << root.get_child("maps").size() << " maps from config" << std::endl;
+        std::cout << "Total maps in game: " << game->GetMaps().size() << std::endl;
+        
+        // Выводим все загруженные карты
+        for (const auto& map_pair : game->GetMaps()) {
+            std::cout << "Map in game: " << map_pair.first << " (" << map_pair.second.name << ")" << std::endl;
+        }
+        
     } catch (const std::exception& e) {
         std::cerr << "Error loading config: " << e.what() << std::endl;
         if (!game->HasMap("map1")) {
@@ -496,6 +544,7 @@ int main(int argc, char* argv[]) {
             std::cout << "No config file specified, creating test map" << std::endl;
             if (!game->HasMap("map1")) {
                 game->AddMap("map1", 3.0);
+                std::cout << "Created default map1" << std::endl;
             }
         }
         
@@ -544,6 +593,12 @@ int main(int argc, char* argv[]) {
         std::cout << "Server started. Press Ctrl+C to stop." << std::endl;
         std::cout << "Game time: " << game->GetGameTime() << " ms" << std::endl;
         std::cout << "Number of maps: " << game->GetMaps().size() << std::endl;
+        
+        // Выводим информацию о картах
+        for (const auto& map_pair : game->GetMaps()) {
+            std::cout << "  Map: " << map_pair.first << " (" << map_pair.second.name << ")" << std::endl;
+        }
+        
         std::cout << "Number of dogs: " << game->GetAllDogs().size() << std::endl;
         
         // Запускаем отдельный поток для игровых тиков
