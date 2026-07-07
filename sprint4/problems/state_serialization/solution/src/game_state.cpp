@@ -4,6 +4,8 @@
 #include <cmath>
 #include <iostream>
 #include <random>
+#include <fstream>
+#include <filesystem>
 
 namespace {
 
@@ -424,7 +426,7 @@ void GameState::SaveState(serialization::GameState& state) const {
         serialization::GameState::LootManagerState mgr_state;
         mgr_state.map_id = *map_id;
         mgr_state.next_id = manager->GetNextId();
-        mgr_state.time_without_loot = manager->GetTimeWithoutLoot();
+        mgr_state.time_without_loot = manager->GetTimeWithoutLoot().count();
         state.loot_managers.push_back(mgr_state);
     }
     
@@ -474,7 +476,10 @@ void GameState::RestoreState(const serialization::GameState& state) {
     for (const auto& player_repr : state.players) {
         model::Map::Id map_id{player_repr.map_id};
         const model::Map* map = game_.FindMap(map_id);
-        if (!map) continue;
+        if (!map) {
+            logger::LogError(0, "Map not found during restore: " + player_repr.map_id, "RestoreState");
+            throw std::runtime_error("Map not found during restore: " + player_repr.map_id);
+        }
         
         // Создаем игрока
         model::Player& player = players_.AddPlayer(player_repr.name, map_id);
@@ -507,7 +512,10 @@ void GameState::RestoreState(const serialization::GameState& state) {
         auto mgr_it = loot_managers_.find(map_id);
         if (mgr_it == loot_managers_.end()) {
             const model::Map* map = game_.FindMap(map_id);
-            if (!map) continue;
+            if (!map) {
+                logger::LogError(0, "Map not found for loot item: " + *map_id, "RestoreState");
+                continue;
+            }
             
             auto manager = std::make_unique<LootManager>(*map, loot_period_, loot_probability_);
             mgr_it = loot_managers_.emplace(map_id, std::move(manager)).first;
@@ -522,7 +530,7 @@ void GameState::RestoreState(const serialization::GameState& state) {
         auto it = loot_managers_.find(map_id);
         if (it != loot_managers_.end()) {
             it->second->SetNextId(mgr_state.next_id);
-            it->second->SetTimeWithoutLoot(mgr_state.time_without_loot);
+            it->second->SetTimeWithoutLoot(std::chrono::milliseconds(mgr_state.time_without_loot));
         }
     }
 }

@@ -30,9 +30,12 @@ public:
     RequestHandler& operator=(const RequestHandler&) = delete;
 
     void Tick(std::chrono::milliseconds delta) {
+        // Обновляем игровое время
+        game_time_ms_ += delta.count();
+        
         api_handler_.Tick(delta);
         
-        // Периодическое сохранение состояния
+        // Периодическое автоматическое сохранение состояния
         if (!state_file_.empty() && save_period_ > std::chrono::milliseconds(0)) {
             elapsed_since_save_ += delta;
             if (elapsed_since_save_ >= save_period_) {
@@ -69,10 +72,18 @@ public:
     
     void RestoreState(const serialization::GameState& state) {
         api_handler_.RestoreState(state);
+        game_time_ms_ = api_handler_.GetGameTimeMs();
     }
     
     uint64_t GetGameTimeMs() const {
         return api_handler_.GetGameTimeMs();
+    }
+    
+    // Метод для сохранения состояния при завершении
+    void Shutdown() {
+        if (!state_file_.empty()) {
+            SaveStateToFile();
+        }
     }
 
     template <typename Body, typename Allocator, typename Send>
@@ -315,6 +326,7 @@ private:
     std::string state_file_;
     std::chrono::milliseconds save_period_{0};
     std::chrono::milliseconds elapsed_since_save_{0};
+    uint64_t game_time_ms_ = 0;
 };
 
 } // namespace http_handler

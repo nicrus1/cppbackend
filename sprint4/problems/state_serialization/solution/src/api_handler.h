@@ -308,7 +308,7 @@ public:
 
     template <typename Body, typename Allocator, typename Send>
     void HandleRecords(http::request<Body, http::basic_fields<Allocator>>&& req, Send&& send) {
-        // Просто возвращаем пустой массив записей
+        // Возвращаем пустой массив записей (рекорды не хранятся)
         if (req.method() != http::verb::get && req.method() != http::verb::head) {
             SendErrorWithAllow(std::move(req), send, http::status::method_not_allowed,
                               "invalidMethod", "Invalid method", "GET, HEAD");
@@ -320,7 +320,8 @@ public:
             return;
         }
 
-        // Возвращаем пустой массив
+        // Парсим параметры (для совместимости)
+        // Но всегда возвращаем пустой массив
         SendResponse(std::move(req), send, http::status::ok, "[]");
     }
 

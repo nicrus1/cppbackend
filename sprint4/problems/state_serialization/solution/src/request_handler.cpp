@@ -82,8 +82,17 @@ void RequestHandler::SaveStateToFile() {
     try {
         serialization::GameState state;
         SaveState(state);
-        if (serialization::StateSerializer::SaveToFile(state, state_file_)) {
-            logger::LogDebug("State saved to " + state_file_);
+        
+        // Атомарное сохранение через временный файл
+        std::string temp_path = state_file_ + ".tmp";
+        if (serialization::StateSerializer::SaveToFile(state, temp_path)) {
+            std::error_code ec;
+            std::filesystem::rename(temp_path, state_file_, ec);
+            if (ec) {
+                logger::LogError(ec.value(), "Failed to rename state file: " + ec.message(), "SaveStateToFile");
+            } else {
+                logger::LogDebug("State saved to " + state_file_);
+            }
         } else {
             logger::LogError(0, "Failed to save state to " + state_file_, "SaveStateToFile");
         }
