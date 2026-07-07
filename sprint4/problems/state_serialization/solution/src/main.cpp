@@ -67,6 +67,8 @@ private:
             [self](beast::error_code ec, size_t) {
                 if (!ec) {
                     self->ProcessRequest();
+                } else {
+                    std::cerr << "Read error: " << ec.message() << std::endl;
                 }
             });
     }
@@ -76,9 +78,11 @@ private:
         response_.keep_alive(false);
         response_.set(http::field::server, "Game Server");
         response_.set(http::field::content_type, "application/json");
+        response_.set(http::field::access_control_allow_origin, "*");
         
         try {
             std::string target = request_.target().to_string();
+            std::cout << "Request: " << request_.method_string() << " " << target << std::endl;
             
             if (request_.method() == http::verb::post && target == "/api/v1/game/join") {
                 HandleJoin();
@@ -95,6 +99,7 @@ private:
                 response_.body() = R"({"error":"Not found"})";
             }
         } catch (const std::exception& e) {
+            std::cerr << "Error processing request: " << e.what() << std::endl;
             response_.result(http::status::internal_server_error);
             response_.body() = R"({"error":")" + std::string(e.what()) + R"("})";
         }
@@ -104,14 +109,17 @@ private:
     
     void HandleJoin() {
         try {
-            // Парсим тело запроса
             std::string body = request_.body();
+            std::cout << "Join body: " << body << std::endl;
+            
             pt::ptree root;
             std::stringstream ss(body);
             pt::read_json(ss, root);
             
             std::string user_name = root.get<std::string>("userName");
             std::string map_id = root.get<std::string>("mapId");
+            
+            std::cout << "User: " << user_name << ", Map: " << map_id << std::endl;
             
             auto map_state = game_->GetMapState(map_id);
             if (!map_state) {
@@ -124,8 +132,17 @@ private:
             std::string token = GenerateToken();
             
             // Создаем собаку
-            auto dog_id = model::Dog::Id{static_cast<uint32_t>(game_->GetAllDogs().size() + 1)};
+            uint32_t dog_id_num = game_->GetAllDogs().size() + 1;
+            auto dog_id = model::Dog::Id{dog_id_num};
+            
+            // Выбираем стартовую позицию из офиса
             geom::Point2D pos(5.0, 5.0);
+            if (!map_state->offices.empty()) {
+                const auto& office = map_state->offices[0];
+                pos.x = office.x + office.offsetX;
+                pos.y = office.y + office.offsetY;
+            }
+            
             auto dog = std::make_shared<model::Dog>(dog_id, user_name, pos, 3);
             
             // Добавляем игрока
@@ -134,7 +151,7 @@ private:
             // Формируем ответ
             pt::ptree response_root;
             response_root.put("authToken", token);
-            response_root.put("playerId", *dog_id);
+            response_root.put("playerId", dog_id_num);
             
             pt::ptree map_info;
             map_info.put("id", map_id);
@@ -147,6 +164,7 @@ private:
             response_.result(http::status::ok);
             
         } catch (const std::exception& e) {
+            std::cerr << "Join error: " << e.what() << std::endl;
             response_.result(http::status::bad_request);
             response_.body() = R"({"error":")" + std::string(e.what()) + R"("})";
         }
@@ -186,11 +204,17 @@ private:
                 player_node.put("userId", player.user_id);
                 player_node.put("mapId", player.map_id);
                 player_node.put("dogId", *player.dog->GetId());
+                player_node.put("score", player.dog->GetScore());
                 
                 pt::ptree pos_node;
                 pos_node.put("x", player.dog->GetPosition().x);
                 pos_node.put("y", player.dog->GetPosition().y);
                 player_node.add_child("position", pos_node);
+                
+                pt::ptree speed_node;
+                speed_node.put("x", player.dog->GetSpeed().x);
+                speed_node.put("y", player.dog->GetSpeed().y);
+                player_node.add_child("speed", speed_node);
                 
                 players_array.push_back(std::make_pair("", player_node));
             }
@@ -229,6 +253,7 @@ private:
             pt::read_json(ss, root);
             
             int time_delta = root.get<int>("timeDelta", 0);
+            std::cout << "Tick: " << time_delta << " ms" << std::endl;
             
             if (time_delta > 0) {
                 game_->Tick(app::milliseconds(time_delta));
@@ -238,6 +263,7 @@ private:
             response_.body() = R"({"status":"ok"})";
             
         } catch (const std::exception& e) {
+            std::cerr << "Tick error: " << e.what() << std::endl;
             response_.result(http::status::bad_request);
             response_.body() = R"({"error":")" + std::string(e.what()) + R"("})";
         }
@@ -278,6 +304,9 @@ private:
         auto self = shared_from_this();
         http::async_write(socket_, response_,
             [self](beast::error_code ec, size_t) {
+                if (ec) {
+                    std::cerr << "Write error: " << ec.message() << std::endl;
+                }
                 self->socket_.shutdown(net::ip::tcp::socket::shutdown_send, ec);
             });
     }
@@ -328,8 +357,196 @@ void LoadMapsFromConfig(const std::string& config_path, std::shared_ptr<model::G
                 if (map_state) {
                     map_state->loot_period_ms = static_cast<uint64_t>(loot_period * 1000);
                     map_state->loot_probability = loot_probability;
+                    std::cout << "  Loot period: " << map_state->loot_period_ms << " ms" << std::endl;
+                    std::cout << "  Loot probability: " << map_state->loot_probability << std::endl;
                 }
             }
         }
         
-       
+        std::cout << "Loaded " << root.get_child("maps").size() << " maps from config" << std::endl;
+    } catch (const std::exception& e) {
+        std::cerr << "Error loading config: " << e.what() << std::endl;
+        if (!game->HasMap("map1")) {
+            game->AddMap("map1", 3.0);
+            std::cout << "Created default map1 due to config error" << std::endl;
+        }
+    }
+}
+
+int main(int argc, char* argv[]) {
+    try {
+        std::cout << "Starting game server..." << std::endl;
+        
+        po::options_description desc("Allowed options");
+        desc.add_options()
+            ("help", "Show help message")
+            ("state-file", po::value<std::string>(), "Path to state file")
+            ("save-state-period", po::value<int>(), "Auto-save period in milliseconds")
+            ("tick-period", po::value<int>(), "Tick period in milliseconds")
+            ("config-file", po::value<std::string>(), "Path to config file")
+            ("www-root", po::value<std::string>(), "Path to www root")
+            ("port", po::value<int>()->default_value(8080), "HTTP server port");
+        
+        po::variables_map vm;
+        po::store(po::parse_command_line(argc, argv, desc), vm);
+        po::notify(vm);
+        
+        if (vm.count("help")) {
+            std::cout << desc << std::endl;
+            return 0;
+        }
+
+        bool has_state_file = vm.count("state-file") > 0;
+        bool has_save_period = vm.count("save-state-period") > 0;
+        bool has_config_file = vm.count("config-file") > 0;
+        
+        std::string state_file;
+        std::chrono::milliseconds save_period(0);
+        int port = vm["port"].as<int>();
+        
+        if (has_state_file) {
+            state_file = vm["state-file"].as<std::string>();
+            std::cout << "State file: " << state_file << std::endl;
+            
+            if (has_save_period) {
+                int period_ms = vm["save-state-period"].as<int>();
+                if (period_ms < 0) {
+                    throw std::runtime_error("Save period must be non-negative");
+                }
+                save_period = std::chrono::milliseconds(period_ms);
+                std::cout << "Save period: " << period_ms << " ms" << std::endl;
+            }
+        }
+
+        auto game = std::make_shared<model::Game>();
+        global_game = game;
+        
+        // Загружаем карты из конфигурационного файла
+        if (has_config_file) {
+            std::string config_path = vm["config-file"].as<std::string>();
+            std::cout << "Config file: " << config_path << std::endl;
+            LoadMapsFromConfig(config_path, game);
+        } else {
+            std::cout << "No config file specified, creating test map" << std::endl;
+            if (!game->HasMap("map1")) {
+                game->AddMap("map1", 3.0);
+            }
+        }
+        
+        // Восстанавливаем состояние из файла если он существует
+        if (!state_file.empty() && std::filesystem::exists(state_file)) {
+            serialization::GameState loaded_state;
+            if (serialization::StateSerializer::LoadFromFile(loaded_state, state_file)) {
+                try {
+                    game->RestoreState(loaded_state);
+                    std::cout << "State restored from " << state_file << std::endl;
+                    
+                    std::cout << "Restored " << game->GetMaps().size() << " maps" << std::endl;
+                    std::cout << "Restored " << game->GetAllDogs().size() << " dogs" << std::endl;
+                    std::cout << "Restored " << game->GetAllLootItems().size() << " loot items" << std::endl;
+                    std::cout << "Restored " << game->GetPlayers().size() << " players" << std::endl;
+                } catch (const std::exception& e) {
+                    std::cerr << "Failed to restore state: " << e.what() << std::endl;
+                    return EXIT_FAILURE;
+                }
+            } else {
+                std::cerr << "Failed to restore state from " << state_file << std::endl;
+                return EXIT_FAILURE;
+            }
+        } else if (!state_file.empty()) {
+            std::cout << "Starting with clean state" << std::endl;
+        }
+
+        // Создаем слушатель для автоматического сохранения
+        auto listener = std::make_shared<infrastructure::SerializingListener>(
+            game, state_file, save_period
+        );
+        global_listener = listener;
+        game->AddListener(listener);
+
+        // Настраиваем обработчики сигналов
+        std::signal(SIGINT, SignalHandler);
+        std::signal(SIGTERM, SignalHandler);
+
+        // Запускаем HTTP сервер
+        net::io_context ioc(1);
+        net::ip::tcp::acceptor acceptor(ioc, net::ip::tcp::endpoint(net::ip::tcp::v4(), port));
+        
+        std::cout << "HTTP server started on port " << port << std::endl;
+        std::cout << "Server started. Press Ctrl+C to stop." << std::endl;
+        std::cout << "Game time: " << game->GetGameTime() << " ms" << std::endl;
+        std::cout << "Number of maps: " << game->GetMaps().size() << std::endl;
+        std::cout << "Number of dogs: " << game->GetAllDogs().size() << std::endl;
+        
+        // Запускаем отдельный поток для игровых тиков
+        int tick_period_ms = 50;
+        if (vm.count("tick-period")) {
+            tick_period_ms = vm["tick-period"].as<int>();
+            if (tick_period_ms <= 0) {
+                throw std::runtime_error("Tick period must be positive");
+            }
+        }
+        std::cout << "Tick period: " << tick_period_ms << " ms" << std::endl;
+        
+        std::thread game_thread([&game, tick_period_ms]() {
+            int tick_count = 0;
+            while (running) {
+                auto start = std::chrono::steady_clock::now();
+                
+                game->Tick(app::milliseconds(tick_period_ms));
+                
+                tick_count++;
+                if (tick_count % 100 == 0) {
+                    std::cout << "Tick " << tick_count << ", game time: " 
+                              << game->GetGameTime() << " ms" << std::endl;
+                }
+                
+                auto end = std::chrono::steady_clock::now();
+                auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+                
+                if (elapsed.count() < tick_period_ms) {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(tick_period_ms - elapsed.count()));
+                }
+            }
+        });
+        
+        // Принимаем HTTP соединения
+        auto accept_loop = [&acceptor, &game]() {
+            while (running) {
+                try {
+                    net::ip::tcp::socket socket(acceptor.get_executor());
+                    acceptor.accept(socket);
+                    
+                    if (!running) break;
+                    
+                    std::cout << "New connection accepted" << std::endl;
+                    auto session = std::make_shared<HttpSession>(std::move(socket), game);
+                    session->Run();
+                } catch (const std::exception& e) {
+                    if (running) {
+                        std::cerr << "Accept error: " << e.what() << std::endl;
+                    }
+                }
+            }
+        };
+        
+        accept_loop();
+        
+        // Ждем завершения игрового потока
+        if (game_thread.joinable()) {
+            game_thread.join();
+        }
+        
+        // Сохраняем состояние при завершении
+        if (!state_file.empty()) {
+            std::cout << "Saving state on shutdown..." << std::endl;
+            listener->OnShutdown();
+        }
+
+        std::cout << "Server stopped." << std::endl;
+        return 0;
+    } catch (const std::exception& e) {
+        std::cerr << "Error: " << e.what() << std::endl;
+        return EXIT_FAILURE;
+    }
+}
