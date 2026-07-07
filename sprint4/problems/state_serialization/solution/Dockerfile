@@ -45,10 +45,8 @@ COPY --from=build /app/build/game_server /app/game_server
 COPY data/ /app/data/
 COPY static/ /app/static/
 
-# Создаем директорию для состояния с правильными правами
-RUN mkdir -p /tmp/volume && \
-    chown -R www:www /tmp/volume && \
-    chmod 755 /tmp/volume
+# Создаем директорию для состояния
+RUN mkdir -p /tmp/volume && chown -R www:www /tmp/volume
 
 # Настройка рабочей директории
 WORKDIR /app
