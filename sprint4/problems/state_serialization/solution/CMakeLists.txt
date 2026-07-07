@@ -9,6 +9,9 @@ conan_basic_setup(TARGETS)
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
 
+# Создаем директорию для исходников
+file(MAKE_DIRECTORY ${CMAKE_SOURCE_DIR}/src/db)
+
 add_library(game_model STATIC
     src/geom.h
     src/model_serialization.h
@@ -17,6 +20,10 @@ add_library(game_model STATIC
     src/tagged.h
     src/game.h
     src/app_listener.h
+    src/logger.h
+    src/sdk.h
+    src/extra_data.h
+    src/db/record_manager.h
 )
 
 target_link_libraries(game_model PUBLIC CONAN_PKG::boost Threads::Threads)
@@ -24,11 +31,13 @@ target_link_libraries(game_model PUBLIC CONAN_PKG::boost Threads::Threads)
 add_executable(game_server
     src/main.cpp
     src/serializing_listener.h
-)
-
-# Устанавливаем путь для исполняемого файла
-set_target_properties(game_server PROPERTIES
-    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}
+    src/api_handler.h
+    src/request_handler.h
+    src/request_handler.cpp
+    src/http_server.h
+    src/http_server.cpp
+    src/command_line.h
+    src/boost_json.cpp
 )
 
 target_link_libraries(game_server game_model CONAN_PKG::boost Threads::Threads)
