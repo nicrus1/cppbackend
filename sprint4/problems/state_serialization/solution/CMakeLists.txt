@@ -26,6 +26,11 @@ add_executable(game_server
     src/serializing_listener.h
 )
 
+# Устанавливаем путь для исполняемого файла
+set_target_properties(game_server PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}
+)
+
 target_link_libraries(game_server game_model CONAN_PKG::boost Threads::Threads)
 
 add_executable(game_server_tests

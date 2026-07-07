@@ -14,8 +14,6 @@ COPY conanfile.txt /app/
 COPY CMakeLists.txt /app/
 COPY src/ /app/src/
 COPY tests/ /app/tests/
-COPY data/ /app/data/
-COPY static/ /app/static/
 
 # Сборка проекта
 RUN mkdir -p /app/build && \
@@ -41,10 +39,6 @@ RUN groupadd -r www && useradd -r -g www www
 # Копирование исполняемого файла (исправленный путь)
 COPY --from=build /app/build/game_server /app/game_server
 
-# Копирование файлов конфигурации и статики
-COPY data/ /app/data/
-COPY static/ /app/static/
-
 # Создаем директорию для состояния
 RUN mkdir -p /tmp/volume && chown www:www /tmp/volume
 
@@ -56,7 +50,4 @@ RUN chmod +x /app/game_server
 
 # Запуск сервера с параметрами
 ENTRYPOINT ["/app/game_server"]
-CMD ["--config-file", "/app/data/config.json", \
-     "--www-root", "/app/static", \
-     "--state-file", "/tmp/volume/state.dat", \
-     "--save-state-period", "5000"]
+CMD ["--state-file", "/tmp/volume/state.dat", "--save-state-period", "5000"]
