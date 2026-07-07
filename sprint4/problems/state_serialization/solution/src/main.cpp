@@ -25,10 +25,14 @@ namespace pt = boost::property_tree;
 std::shared_ptr<infrastructure::SerializingListener> global_listener;
 std::shared_ptr<model::Game> global_game;
 std::atomic<bool> running{true};
+net::io_context* global_ioc = nullptr;
 
 void SignalHandler(int signal) {
     std::cout << "Received signal " << signal << std::endl;
     running = false;
+    if (global_ioc) {
+        global_ioc->stop();
+    }
     if (global_listener) {
         global_listener->OnShutdown();
     }
@@ -210,11 +214,6 @@ private:
                 pos_node.put("x", player.dog->GetPosition().x);
                 pos_node.put("y", player.dog->GetPosition().y);
                 player_node.add_child("position", pos_node);
-                
-                pt::ptree speed_node;
-                speed_node.put("x", player.dog->GetSpeed().x);
-                speed_node.put("y", player.dog->GetSpeed().y);
-                player_node.add_child("speed", speed_node);
                 
                 players_array.push_back(std::make_pair("", player_node));
             }
@@ -426,9 +425,6 @@ void LoadMapsFromConfig(const std::string& config_path, std::shared_ptr<model::G
                     std::cout << "  Loot period: " << map_state->loot_period_ms << " ms" << std::endl;
                     std::cout << "  Loot probability: " << map_state->loot_probability << std::endl;
                     std::cout << "  Loot types: " << map_state->loot_types.size() << std::endl;
-                    std::cout << "  Roads: " << map_state->roads.size() << std::endl;
-                    std::cout << "  Buildings: " << map_state->buildings.size() << std::endl;
-                    std::cout << "  Offices: " << map_state->offices.size() << std::endl;
                 }
             }
         }
@@ -540,6 +536,8 @@ int main(int argc, char* argv[]) {
 
         // Запускаем HTTP сервер
         net::io_context ioc(1);
+        global_ioc = &ioc;
+        
         net::ip::tcp::acceptor acceptor(ioc, net::ip::tcp::endpoint(net::ip::tcp::v4(), port));
         
         std::cout << "HTTP server started on port " << port << std::endl;
@@ -580,29 +578,41 @@ int main(int argc, char* argv[]) {
             }
         });
         
-        // Принимаем HTTP соединения
-        auto accept_loop = [&acceptor, &game]() {
-            while (running) {
-                try {
-                    net::ip::tcp::socket socket(acceptor.get_executor());
-                    acceptor.accept(socket);
-                    
-                    if (!running) break;
-                    
-                    std::cout << "New connection accepted" << std::endl;
-                    auto session = std::make_shared<HttpSession>(std::move(socket), game);
-                    session->Run();
-                } catch (const std::exception& e) {
-                    if (running) {
-                        std::cerr << "Accept error: " << e.what() << std::endl;
+        // Асинхронный accept
+        auto do_accept = [&](auto&& self_ref) -> void {
+            acceptor.async_accept(
+                [&, self_ref](beast::error_code ec, net::ip::tcp::socket socket) {
+                    if (!ec && running) {
+                        std::cout << "New connection accepted" << std::endl;
+                        auto session = std::make_shared<HttpSession>(std::move(socket), game);
+                        session->Run();
                     }
-                }
-            }
+                    if (running) {
+                        self_ref(self_ref);
+                    }
+                });
         };
         
-        accept_loop();
+        do_accept(do_accept);
         
-        // Ждем завершения игрового потока
+        // Запускаем ioc в отдельном потоке
+        std::thread ioc_thread([&ioc]() {
+            ioc.run();
+        });
+        
+        // Ждем завершения
+        while (running) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        }
+        
+        // Останавливаем ioc
+        ioc.stop();
+        
+        // Ждем завершения потоков
+        if (ioc_thread.joinable()) {
+            ioc_thread.join();
+        }
+        
         if (game_thread.joinable()) {
             game_thread.join();
         }
