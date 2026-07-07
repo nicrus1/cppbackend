@@ -5,11 +5,13 @@
 #include <boost/serialization/utility.hpp>
 #include <boost/serialization/shared_ptr.hpp>
 #include <boost/serialization/optional.hpp>
+#include <boost/archive/text_oarchive.hpp>
+#include <boost/archive/text_iarchive.hpp>
 #include <fstream>
 #include <filesystem>
+#include <iostream>
 
 #include "model.h"
-#include "game.h" // Предполагаем, что у вас есть класс Game
 
 namespace geom {
 
@@ -167,15 +169,25 @@ public:
             // Сохраняем во временный файл
             {
                 std::ofstream ofs(temp_path);
+                if (!ofs.is_open()) {
+                    std::cerr << "Failed to open temp file: " << temp_path << std::endl;
+                    return false;
+                }
                 boost::archive::text_oarchive oa(ofs);
                 oa << state;
+            }
+            
+            // Проверяем, что временный файл создан
+            if (!std::filesystem::exists(temp_path)) {
+                std::cerr << "Temp file was not created: " << temp_path << std::endl;
+                return false;
             }
             
             // Атомарно переименовываем
             std::filesystem::rename(temp_path, file_path);
             return true;
         } catch (const std::exception& e) {
-            // Логируем ошибку
+            std::cerr << "SaveToFile exception: " << e.what() << std::endl;
             return false;
         }
     }
@@ -183,15 +195,21 @@ public:
     static bool LoadFromFile(GameState& state, const std::string& file_path) {
         try {
             if (!std::filesystem::exists(file_path)) {
+                std::cerr << "State file does not exist: " << file_path << std::endl;
                 return false;
             }
             
             std::ifstream ifs(file_path);
+            if (!ifs.is_open()) {
+                std::cerr << "Failed to open state file: " << file_path << std::endl;
+                return false;
+            }
+            
             boost::archive::text_iarchive ia(ifs);
             ia >> state;
             return true;
         } catch (const std::exception& e) {
-            // Логируем ошибку
+            std::cerr << "LoadFromFile exception: " << e.what() << std::endl;
             return false;
         }
     }

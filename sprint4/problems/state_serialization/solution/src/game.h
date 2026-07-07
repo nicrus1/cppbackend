@@ -49,15 +49,12 @@ public:
     }
     
     void Tick(app::milliseconds delta) {
-        // Обновляем игровое время
         game_time_ms_ += delta.count();
         
-        // Обновляем состояние всех карт
         for (auto& map_pair : maps_) {
             UpdateMap(map_pair.second, delta);
         }
         
-        // Уведомляем слушателей
         for (auto& listener : listeners_) {
             listener->OnTick(delta);
         }
@@ -135,7 +132,6 @@ public:
         player.map_id = map_id;
         players_[token] = player;
         
-        // Добавляем собаку на карту
         AddDog(map_id, dog);
     }
     
@@ -183,22 +179,18 @@ public:
     
     // Методы для сохранения и восстановления состояния
     void SaveState(serialization::GameState& state) const {
-        // Сохраняем игровое время
         state.game_time_ms = game_time_ms_;
         
-        // Сохраняем состояние каждой карты
         for (const auto& map_pair : maps_) {
             const auto& map_state = map_pair.second;
             
             serialization::GameState::MapState map_repr;
             map_repr.map_id = map_pair.first;
             
-            // Сохраняем собак на карте
             for (const auto& dog : map_state.dogs) {
                 map_repr.map_dogs.emplace_back(*dog);
             }
             
-            // Сохраняем предметы на карте
             for (const auto& item : map_state.loot_items) {
                 if (!item.is_collected) {
                     serialization::LootItemRepr item_repr;
@@ -212,14 +204,12 @@ public:
             state.maps.push_back(map_repr);
         }
         
-        // Сохраняем всех собак (глобально)
         for (const auto& map_pair : maps_) {
             for (const auto& dog : map_pair.second.dogs) {
                 state.dogs.emplace_back(*dog);
             }
         }
         
-        // Сохраняем все предметы (глобально)
         for (const auto& map_pair : maps_) {
             for (const auto& item : map_pair.second.loot_items) {
                 if (!item.is_collected) {
@@ -232,7 +222,6 @@ public:
             }
         }
         
-        // Сохраняем игроков
         for (const auto& player_pair : players_) {
             const auto& player = player_pair.second;
             serialization::PlayerRepr player_repr;
@@ -246,19 +235,15 @@ public:
     }
     
     void RestoreState(const serialization::GameState& state) {
-        // Очищаем текущее состояние
         maps_.clear();
         players_.clear();
         
-        // Восстанавливаем игровое время
         game_time_ms_ = state.game_time_ms;
         
-        // Сначала создаем карты
         for (const auto& map_repr : state.maps) {
             AddMap(map_repr.map_id);
         }
         
-        // Восстанавливаем собак на картах
         std::unordered_map<uint32_t, std::shared_ptr<Dog>> dog_map;
         
         for (const auto& map_repr : state.maps) {
@@ -271,7 +256,6 @@ public:
             }
         }
         
-        // Восстанавливаем предметы на картах
         for (const auto& map_repr : state.maps) {
             auto& map_state = maps_[map_repr.map_id];
             
@@ -285,13 +269,11 @@ public:
             }
         }
         
-        // Восстанавливаем игроков
         for (const auto& player_repr : state.players) {
             PlayerInfo player;
             player.token = player_repr.token;
             player.user_id = player_repr.user_id;
             
-            // Находим собаку по ID
             if (!player_repr.dog_id.empty()) {
                 uint32_t dog_id = std::stoul(player_repr.dog_id);
                 auto it = dog_map.find(dog_id);
@@ -304,14 +286,7 @@ public:
         }
     }
     
-    // Метод для обновления карты
     void UpdateMap(MapState& map_state, app::milliseconds delta) {
-        // Здесь обновляем состояние карты:
-        // - двигаем собак
-        // - генерируем новые предметы
-        // - проверяем сбор предметов и т.д.
-        
-        // Обновляем позиции собак
         for (auto& dog : map_state.dogs) {
             if (dog) {
                 double speed_x = dog->GetSpeed().x;
