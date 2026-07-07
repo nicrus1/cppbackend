@@ -8,6 +8,8 @@
 #include <thread>
 #include <chrono>
 #include <atomic>
+#include <sstream>
+#include <random>
 
 #include "game.h"
 #include "serializing_listener.h"
@@ -19,12 +21,13 @@ namespace pt = boost::property_tree;
 std::shared_ptr<infrastructure::SerializingListener> global_listener;
 std::shared_ptr<model::Game> global_game;
 std::atomic<bool> running{true};
+net::io_context* global_ioc = nullptr;
 
 void SignalHandler(int signal) {
     std::cout << "Received signal " << signal << std::endl;
     running = false;
-    if (global_listener) {
-        global_listener->OnShutdown();
+    if (global_ioc) {
+        global_ioc->stop();
     }
 }
 
@@ -33,7 +36,6 @@ void LoadMapsFromConfig(const std::string& config_path, std::shared_ptr<model::G
     try {
         if (!std::filesystem::exists(config_path)) {
             std::cerr << "Config file not found: " << config_path << std::endl;
-            // Создаем тестовую карту для демонстрации
             if (!game->HasMap("map1")) {
                 game->AddMap("map1");
                 std::cout << "Created default map1" << std::endl;
@@ -44,17 +46,12 @@ void LoadMapsFromConfig(const std::string& config_path, std::shared_ptr<model::G
         pt::ptree root;
         pt::read_json(config_path, root);
         
-        // Парсим карты
         if (root.count("maps") > 0) {
             for (const auto& map_node : root.get_child("maps")) {
                 const auto& map_data = map_node.second;
-                
                 std::string map_id = map_data.get<std::string>("id");
-                std::string map_name = map_data.get<std::string>("name", map_id);
+                std::cout << "Loading map: " << map_id << std::endl;
                 
-                std::cout << "Loading map: " << map_id << " (" << map_name << ")" << std::endl;
-                
-                // Добавляем карту в игру
                 if (!game->HasMap(map_id)) {
                     game->AddMap(map_id);
                 }
@@ -64,13 +61,225 @@ void LoadMapsFromConfig(const std::string& config_path, std::shared_ptr<model::G
         std::cout << "Loaded " << root.get_child("maps").size() << " maps from config" << std::endl;
     } catch (const std::exception& e) {
         std::cerr << "Error loading config: " << e.what() << std::endl;
-        // Создаем тестовую карту в случае ошибки
         if (!game->HasMap("map1")) {
             game->AddMap("map1");
             std::cout << "Created default map1 due to config error" << std::endl;
         }
     }
 }
+
+// Простой HTTP обработчик
+class HttpHandler {
+public:
+    HttpHandler(std::shared_ptr<model::Game> game) : game_(game), id_counter_(1) {}
+    
+    std::string HandleRequest(const std::string& request) {
+        std::istringstream iss(request);
+        std::string method, path, version;
+        iss >> method >> path >> version;
+        
+        std::cout << "Handling " << method << " " << path << std::endl;
+        
+        if (method == "GET") {
+            if (path.find("/api/v1/maps") == 0) {
+                return HandleGetMaps();
+            } else if (path.find("/api/v1/game/players") == 0) {
+                return HandleGetPlayers();
+            } else if (path.find("/api/v1/game/join") == 0) {
+                return HandleJoin(path);
+            }
+        } else if (method == "POST") {
+            if (path.find("/api/v1/game/join") == 0) {
+                return HandleJoin(path);
+            } else if (path.find("/api/v1/game/tick") == 0) {
+                return HandleTick();
+            } else if (path.find("/api/v1/game/action") == 0) {
+                return HandleAction(path);
+            }
+        }
+        
+        return "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n";
+    }
+    
+private:
+    std::string HandleGetMaps() {
+        std::string response = "HTTP/1.1 200 OK\r\n";
+        response += "Content-Type: application/json\r\n";
+        
+        // Формируем JSON со списком карт
+        std::string json = "[";
+        bool first = true;
+        for (const auto& map_pair : game_->GetMaps()) {
+            if (!first) json += ",";
+            first = false;
+            json += "{\"id\":\"" + map_pair.first + "\"}";
+        }
+        json += "]";
+        
+        response += "Content-Length: " + std::to_string(json.size()) + "\r\n\r\n";
+        response += json;
+        return response;
+    }
+    
+    std::string HandleGetPlayers() {
+        std::string response = "HTTP/1.1 200 OK\r\n";
+        response += "Content-Type: application/json\r\n";
+        
+        std::string json = "[";
+        bool first = true;
+        for (const auto& player_pair : game_->GetPlayers()) {
+            if (!first) json += ",";
+            first = false;
+            json += "{\"token\":\"" + player_pair.first + "\",";
+            json += "\"user_id\":\"" + player_pair.second.user_id + "\"}";
+        }
+        json += "]";
+        
+        response += "Content-Length: " + std::to_string(json.size()) + "\r\n\r\n";
+        response += json;
+        return response;
+    }
+    
+    std::string HandleJoin(const std::string& path) {
+        std::string response = "HTTP/1.1 200 OK\r\n";
+        response += "Content-Type: application/json\r\n";
+        
+        // Парсим параметры из пути
+        std::string name, map_id;
+        size_t name_pos = path.find("name=");
+        size_t map_pos = path.find("mapId=");
+        
+        if (name_pos != std::string::npos) {
+            size_t end = path.find("&", name_pos);
+            name = path.substr(name_pos + 5, end - name_pos - 5);
+        }
+        if (map_pos != std::string::npos) {
+            size_t end = path.find("&", map_pos);
+            if (end == std::string::npos) end = path.length();
+            map_id = path.substr(map_pos + 6, end - map_pos - 6);
+        }
+        
+        if (name.empty() || map_id.empty()) {
+            return "HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\n\r\n";
+        }
+        
+        // Создаем токен и собаку
+        std::string token = "token_" + std::to_string(id_counter_++);
+        auto dog = std::make_shared<model::Dog>(
+            model::Dog::Id{id_counter_}, 
+            name, 
+            geom::Point2D{0, 0}, 
+            10
+        );
+        
+        game_->AddPlayer(token, name, map_id, dog);
+        
+        std::string json = "{\"authToken\":\"" + token + "\"}";
+        response += "Content-Length: " + std::to_string(json.size()) + "\r\n\r\n";
+        response += json;
+        return response;
+    }
+    
+    std::string HandleTick() {
+        game_->Tick(app::milliseconds(100));
+        return "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\n{}";
+    }
+    
+    std::string HandleAction(const std::string& path) {
+        std::string action;
+        size_t action_pos = path.find("action=");
+        if (action_pos != std::string::npos) {
+            size_t end = path.find("&", action_pos);
+            if (end == std::string::npos) end = path.length();
+            action = path.substr(action_pos + 7, end - action_pos - 7);
+        }
+        
+        // Обрабатываем действие
+        if (!action.empty()) {
+            // Обновляем скорость собаки в зависимости от действия
+            for (auto& dog : game_->GetAllDogs()) {
+                if (action == "move") {
+                    dog->SetSpeed({1.0, 0});
+                } else if (action == "stop") {
+                    dog->SetSpeed({0, 0});
+                }
+            }
+        }
+        
+        return "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\n{}";
+    }
+    
+    std::shared_ptr<model::Game> game_;
+    int id_counter_;
+};
+
+class Session : public std::enable_shared_from_this<Session> {
+public:
+    Session(net::ip::tcp::socket socket, std::shared_ptr<HttpHandler> handler)
+        : socket_(std::move(socket)), handler_(handler) {}
+    
+    void Start() {
+        do_read();
+    }
+    
+private:
+    void do_read() {
+        auto self = shared_from_this();
+        socket_.async_read_some(
+            net::buffer(buffer_, max_length),
+            [this, self](boost::system::error_code ec, std::size_t length) {
+                if (!ec) {
+                    std::string request(buffer_.data(), length);
+                    std::string response = handler_->HandleRequest(request);
+                    do_write(response);
+                }
+            });
+    }
+    
+    void do_write(const std::string& response) {
+        auto self = shared_from_this();
+        net::async_write(
+            socket_, 
+            net::buffer(response),
+            [this, self](boost::system::error_code ec, std::size_t) {
+                if (!ec) {
+                    do_read();
+                }
+            });
+    }
+    
+    net::ip::tcp::socket socket_;
+    std::shared_ptr<HttpHandler> handler_;
+    enum { max_length = 1024 };
+    char buffer_[max_length];
+};
+
+class Server {
+public:
+    Server(net::io_context& ioc, short port, std::shared_ptr<model::Game> game)
+        : ioc_(ioc), 
+          acceptor_(ioc, net::ip::tcp::endpoint(net::ip::tcp::v4(), port)),
+          handler_(std::make_shared<HttpHandler>(game)) {}
+    
+    void Start() {
+        do_accept();
+    }
+    
+private:
+    void do_accept() {
+        acceptor_.async_accept(
+            [this](boost::system::error_code ec, net::ip::tcp::socket socket) {
+                if (!ec) {
+                    std::make_shared<Session>(std::move(socket), handler_)->Start();
+                }
+                do_accept();
+            });
+    }
+    
+    net::io_context& ioc_;
+    net::ip::tcp::acceptor acceptor_;
+    std::shared_ptr<HttpHandler> handler_;
+};
 
 int main(int argc, char* argv[]) {
     try {
@@ -124,7 +333,6 @@ int main(int argc, char* argv[]) {
             std::cout << "Config file: " << config_path << std::endl;
             LoadMapsFromConfig(config_path, game);
         } else {
-            // Если конфиг не указан, создаем тестовую карту для демонстрации
             std::cout << "No config file specified, creating test map" << std::endl;
             if (!game->HasMap("map1")) {
                 game->AddMap("map1");
@@ -138,8 +346,6 @@ int main(int argc, char* argv[]) {
                 try {
                     game->RestoreState(loaded_state);
                     std::cout << "State restored from " << state_file << std::endl;
-                    
-                    // Выводим информацию о восстановленном состоянии
                     std::cout << "Restored " << game->GetMaps().size() << " maps" << std::endl;
                     std::cout << "Restored " << game->GetAllDogs().size() << " dogs" << std::endl;
                     std::cout << "Restored " << game->GetAllLootItems().size() << " loot items" << std::endl;
@@ -167,13 +373,19 @@ int main(int argc, char* argv[]) {
         std::signal(SIGINT, SignalHandler);
         std::signal(SIGTERM, SignalHandler);
 
-        std::cout << "Server started. Press Ctrl+C to stop." << std::endl;
+        // Запускаем HTTP сервер
+        net::io_context ioc;
+        global_ioc = &ioc;
+        Server server(ioc, 8080, game);
+        server.Start();
+
+        std::cout << "Server started on port 8080. Press Ctrl+C to stop." << std::endl;
         std::cout << "Game time: " << game->GetGameTime() << " ms" << std::endl;
         std::cout << "Number of maps: " << game->GetMaps().size() << std::endl;
         std::cout << "Number of dogs: " << game->GetAllDogs().size() << std::endl;
         
-        // Основной игровой цикл
-        int tick_period_ms = 50; // 50ms по умолчанию
+        // Основной игровой цикл с тиками
+        int tick_period_ms = 50;
         if (vm.count("tick-period")) {
             tick_period_ms = vm["tick-period"].as<int>();
             if (tick_period_ms <= 0) {
@@ -182,27 +394,32 @@ int main(int argc, char* argv[]) {
         }
         std::cout << "Tick period: " << tick_period_ms << " ms" << std::endl;
         
-        int tick_count = 0;
-        while (running) {
-            auto start = std::chrono::steady_clock::now();
-            
-            // Выполняем тик игры
-            game->Tick(app::milliseconds(tick_period_ms));
-            
-            // Логируем каждый 100-й тик
-            tick_count++;
-            if (tick_count % 100 == 0) {
-                std::cout << "Tick " << tick_count << ", game time: " << game->GetGameTime() << " ms" << std::endl;
+        // Запускаем отдельный поток для тиков
+        std::thread tick_thread([&]() {
+            int tick_count = 0;
+            while (running) {
+                auto start = std::chrono::steady_clock::now();
+                game->Tick(app::milliseconds(tick_period_ms));
+                
+                tick_count++;
+                if (tick_count % 100 == 0) {
+                    std::cout << "Tick " << tick_count << ", game time: " << game->GetGameTime() << " ms" << std::endl;
+                }
+                
+                auto end = std::chrono::steady_clock::now();
+                auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+                
+                if (elapsed.count() < tick_period_ms) {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(tick_period_ms - elapsed.count()));
+                }
             }
-            
-            auto end = std::chrono::steady_clock::now();
-            auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
-            
-            // Если тик выполнился быстрее, чем tick_period, ждем
-            if (elapsed.count() < tick_period_ms) {
-                std::this_thread::sleep_for(std::chrono::milliseconds(tick_period_ms - elapsed.count()));
-            }
-        }
+        });
+        
+        // Запускаем обработку асинхронных операций
+        ioc.run();
+        
+        // Ждем завершения потока тиков
+        tick_thread.join();
         
         // Сохраняем состояние при завершении
         if (!state_file.empty()) {
