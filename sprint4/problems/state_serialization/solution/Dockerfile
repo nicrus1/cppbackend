@@ -1,9 +1,20 @@
-FROM gcc:11.3 AS build
+FROM ubuntu:22.04 AS build
 
-# Установка необходимых пакетов
-RUN apt update && \
-    apt install -y python3-pip cmake && \
-    pip3 install conan==1.*
+# Установка необходимых пакетов с retry
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        python3-pip \
+        cmake \
+        g++ \
+        make \
+        wget \
+        ca-certificates \
+        && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+# Установка Conan через pip
+RUN pip3 install conan==1.* --no-cache-dir
 
 # Настройка профиля Conan
 RUN conan profile new default --detect --force && \
@@ -15,6 +26,7 @@ COPY CMakeLists.txt /app/
 COPY src/ /app/src/
 COPY tests/ /app/tests/
 COPY data/ /app/data/
+COPY static/ /app/static/
 
 # Сборка проекта
 RUN mkdir -p /app/build && \
@@ -27,12 +39,13 @@ RUN mkdir -p /app/build && \
 FROM ubuntu:22.04
 
 # Установка runtime зависимостей
-RUN apt update && \
-    apt install -y \
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
         libstdc++6 \
         ca-certificates \
         libpq-dev \
         && \
+    apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
 # Создание пользователя для запуска
@@ -43,10 +56,10 @@ COPY --from=build /app/build/bin/game_server /app/game_server
 
 # Копируем конфиг и статику из сборки
 COPY --from=build /app/data /app/data
+COPY --from=build /app/static /app/static
 
-# Создаем директорию для статики
-RUN mkdir -p /app/static /tmp/volume && \
-    echo '<html><body><h1>Game Server</h1></body></html>' > /app/static/index.html && \
+# Создаем директорию для состояния
+RUN mkdir -p /tmp/volume && \
     chown -R www:www /app /tmp/volume
 
 # Настройка рабочей директории
