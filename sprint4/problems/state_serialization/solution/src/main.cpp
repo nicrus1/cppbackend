@@ -18,7 +18,7 @@
 #include "request_handler.h"
 #include "game.h"
 #include "serializing_listener.h"
-#include "state_serializer.h"
+#include "model_serialization.h"
 
 namespace net = boost::asio;
 namespace beast = boost::beast;
