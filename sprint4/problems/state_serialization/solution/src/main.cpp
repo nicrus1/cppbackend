@@ -67,6 +67,8 @@ private:
             [self](beast::error_code ec, size_t) {
                 if (!ec) {
                     self->ProcessRequest();
+                } else {
+                    std::cerr << "Read error: " << ec.message() << std::endl;
                 }
             });
     }
@@ -76,9 +78,11 @@ private:
         response_.keep_alive(false);
         response_.set(http::field::server, "Game Server");
         response_.set(http::field::content_type, "application/json");
+        response_.set(http::field::access_control_allow_origin, "*");
         
         try {
             std::string target = request_.target().to_string();
+            std::cout << "Request: " << request_.method_string() << " " << target << std::endl;
             
             if (request_.method() == http::verb::post && target == "/api/v1/game/join") {
                 HandleJoin();
@@ -95,6 +99,7 @@ private:
                 response_.body() = R"({"error":"Not found"})";
             }
         } catch (const std::exception& e) {
+            std::cerr << "Error processing request: " << e.what() << std::endl;
             response_.result(http::status::internal_server_error);
             response_.body() = R"({"error":")" + std::string(e.what()) + R"("})";
         }
@@ -104,14 +109,17 @@ private:
     
     void HandleJoin() {
         try {
-            // Парсим тело запроса
             std::string body = request_.body();
+            std::cout << "Join body: " << body << std::endl;
+            
             pt::ptree root;
             std::stringstream ss(body);
             pt::read_json(ss, root);
             
             std::string user_name = root.get<std::string>("userName");
             std::string map_id = root.get<std::string>("mapId");
+            
+            std::cout << "User: " << user_name << ", Map: " << map_id << std::endl;
             
             auto map_state = game_->GetMapState(map_id);
             if (!map_state) {
@@ -124,7 +132,8 @@ private:
             std::string token = GenerateToken();
             
             // Создаем собаку
-            auto dog_id = model::Dog::Id{static_cast<uint32_t>(game_->GetAllDogs().size() + 1)};
+            uint32_t dog_id_num = game_->GetAllDogs().size() + 1;
+            auto dog_id = model::Dog::Id{dog_id_num};
             geom::Point2D pos(5.0, 5.0);
             auto dog = std::make_shared<model::Dog>(dog_id, user_name, pos, 3);
             
@@ -134,7 +143,7 @@ private:
             // Формируем ответ
             pt::ptree response_root;
             response_root.put("authToken", token);
-            response_root.put("playerId", *dog_id);
+            response_root.put("playerId", dog_id_num);
             
             pt::ptree map_info;
             map_info.put("id", map_id);
@@ -147,6 +156,7 @@ private:
             response_.result(http::status::ok);
             
         } catch (const std::exception& e) {
+            std::cerr << "Join error: " << e.what() << std::endl;
             response_.result(http::status::bad_request);
             response_.body() = R"({"error":")" + std::string(e.what()) + R"("})";
         }
@@ -229,6 +239,7 @@ private:
             pt::read_json(ss, root);
             
             int time_delta = root.get<int>("timeDelta", 0);
+            std::cout << "Tick: " << time_delta << " ms" << std::endl;
             
             if (time_delta > 0) {
                 game_->Tick(app::milliseconds(time_delta));
@@ -238,6 +249,7 @@ private:
             response_.body() = R"({"status":"ok"})";
             
         } catch (const std::exception& e) {
+            std::cerr << "Tick error: " << e.what() << std::endl;
             response_.result(http::status::bad_request);
             response_.body() = R"({"error":")" + std::string(e.what()) + R"("})";
         }
@@ -278,6 +290,9 @@ private:
         auto self = shared_from_this();
         http::async_write(socket_, response_,
             [self](beast::error_code ec, size_t) {
+                if (ec) {
+                    std::cerr << "Write error: " << ec.message() << std::endl;
+                }
                 self->socket_.shutdown(net::ip::tcp::socket::shutdown_send, ec);
             });
     }
@@ -328,6 +343,8 @@ void LoadMapsFromConfig(const std::string& config_path, std::shared_ptr<model::G
                 if (map_state) {
                     map_state->loot_period_ms = static_cast<uint64_t>(loot_period * 1000);
                     map_state->loot_probability = loot_probability;
+                    std::cout << "  Loot period: " << map_state->loot_period_ms << " ms" << std::endl;
+                    std::cout << "  Loot probability: " << map_state->loot_probability << std::endl;
                 }
             }
         }
@@ -438,7 +455,7 @@ int main(int argc, char* argv[]) {
         std::signal(SIGTERM, SignalHandler);
 
         // Запускаем HTTP сервер
-        net::io_context ioc(1);
+        net::io_context ioc;
         net::ip::tcp::acceptor acceptor(ioc, net::ip::tcp::endpoint(net::ip::tcp::v4(), port));
         
         std::cout << "HTTP server started on port " << port << std::endl;
@@ -479,28 +496,46 @@ int main(int argc, char* argv[]) {
             }
         });
         
-        // Принимаем HTTP соединения
-        auto accept_loop = [&acceptor, &game]() {
-            while (running) {
-                try {
-                    net::ip::tcp::socket socket(acceptor.get_executor());
-                    acceptor.accept(socket);
-                    
-                    if (!running) break;
-                    
-                    auto session = std::make_shared<HttpSession>(std::move(socket), game);
-                    session->Run();
-                } catch (const std::exception& e) {
-                    if (running) {
-                        std::cerr << "Accept error: " << e.what() << std::endl;
+        // Принимаем HTTP соединения асинхронно
+        auto accept_loop = [&acceptor, &game, &ioc]() {
+            net::ip::tcp::socket socket(acceptor.get_executor());
+            
+            acceptor.async_accept(socket,
+                [&acceptor, &game, &ioc](beast::error_code ec) {
+                    if (!ec) {
+                        std::cout << "New connection accepted" << std::endl;
+                        auto session = std::make_shared<HttpSession>(std::move(socket), game);
+                        session->Run();
                     }
-                }
-            }
+                    
+                    // Продолжаем принимать соединения
+                    if (running) {
+                        accept_loop();
+                    }
+                });
         };
         
+        // Запускаем асинхронный цикл
         accept_loop();
         
-        // Ждем завершения игрового потока
+        // Запускаем io_context в отдельном потоке
+        std::thread ioc_thread([&ioc]() {
+            ioc.run();
+        });
+        
+        // Ждем завершения
+        while (running) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        }
+        
+        // Останавливаем io_context
+        ioc.stop();
+        
+        // Ждем завершения потоков
+        if (ioc_thread.joinable()) {
+            ioc_thread.join();
+        }
+        
         if (game_thread.joinable()) {
             game_thread.join();
         }

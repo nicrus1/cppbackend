@@ -62,7 +62,7 @@ public:
         dog.SetDirection(direction_);
         dog.AddScore(score_);
         for (const auto& item : bag_content_) {
-            dog.PutToBag(item);
+            (void)dog.PutToBag(item); // Игнорируем возвращаемое значение
         }
         return dog;
     }
