@@ -1,34 +1,21 @@
-FROM ubuntu:22.04 AS build
+FROM gcc:11.3 AS build
 
-# Установка всех зависимостей для сборки
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-        g++ \
-        cmake \
-        make \
-        pkg-config \
-        python3-pip \
-        libboost-all-dev \
-        libpqxx-dev \
-        libpq-dev \
-        && \
-    pip3 install conan==1.* --no-cache-dir && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
+# Установка необходимых пакетов
+RUN apt update && \
+    apt install -y python3-pip cmake && \
+    pip3 install conan==1.*
 
-# Настройка Conan (фиксируем профиль)
+# Настройка профиля Conan
 RUN conan profile new default --detect --force && \
     conan profile update settings.compiler.libcxx=libstdc++11 default
 
-# Копирование файлов конфигурации и исходников
+# Копирование файлов проекта
 COPY conanfile.txt /app/
 COPY CMakeLists.txt /app/
-COPY ./src /app/src
-COPY ./tests/ /app/tests
-COPY ./data/ /app/data
-COPY ./static/ /app/static
+COPY src/ /app/src/
+COPY tests/ /app/tests/
 
-# Сборка проекта с отладкой Conan (установкой прекомпиляции для отсутствующих пакетов)
+# Сборка проекта
 RUN mkdir -p /app/build && \
     cd /app/build && \
     conan install .. --build=missing && \
@@ -39,29 +26,28 @@ RUN mkdir -p /app/build && \
 FROM ubuntu:22.04
 
 # Установка runtime зависимостей
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
+RUN apt update && \
+    apt install -y \
         libstdc++6 \
         ca-certificates \
-        libpq5 \
         && \
-    apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
 # Создание пользователя для запуска
 RUN groupadd -r www && useradd -r -g www www
 
-# Копирование исполняемого файла и ресурсов
-COPY --from=build /app/build/bin/game_server /app/game_server
-COPY --from=build /app/data /app/data
-COPY --from=build /app/static /app/static
+# Копирование исполняемого файла (исправленный путь)
+COPY --from=build /app/build/game_server /app/game_server
 
 # Создаем директорию для состояния
-RUN mkdir -p /tmp/volume && \
-    chown -R www:www /app /tmp/volume
+RUN mkdir -p /tmp/volume && chown www:www /tmp/volume
 
+# Настройка рабочей директории
 WORKDIR /app
+
+# Права на выполнение
 RUN chmod +x /app/game_server
 
+# Запуск сервера с параметрами
 ENTRYPOINT ["/app/game_server"]
-CMD ["--config-file", "/app/data/config.json", "--www-root", "/app/static", "--state-file", "/tmp/volume/state.dat", "--save-state-period", "5000"]
+CMD ["--state-file", "/tmp/volume/state.dat", "--save-state-period", "5000"]

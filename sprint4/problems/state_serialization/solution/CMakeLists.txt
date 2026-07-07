@@ -2,82 +2,39 @@ cmake_minimum_required(VERSION 3.11)
 
 project(game_server CXX)
 set(CMAKE_CXX_STANDARD 20)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# Подключение интеграции с Conan
-if(EXISTS ${CMAKE_BINARY_DIR}/conanbuildinfo.cmake)
-    include(${CMAKE_BINARY_DIR}/conanbuildinfo.cmake)
-    conan_basic_setup(TARGETS)
-else()
-    message(WARNING "Conan build info not found, expect missing dependencies!")
-endif()
+include(${CMAKE_BINARY_DIR}/conanbuildinfo_multi.cmake)
+conan_basic_setup(TARGETS)
 
-# Find Threads first
+set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
 
-# Поиск пакетов
-find_package(Boost REQUIRED COMPONENTS json program_options)
-find_package(PkgConfig REQUIRED)
-pkg_check_modules(PQXX REQUIRED libpqxx)
+add_library(game_model STATIC
+    src/geom.h
+    src/model_serialization.h
+    src/model.h
+    src/model.cpp
+    src/tagged.h
+    src/game.h
+    src/app_listener.h
+)
 
-# Включаем директорию с исходниками
-set(SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_link_libraries(game_model PUBLIC CONAN_PKG::boost Threads::Threads)
 
-# Основной исполняемый файл сервера
 add_executable(game_server
-    ${SOURCE_DIR}/main.cpp
-    ${SOURCE_DIR}/model.cpp
-    ${SOURCE_DIR}/json_loader.cpp
-    ${SOURCE_DIR}/request_handler.cpp
-    ${SOURCE_DIR}/game_state.cpp
-    ${SOURCE_DIR}/loot_manager.cpp
-    ${SOURCE_DIR}/loot_generator.cpp
-    ${SOURCE_DIR}/http_server.cpp
-    ${SOURCE_DIR}/logger.cpp
-    ${SOURCE_DIR}/htmldecode.cpp
-    ${SOURCE_DIR}/boost_json.cpp
+    src/main.cpp
+    src/serializing_listener.h
 )
 
-target_include_directories(game_server PRIVATE 
-    ${CMAKE_CURRENT_SOURCE_DIR}/src
-    ${Boost_INCLUDE_DIRS}
-    ${PQXX_INCLUDE_DIRS}
+# Устанавливаем путь для исполняемого файла
+set_target_properties(game_server PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}
 )
 
-target_link_libraries(game_server PRIVATE 
-    ${Boost_LIBRARIES}
-    ${PQXX_LIBRARIES}
-    Threads::Threads
-    pqxx
-    CONAN_PKG::boost # Используем цели conan, если настроены через CONAN_PKG
-    boost_json
-    boost_program_options
-)
+target_link_libraries(game_server game_model CONAN_PKG::boost Threads::Threads)
 
-# Тесты
 add_executable(game_server_tests
-    ${SOURCE_DIR}/model.cpp
-    ${SOURCE_DIR}/game_state.cpp
-    ${SOURCE_DIR}/loot_manager.cpp
-    ${SOURCE_DIR}/loot_generator.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/tests/state-serialization-tests.cpp
+    tests/state-serialization-tests.cpp
 )
 
-target_include_directories(game_server_tests PRIVATE 
-    ${CMAKE_CURRENT_SOURCE_DIR}/src
-    ${CMAKE_CURRENT_SOURCE_DIR}/tests
-    ${Boost_INCLUDE_DIRS}
-)
-
-target_link_libraries(game_server_tests PRIVATE 
-    ${Boost_LIBRARIES}
-    Threads::Threads
-)
-
-# Настройка выходных директорий
-set_target_properties(game_server game_server_tests PROPERTIES
-    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
-)
-
-enable_testing()
-add_test(NAME game_server_tests COMMAND game_server_tests)
+target_link_libraries(game_server_tests CONAN_PKG::catch2 game_model)
