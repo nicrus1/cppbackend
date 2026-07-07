@@ -22,15 +22,15 @@ RUN conan profile new default --detect --force && \
 # Копирование исходников
 COPY conanfile.txt /app/
 COPY CMakeLists.txt /app/
-COPY src/ /app/src/
-COPY tests/ /app/tests/
-COPY data/ /app/data/
-COPY static/ /app/static/
+COPY ./src /app/src
+COPY ./tests/ /app/tests
+COPY ./data/ /app/data
+COPY ./static/ /app/static
 
-# Сборка с возвращенным игнорированием некритичного вывода conan
+# Сборка проекта
 RUN mkdir -p /app/build && \
     cd /app/build && \
-    conan install .. --build=missing || true && \
+    conan install .. --build=missing && \
     cmake -DCMAKE_BUILD_TYPE=Release .. && \
     cmake --build . --target game_server
 
