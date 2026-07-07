@@ -223,15 +223,15 @@ public:
         }
         
         for (const auto& player_pair : players_) {
-            const auto& player = player_pair.second;
-            serialization::PlayerRepr player_repr;
-            player_repr.token = player.token;
-            player_repr.user_id = player.user_id;
-            if (player.dog) {
-                player_repr.dog_id = std::to_string((*player.dog->GetId()));
-            }
-            state.players.push_back(player_repr);
-        }
+    const auto& player = player_pair.second;
+    serialization::PlayerRepr player_repr;
+    player_repr.token = player.token;
+    player_repr.user_id = player.user_id;
+    if (player.dog) {
+        player_repr.dog_id = std::to_string(*player.dog->GetId());
+    }
+    state.players.push_back(player_repr);
+}
     }
     
     void RestoreState(const serialization::GameState& state) {

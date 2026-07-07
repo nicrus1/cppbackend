@@ -37,16 +37,18 @@ void serialize(Archive& ar, FoundObject& obj, [[maybe_unused]] const unsigned ve
     ar& obj.type;
 }
 
+// Исправленная сериализация Dog::Id
 template <typename Archive>
 void serialize(Archive& ar, Dog::Id& id, [[maybe_unused]] const unsigned version) {
-    ar& (*id);
+    uint32_t value = *id;
+    ar& value;
+    id = Dog::Id{value};
 }
 
 }  // namespace model
 
 namespace serialization {
 
-// DogRepr - сериализованное представление класса Dog
 class DogRepr {
 public:
     DogRepr() = default;
@@ -77,7 +79,8 @@ public:
 
     template <typename Archive>
     void serialize(Archive& ar, [[maybe_unused]] const unsigned version) {
-        ar&* id_;
+        // Исправлено: ar& id_ вместо ar&* id_
+        ar& id_;
         ar& name_;
         ar& pos_;
         ar& bag_capacity_;
@@ -98,7 +101,6 @@ private:
     model::Dog::BagContent bag_content_;
 };
 
-// PlayerRepr - сериализованное представление игрока
 struct PlayerRepr {
     std::string token;
     std::string dog_id;
@@ -112,7 +114,6 @@ struct PlayerRepr {
     }
 };
 
-// LootItemRepr - сериализованное представление предмета
 struct LootItemRepr {
     uint32_t id;
     uint32_t type;
@@ -126,14 +127,12 @@ struct LootItemRepr {
     }
 };
 
-// GameState - полное состояние игры для сериализации
 struct GameState {
     std::vector<DogRepr> dogs;
     std::vector<LootItemRepr> loot_items;
     std::vector<PlayerRepr> players;
     uint64_t game_time_ms = 0;
     
-    // Карты и их состояние
     struct MapState {
         std::string map_id;
         std::vector<DogRepr> map_dogs;
@@ -158,15 +157,12 @@ struct GameState {
     }
 };
 
-// Сохранение и загрузка состояния
 class StateSerializer {
 public:
     static bool SaveToFile(const GameState& state, const std::string& file_path) {
         try {
-            // Создаем временный файл
             std::string temp_path = file_path + ".tmp";
             
-            // Сохраняем во временный файл
             {
                 std::ofstream ofs(temp_path);
                 if (!ofs.is_open()) {
@@ -177,13 +173,11 @@ public:
                 oa << state;
             }
             
-            // Проверяем, что временный файл создан
             if (!std::filesystem::exists(temp_path)) {
                 std::cerr << "Temp file was not created: " << temp_path << std::endl;
                 return false;
             }
             
-            // Атомарно переименовываем
             std::filesystem::rename(temp_path, file_path);
             return true;
         } catch (const std::exception& e) {
