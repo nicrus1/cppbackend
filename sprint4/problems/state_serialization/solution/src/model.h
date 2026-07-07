@@ -14,6 +14,22 @@ namespace model {
 using Dimension = int;
 using Coord = Dimension;
 
+// Геометрические типы
+namespace geom {
+    struct Point2D {
+        double x = 0.0;
+        double y = 0.0;
+        
+        bool operator==(const Point2D& other) const {
+            return x == other.x && y == other.y;
+        }
+        
+        bool operator!=(const Point2D& other) const {
+            return !(*this == other);
+        }
+    };
+} // namespace geom
+
 struct Point {
     Coord x, y;
 };
@@ -34,11 +50,27 @@ struct Offset {
 struct Position {
     double x = 0.0;
     double y = 0.0;
+    
+    bool operator==(const Position& other) const {
+        return x == other.x && y == other.y;
+    }
+    
+    bool operator!=(const Position& other) const {
+        return !(*this == other);
+    }
 };
 
 struct Speed {
     double vx = 0.0;
     double vy = 0.0;
+    
+    bool operator==(const Speed& other) const {
+        return vx == other.vx && vy == other.vy;
+    }
+    
+    bool operator!=(const Speed& other) const {
+        return !(*this == other);
+    }
 };
 
 enum class Direction {
@@ -66,10 +98,13 @@ inline Direction StringToDirection(const std::string& str) {
     return Direction::NORTH;
 }
 
+// --- Dog ---
 class Dog {
 public:
     using Id = uint64_t;
 
+    Dog() = default;
+    
     Dog(Id id, Point pos, double speed)
         : id_(id)
         , pos_{static_cast<double>(pos.x), static_cast<double>(pos.y)}
@@ -79,6 +114,12 @@ public:
     Dog(Id id, Position pos, double speed)
         : id_(id)
         , pos_(pos)
+        , default_speed_(speed) {
+    }
+    
+    Dog(Id id, geom::Point2D pos, double speed)
+        : id_(id)
+        , pos_{pos.x, pos.y}
         , default_speed_(speed) {
     }
 
@@ -96,6 +137,10 @@ public:
     
     void SetPosition(double x, double y) {
         pos_ = {x, y};
+    }
+    
+    void SetPosition(const geom::Point2D& pos) {
+        pos_ = {pos.x, pos.y};
     }
 
     const Speed& GetSpeed() const {
@@ -143,11 +188,11 @@ public:
     }
 
 private:
-    Id id_;
-    Position pos_;
+    Id id_ = 0;
+    Position pos_{0.0, 0.0};
     Speed speed_{0.0, 0.0};
     Direction direction_ = Direction::NORTH;
-    double default_speed_;
+    double default_speed_ = 1.0;
     int score_ = 0;
     
     std::chrono::milliseconds retirement_time_{60000};
@@ -161,6 +206,8 @@ public:
     static constexpr int HORIZONTAL = 0;
     static constexpr int VERTICAL = 1;
 
+    Road() = default;
+    
     Road(int type, Point start, Coord end)
         : type_(type)
         , start_(start)
@@ -184,14 +231,16 @@ public:
     }
 
 private:
-    int type_;
-    Point start_;
-    Point end_;
+    int type_ = HORIZONTAL;
+    Point start_{0, 0};
+    Point end_{0, 0};
 };
 
 // --- Building ---
 class Building {
 public:
+    Building() = default;
+    
     Building(Rectangle rect)
         : bounds_(rect) {
     }
@@ -201,7 +250,7 @@ public:
     }
 
 private:
-    Rectangle bounds_;
+    Rectangle bounds_{{0, 0}, {0, 0}};
 };
 
 // --- Office ---
@@ -211,6 +260,8 @@ public:
         using Tagged::Tagged;
     };
 
+    Office() = default;
+    
     Office(Id id, Point pos, Offset offset)
         : id_(std::move(id))
         , pos_(pos)
@@ -230,9 +281,9 @@ public:
     }
 
 private:
-    Id id_;
-    Point pos_;
-    Offset offset_;
+    Id id_{""};
+    Point pos_{0, 0};
+    Offset offset_{0, 0};
 };
 
 // --- Map ---
@@ -242,6 +293,8 @@ public:
         using Tagged::Tagged;
     };
 
+    Map() = default;
+    
     Map(Id id, std::string name)
         : id_(std::move(id))
         , name_(std::move(name)) {
@@ -300,7 +353,7 @@ public:
 private:
     using OfficeIdToIndex = std::unordered_map<Office::Id, size_t, util::TaggedHasher<Office::Id>>;
 
-    Id id_;
+    Id id_{""};
     std::string name_;
     std::vector<Road> roads_;
     std::vector<Building> buildings_;

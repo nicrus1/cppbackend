@@ -7,6 +7,9 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # Find Threads first
 find_package(Threads REQUIRED)
 
+# Включаем директорию с исходниками
+set(SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src)
+
 # Если в вашем conanfile.txt указан генератор "cmake", а не "cmake_multi", 
 # замените эту строку на: include(${CMAKE_BINARY_DIR}/conanbuildinfo.cmake)
 include(${CMAKE_BINARY_DIR}/conanbuildinfo_multi.cmake)
@@ -14,24 +17,24 @@ conan_basic_setup(TARGETS)
 
 # Основной исполняемый файл сервера
 add_executable(game_server
-    src/main.cpp
-    src/model.cpp
-    src/json_loader.cpp
-    src/request_handler.cpp
-    src/game_state.cpp
-    src/loot_manager.cpp
-    src/loot_generator.cpp
-    src/http_server.cpp
-    src/logger.cpp
-    src/htmldecode.cpp
-    src/boost_json.cpp
+    ${SOURCE_DIR}/main.cpp
+    ${SOURCE_DIR}/model.cpp
+    ${SOURCE_DIR}/json_loader.cpp
+    ${SOURCE_DIR}/request_handler.cpp
+    ${SOURCE_DIR}/game_state.cpp
+    ${SOURCE_DIR}/loot_manager.cpp
+    ${SOURCE_DIR}/loot_generator.cpp
+    ${SOURCE_DIR}/http_server.cpp
+    ${SOURCE_DIR}/logger.cpp
+    ${SOURCE_DIR}/htmldecode.cpp
+    ${SOURCE_DIR}/boost_json.cpp
 )
 
 target_include_directories(game_server PRIVATE 
     ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
-# Правильные имена целей от Conan (изменено с CONAN_LIBS на CONAN_TARGETS)
+# Правильные имена целей от Conan
 target_link_libraries(game_server PRIVATE 
     ${CONAN_TARGETS}
     Threads::Threads
@@ -39,11 +42,16 @@ target_link_libraries(game_server PRIVATE
 
 # Тесты
 add_executable(game_server_tests
-    src/model.cpp
-    src/game_state.cpp
-    src/loot_manager.cpp
-    src/loot_generator.cpp
-    tests/state-serialization-tests.cpp
+    ${SOURCE_DIR}/model.cpp
+    ${SOURCE_DIR}/game_state.cpp
+    ${SOURCE_DIR}/loot_manager.cpp
+    ${SOURCE_DIR}/loot_generator.cpp
+    ${SOURCE_DIR}/model_serialization.h
+    ${SOURCE_DIR}/player.h
+    ${SOURCE_DIR}/players.h
+    ${SOURCE_DIR}/player_tokens.h
+    ${SOURCE_DIR}/tagged.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/state-serialization-tests.cpp
 )
 
 target_include_directories(game_server_tests PRIVATE 
