@@ -94,12 +94,14 @@ struct LootItemRepr {
     uint32_t id = 0;
     uint32_t type = 0;
     geom::Point2D position;
+    std::string map_id;  // Добавлено поле для хранения ID карты
     
     template <typename Archive>
     void serialize(Archive& ar, [[maybe_unused]] const unsigned version) {
         ar& id;
         ar& type;
         ar& position;
+        ar& map_id;
     }
 };
 

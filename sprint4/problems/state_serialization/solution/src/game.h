@@ -9,12 +9,53 @@
 #include <stdexcept>
 #include <chrono>
 #include <fstream>
+#include <random>
 
 #include "model.h"
 #include "app_listener.h"
 #include "model_serialization.h"
 
 namespace model {
+
+// Структура для дороги
+struct RoadSegment {
+    double x0 = 0, y0 = 0;
+    double x1 = 0, y1 = 0;
+    bool has_x1 = false;
+    bool has_y1 = false;
+};
+
+// Структура для здания
+struct Building {
+    double x = 0, y = 0;
+    double w = 0, h = 0;
+};
+
+// Структура для офиса
+struct Office {
+    std::string id;
+    double x = 0, y = 0;
+    double offsetX = 0, offsetY = 0;
+};
+
+// Структура для типа лута
+struct LootType {
+    std::string name;
+    std::string file;
+    std::string type;
+    double rotation = 0;
+    std::string color;
+    double scale = 0.01;
+    uint32_t value = 0;
+};
+
+// Структура для хранения предмета на карте
+struct LootItem {
+    uint32_t id = 0;
+    uint32_t type = 0;
+    geom::Point2D position;
+    bool is_collected = false;
+};
 
 // Структура для хранения информации об игроке
 struct PlayerInfo {
@@ -24,27 +65,33 @@ struct PlayerInfo {
     std::string map_id;
 };
 
-// Структура для хранения предмета на карте
-struct LootItem {
-    uint32_t id;
-    uint32_t type;
-    geom::Point2D position;
-    bool is_collected = false;
-};
-
 // Структура для хранения состояния карты
 struct MapState {
     std::string map_id;
+    std::string name;
+    double default_dog_speed = 3.0;
+    double dog_speed = 3.0;
     std::vector<std::shared_ptr<Dog>> dogs;
     std::vector<LootItem> loot_items;
+    std::vector<RoadSegment> roads;
+    std::vector<Building> buildings;
+    std::vector<Office> offices;
+    std::vector<LootType> loot_types;
     uint64_t last_loot_generation_time = 0;
+    uint64_t loot_period_ms = 5000;
+    double loot_probability = 0.5;
+    uint64_t next_loot_id = 1;
+    
+    // Границы карты
+    double map_width = 40.0;
+    double map_height = 30.0;
 };
 
 class Game {
 public:
     using ListenerPtr = std::shared_ptr<app::ApplicationListener>;
     
-    Game() = default;
+    Game() : rng_(std::random_device{}()) {}
     
     void AddListener(ListenerPtr listener) {
         listeners_.push_back(listener);
@@ -66,6 +113,34 @@ public:
         for (auto& listener : listeners_) {
             listener->OnShutdown();
         }
+    }
+    
+    // Методы для работы с картами
+    void AddMap(const std::string& map_id, double dog_speed = 3.0) {
+        if (maps_.find(map_id) != maps_.end()) {
+            throw std::runtime_error("Map already exists: " + map_id);
+        }
+        MapState new_map;
+        new_map.map_id = map_id;
+        new_map.dog_speed = dog_speed;
+        new_map.default_dog_speed = dog_speed;
+        maps_[map_id] = new_map;
+    }
+    
+    bool HasMap(const std::string& map_id) const {
+        return maps_.find(map_id) != maps_.end();
+    }
+    
+    const std::unordered_map<std::string, MapState>& GetMaps() const {
+        return maps_;
+    }
+    
+    MapState* GetMapState(const std::string& map_id) {
+        auto it = maps_.find(map_id);
+        if (it == maps_.end()) {
+            return nullptr;
+        }
+        return &it->second;
     }
     
     // Методы для работы с собаками
@@ -157,26 +232,86 @@ public:
         return players_;
     }
     
-    // Методы для работы с картами
-    void AddMap(const std::string& map_id) {
-        if (maps_.find(map_id) != maps_.end()) {
-            throw std::runtime_error("Map already exists: " + map_id);
-        }
-        MapState new_map;
-        new_map.map_id = map_id;
-        maps_[map_id] = new_map;
-    }
-    
-    bool HasMap(const std::string& map_id) const {
-        return maps_.find(map_id) != maps_.end();
-    }
-    
-    const std::unordered_map<std::string, MapState>& GetMaps() const {
-        return maps_;
-    }
-    
     uint64_t GetGameTime() const {
         return game_time_ms_;
+    }
+    
+    // Загрузка карты из конфига
+    void LoadMapFromConfig(const boost::property_tree::ptree& map_data) {
+        std::string map_id = map_data.get<std::string>("id");
+        std::string map_name = map_data.get<std::string>("name", map_id);
+        double dog_speed = map_data.get<double>("dogSpeed", 3.0);
+        
+        if (!HasMap(map_id)) {
+            AddMap(map_id, dog_speed);
+        }
+        
+        auto it = maps_.find(map_id);
+        if (it == maps_.end()) return;
+        
+        auto& map_state = it->second;
+        map_state.name = map_name;
+        map_state.dog_speed = dog_speed;
+        map_state.default_dog_speed = dog_speed;
+        
+        // Загружаем типы лута
+        if (map_data.count("lootTypes") > 0) {
+            for (const auto& loot_node : map_data.get_child("lootTypes")) {
+                LootType loot_type;
+                loot_type.name = loot_node.second.get<std::string>("name");
+                loot_type.file = loot_node.second.get<std::string>("file");
+                loot_type.type = loot_node.second.get<std::string>("type");
+                loot_type.rotation = loot_node.second.get<double>("rotation", 0);
+                loot_type.color = loot_node.second.get<std::string>("color");
+                loot_type.scale = loot_node.second.get<double>("scale", 0.01);
+                loot_type.value = loot_node.second.get<uint32_t>("value", 0);
+                map_state.loot_types.push_back(loot_type);
+            }
+        }
+        
+        // Загружаем дороги
+        if (map_data.count("roads") > 0) {
+            for (const auto& road_node : map_data.get_child("roads")) {
+                RoadSegment road;
+                road.x0 = road_node.second.get<double>("x0", 0);
+                road.y0 = road_node.second.get<double>("y0", 0);
+                
+                if (road_node.second.count("x1") > 0) {
+                    road.x1 = road_node.second.get<double>("x1");
+                    road.has_x1 = true;
+                }
+                if (road_node.second.count("y1") > 0) {
+                    road.y1 = road_node.second.get<double>("y1");
+                    road.has_y1 = true;
+                }
+                map_state.roads.push_back(road);
+            }
+        }
+        
+        // Загружаем здания
+        if (map_data.count("buildings") > 0) {
+            for (const auto& building_node : map_data.get_child("buildings")) {
+                Building building;
+                building.x = building_node.second.get<double>("x", 0);
+                building.y = building_node.second.get<double>("y", 0);
+                building.w = building_node.second.get<double>("w", 0);
+                building.h = building_node.second.get<double>("h", 0);
+                map_state.buildings.push_back(building);
+            }
+        }
+        
+        // Загружаем офисы
+        if (map_data.count("offices") > 0) {
+            for (const auto& office_node : map_data.get_child("offices")) {
+                Office office;
+                office.id = office_node.second.get<std::string>("id");
+                office.x = office_node.second.get<double>("x", 0);
+                office.y = office_node.second.get<double>("y", 0);
+                office.offsetX = office_node.second.get<double>("offsetX", 0);
+                office.offsetY = office_node.second.get<double>("offsetY", 0);
+                map_state.offices.push_back(office);
+            }
+        }
     }
     
     // Методы для сохранения и восстановления состояния
@@ -191,8 +326,10 @@ public:
         // Сохраняем собак
         for (const auto& map_pair : maps_) {
             for (const auto& dog : map_pair.second.dogs) {
-                state.dogs.emplace_back(*dog);
-                state.dog_to_map[*dog->GetId()] = map_pair.first;
+                if (dog) {
+                    state.dogs.emplace_back(*dog);
+                    state.dog_to_map[*dog->GetId()] = map_pair.first;
+                }
             }
         }
         
@@ -204,6 +341,7 @@ public:
                     item_repr.id = item.id;
                     item_repr.type = item.type;
                     item_repr.position = item.position;
+                    item_repr.map_id = map_pair.first;
                     state.loot_items.push_back(item_repr);
                 }
             }
@@ -224,6 +362,8 @@ public:
     }
     
     void RestoreState(const serialization::GameState& state) {
+        // Сохраняем существующие карты
+        auto existing_maps = maps_;
         maps_.clear();
         players_.clear();
         
@@ -231,7 +371,11 @@ public:
         
         // Восстанавливаем карты
         for (const auto& map_id : state.map_ids) {
-            AddMap(map_id);
+            if (existing_maps.find(map_id) != existing_maps.end()) {
+                maps_[map_id] = existing_maps[map_id];
+            } else {
+                AddMap(map_id);
+            }
         }
         
         // Создаем маппинг ID собаки -> объект
@@ -240,10 +384,11 @@ public:
         // Восстанавливаем собак
         for (const auto& dog_repr : state.dogs) {
             auto dog = std::make_shared<model::Dog>(dog_repr.Restore());
-            dog_map[*dog->GetId()] = dog;
+            uint32_t dog_id = *dog->GetId();
+            dog_map[dog_id] = dog;
             
             // Добавляем собаку на соответствующую карту
-            auto it = state.dog_to_map.find(*dog->GetId());
+            auto it = state.dog_to_map.find(dog_id);
             if (it != state.dog_to_map.end()) {
                 auto map_it = maps_.find(it->second);
                 if (map_it != maps_.end()) {
@@ -253,26 +398,19 @@ public:
         }
         
         // Восстанавливаем предметы
-        // Распределяем предметы по картам (равномерно или по какому-то правилу)
-        // В данном случае просто добавляем все предметы на первую карту,
-        // если карт несколько - нужно более сложное распределение
-        if (!state.loot_items.empty() && !maps_.empty()) {
-            auto it = maps_.begin();
-            size_t map_index = 0;
-            size_t total_maps = maps_.size();
+        for (const auto& item_repr : state.loot_items) {
+            LootItem item;
+            item.id = item_repr.id;
+            item.type = item_repr.type;
+            item.position = item_repr.position;
+            item.is_collected = false;
             
-            for (const auto& item_repr : state.loot_items) {
-                LootItem item;
-                item.id = item_repr.id;
-                item.type = item_repr.type;
-                item.position = item_repr.position;
-                item.is_collected = false;
-                
-                // Распределяем предметы по картам по кругу
-                auto map_it = maps_.begin();
-                std::advance(map_it, map_index % total_maps);
+            auto map_it = maps_.find(item_repr.map_id);
+            if (map_it != maps_.end()) {
                 map_it->second.loot_items.push_back(item);
-                map_index++;
+                if (item.id >= map_it->second.next_loot_id) {
+                    map_it->second.next_loot_id = item.id + 1;
+                }
             }
         }
         
@@ -293,6 +431,7 @@ public:
     }
     
     void UpdateMap(MapState& map_state, app::milliseconds delta) {
+        // Обновляем позиции собак
         for (auto& dog : map_state.dogs) {
             if (dog) {
                 double speed_x = dog->GetSpeed().x;
@@ -302,10 +441,43 @@ public:
                     geom::Point2D pos = dog->GetPosition();
                     double delta_seconds = delta.count() / 1000.0;
                     
-                    pos.x += speed_x * delta_seconds;
-                    pos.y += speed_y * delta_seconds;
+                    pos.x += speed_x * delta_seconds * map_state.dog_speed;
+                    pos.y += speed_y * delta_seconds * map_state.dog_speed;
+                    
+                    // Ограничиваем движение границами карты
+                    pos.x = std::max(0.0, std::min(map_state.map_width, pos.x));
+                    pos.y = std::max(0.0, std::min(map_state.map_height, pos.y));
                     
                     dog->SetPosition(pos);
+                }
+            }
+        }
+        
+        // Генерируем предметы
+        if (map_state.loot_period_ms > 0 && !map_state.loot_types.empty()) {
+            map_state.last_loot_generation_time += delta.count();
+            
+            while (map_state.last_loot_generation_time >= map_state.loot_period_ms) {
+                map_state.last_loot_generation_time -= map_state.loot_period_ms;
+                
+                // Генерация на основе вероятности
+                std::uniform_real_distribution<double> dist(0.0, 1.0);
+                if (dist(rng_) < map_state.loot_probability) {
+                    LootItem item;
+                    item.id = map_state.next_loot_id++;
+                    
+                    // Случайный тип лута
+                    std::uniform_int_distribution<size_t> type_dist(0, map_state.loot_types.size() - 1);
+                    item.type = type_dist(rng_);
+                    
+                    // Случайная позиция на карте
+                    std::uniform_real_distribution<double> x_dist(1.0, map_state.map_width - 1.0);
+                    std::uniform_real_distribution<double> y_dist(1.0, map_state.map_height - 1.0);
+                    item.position.x = x_dist(rng_);
+                    item.position.y = y_dist(rng_);
+                    item.is_collected = false;
+                    
+                    map_state.loot_items.push_back(item);
                 }
             }
         }
@@ -316,6 +488,7 @@ private:
     std::unordered_map<std::string, PlayerInfo> players_;
     std::vector<ListenerPtr> listeners_;
     uint64_t game_time_ms_ = 0;
+    std::mt19937 rng_;
 };
 
 }  // namespace model
