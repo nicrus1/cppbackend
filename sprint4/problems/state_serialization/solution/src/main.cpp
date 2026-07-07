@@ -9,10 +9,12 @@
 #include <optional>
 #include <chrono>
 
-// Предполагается, что эти заголовки уже есть в вашем проекте
+// === ВАЖНО: Подключаем заголовки вашей модели и приложения ===
 #include "model.h"
 #include "model_serialization.h"
-#include "state_manager.h" 
+#include "state_manager.h"
+#include "json_loader.h"    // <--- Добавлено (или тот файл, где у вас парсинг JSON)
+#include "application.h"    // <--- Добавлено (или game.h, где объявлен app::Application)
 
 namespace net = boost::asio;
 namespace sys = boost::system;
@@ -23,10 +25,9 @@ struct Args {
     std::string www_root;
     std::optional<std::string> state_file;
     std::optional<int> save_state_period;
-    std::optional<int> tick_period; // Период автоматического тика, если есть
+    std::optional<int> tick_period;
 };
 
-// Функция разбора аргументов командной строки
 Args ParseCommandLine(int argc, const char* argv[]) {
     po::options_description desc{"Allowed options"};
     desc.add_options()
@@ -58,7 +59,6 @@ Args ParseCommandLine(int argc, const char* argv[]) {
     return args;
 }
 
-// Запуск многопоточного выполнения io_context
 template <typename Fn>
 void RunWorkers(unsigned num_threads, const Fn& fn) {
     std::vector<std::thread> v;
@@ -74,7 +74,6 @@ void RunWorkers(unsigned num_threads, const Fn& fn) {
 
 int main(int argc, const char* argv[]) {
     try {
-        // 1. Разбираем аргументы командной строки
         Args args;
         try {
             args = ParseCommandLine(argc, argv);
@@ -83,14 +82,19 @@ int main(int argc, const char* argv[]) {
             return EXIT_FAILURE;
         }
 
-        // 2. Инициализируем прикладной слой (Application) и модель игры
-        // Здесь загружается ваш JSON-конфиг карт и настраивается окружение
-        auto config = model::LoadConfig(args.config_file); 
-        app::Application app(std::move(config));
+        // === ИСПРАВЛЕНИЕ ЗДЕСЬ ===
+        // В зависимости от того, как называется функция загрузки в вашем спринте, используйте один из вариантов:
+        
+        // Вариант А (стандартный для курса): функция LoadGame в namespace json_loader
+        model::Game game = json_loader::LoadGame(args.config_file);
+        app::Application app(std::move(game));
+        
+        // --- ИЛИ Вариант Б: если у вас действительно LoadConfig в namespace model ---
+        // auto config = model::LoadConfig(args.config_file);
+        // app::Application app(std::move(config));
 
         std::shared_ptr<infrastructure::StateManager> state_manager;
 
-        // 3. Настройка инфраструктуры сохранения состояния, если передан --state-file
         if (args.state_file.has_value()) {
             std::optional<std::chrono::milliseconds> period;
             if (args.save_state_period.has_value()) {
@@ -101,49 +105,36 @@ int main(int argc, const char* argv[]) {
                 *args.state_file, period, app
             );
 
-            // Восстановление состояния из файла при старте
             try {
                 state_manager->Load();
                 BOOST_LOG_TRIVIAL(info) << "Game state successfully initialized.";
             } catch (const std::exception& ex) {
-                // ТЗ: При ошибке восстановления вывести в log и вернуть EXIT_FAILURE
                 BOOST_LOG_TRIVIAL(error) << "Critical error restoring state: " << ex.what();
                 return EXIT_FAILURE;
             }
 
-            // Регистрируем лямбду в Application, которая будет дергать менеджер при каждом тике времени
             app.DoOnTick([state_manager](std::chrono::milliseconds delta) {
                 state_manager->OnTick(delta);
             });
         }
 
-        // 4. Инициализация асинхронного контекста Asio
         const unsigned num_threads = std::max(1u, std::thread::hardware_concurrency());
         net::io_context ioc(num_threads);
 
-        // 5. Подписка на системные сигналы SIGINT и SIGTERM для штатного завершения
         net::signal_set signals(ioc, SIGINT, SIGTERM);
         signals.async_wait([&ioc](const sys::error_code& ec, [[maybe_unused]] int signal_number) {
             if (!ec) {
                 BOOST_LOG_TRIVIAL(info) << "Shutdown signal received. Stopping server...";
-                ioc.stop(); // Останавливаем цикл обработки событий Asio
+                ioc.stop();
             }
         });
 
-        // 6. Инициализация и запуск сетевой подсистемы (HTTP API и статика)
-        // Здесь должен быть ваш код создания HttpServer / API ручек, например:
-        // auto handler = std::make_shared<http_handler::RequestHandler>(app, args.www_root);
-        // http_server::ServeHttp(ioc, {address, port}, handler);
-
         BOOST_LOG_TRIVIAL(info) << "Game server started. Running workers...";
 
-        // 7. Передаем управление воркерам (блокирующий вызов)
         RunWorkers(num_threads, [&ioc] {
             ioc.run();
         });
 
-        // --- ТОЧКА ШТАТНОГО ВЫХОДА ИЗ ЦИКЛА СОБЫТИЙ ---
-        // Сюда мы попадаем, когда все асинхронные потоки завершили работу после ioc.stop()
         if (state_manager) {
             try {
                 state_manager->Save();
