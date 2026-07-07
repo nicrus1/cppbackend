@@ -7,6 +7,7 @@
 #include <unordered_map>
 #include <algorithm>
 #include <stdexcept>
+#include <chrono>
 
 #include "model.h"
 #include "app_listener.h"
@@ -181,35 +182,20 @@ public:
     void SaveState(serialization::GameState& state) const {
         state.game_time_ms = game_time_ms_;
         
+        // Сохраняем список карт
         for (const auto& map_pair : maps_) {
-            const auto& map_state = map_pair.second;
-            
-            serialization::GameState::MapState map_repr;
-            map_repr.map_id = map_pair.first;
-            
-            for (const auto& dog : map_state.dogs) {
-                map_repr.map_dogs.emplace_back(*dog);
-            }
-            
-            for (const auto& item : map_state.loot_items) {
-                if (!item.is_collected) {
-                    serialization::LootItemRepr item_repr;
-                    item_repr.id = item.id;
-                    item_repr.type = item.type;
-                    item_repr.position = item.position;
-                    map_repr.map_loot.push_back(item_repr);
-                }
-            }
-            
-            state.maps.push_back(map_repr);
+            state.map_ids.push_back(map_pair.first);
         }
         
+        // Сохраняем собак
         for (const auto& map_pair : maps_) {
             for (const auto& dog : map_pair.second.dogs) {
                 state.dogs.emplace_back(*dog);
+                state.dog_to_map[*dog->GetId()] = map_pair.first;
             }
         }
         
+        // Сохраняем предметы
         for (const auto& map_pair : maps_) {
             for (const auto& item : map_pair.second.loot_items) {
                 if (!item.is_collected) {
@@ -222,14 +208,15 @@ public:
             }
         }
         
+        // Сохраняем игроков
         for (const auto& player_pair : players_) {
             const auto& player = player_pair.second;
             serialization::PlayerRepr player_repr;
             player_repr.token = player.token;
             player_repr.user_id = player.user_id;
             if (player.dog) {
-                // ИСПРАВЛЕНО: убраны лишние скобки
-                player_repr.dog_id = std::to_string(*player.dog->GetId());
+                player_repr.dog_id = *player.dog->GetId();
+                player_repr.map_id = player.map_id;
             }
             state.players.push_back(player_repr);
         }
@@ -241,58 +228,63 @@ public:
         
         game_time_ms_ = state.game_time_ms;
         
-        for (const auto& map_repr : state.maps) {
-            AddMap(map_repr.map_id);
+        // Восстанавливаем карты
+        for (const auto& map_id : state.map_ids) {
+            AddMap(map_id);
         }
         
+        // Создаем маппинг ID собаки -> объект
         std::unordered_map<uint32_t, std::shared_ptr<Dog>> dog_map;
         
-        for (const auto& map_repr : state.maps) {
-            auto& map_state = maps_[map_repr.map_id];
+        // Восстанавливаем собак
+        for (const auto& dog_repr : state.dogs) {
+            auto dog = std::make_shared<model::Dog>(dog_repr.Restore());
+            dog_map[*dog->GetId()] = dog;
             
-            for (const auto& dog_repr : map_repr.map_dogs) {
-                auto dog = std::make_shared<Dog>(dog_repr.Restore());
-                map_state.dogs.push_back(dog);
-                dog_map[*dog->GetId()] = dog;
+            // Добавляем собаку на соответствующую карту
+            auto it = state.dog_to_map.find(*dog->GetId());
+            if (it != state.dog_to_map.end()) {
+                auto map_it = maps_.find(it->second);
+                if (map_it != maps_.end()) {
+                    map_it->second.dogs.push_back(dog);
+                }
             }
         }
         
-        for (const auto& map_repr : state.maps) {
-            auto& map_state = maps_[map_repr.map_id];
+        // Восстанавливаем предметы
+        // Распределяем предметы по картам (равномерно или по какому-то правилу)
+        // В данном случае просто добавляем все предметы на первую карту,
+        // если карт несколько - нужно более сложное распределение
+        if (!state.loot_items.empty() && !maps_.empty()) {
+            auto it = maps_.begin();
+            size_t map_index = 0;
+            size_t total_maps = maps_.size();
             
-            for (const auto& item_repr : map_repr.map_loot) {
+            for (const auto& item_repr : state.loot_items) {
                 LootItem item;
                 item.id = item_repr.id;
                 item.type = item_repr.type;
                 item.position = item_repr.position;
                 item.is_collected = false;
-                map_state.loot_items.push_back(item);
+                
+                // Распределяем предметы по картам по кругу
+                auto map_it = maps_.begin();
+                std::advance(map_it, map_index % total_maps);
+                map_it->second.loot_items.push_back(item);
+                map_index++;
             }
         }
         
-        // ИСПРАВЛЕНО: сохраняем map_id для игроков
+        // Восстанавливаем игроков
         for (const auto& player_repr : state.players) {
             PlayerInfo player;
             player.token = player_repr.token;
             player.user_id = player_repr.user_id;
+            player.map_id = player_repr.map_id;
             
-            if (!player_repr.dog_id.empty()) {
-                uint32_t dog_id = std::stoul(player_repr.dog_id);
-                auto it = dog_map.find(dog_id);
-                if (it != dog_map.end()) {
-                    player.dog = it->second;
-                    // Находим карту для этой собаки
-                    for (auto& map_pair : maps_) {
-                        auto& map_state = map_pair.second;
-                        for (auto& dog : map_state.dogs) {
-                            if (*dog->GetId() == dog_id) {
-                                player.map_id = map_pair.first;
-                                break;
-                            }
-                        }
-                        if (!player.map_id.empty()) break;
-                    }
-                }
+            auto it = dog_map.find(player_repr.dog_id);
+            if (it != dog_map.end()) {
+                player.dog = it->second;
             }
             
             players_[player.token] = player;

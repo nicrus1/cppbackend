@@ -6,6 +6,7 @@
 #include <atomic>
 #include <mutex>
 #include <iostream>
+#include <filesystem>
 
 #include "app_listener.h"
 #include "model_serialization.h"
@@ -67,6 +68,7 @@ private:
             serialization::GameState state;
             game_->SaveState(state);
             
+            // Сохраняем с атомарным переименованием
             if (serialization::StateSerializer::SaveToFile(state, state_file_)) {
                 std::cout << "State saved to " << state_file_ << std::endl;
             } else {

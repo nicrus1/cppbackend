@@ -131,21 +131,6 @@ int main(int argc, char* argv[]) {
             }
         }
         
-        // Создаем тестовую собаку для каждой карты, если собаки нет
-        for (const auto& map_pair : game->GetMaps()) {
-            const std::string& map_id = map_pair.first;
-            if (game->GetDogs(map_id).empty()) {
-                auto dog = std::make_shared<model::Dog>(
-                    model::Dog::Id{static_cast<uint32_t>(map_pair.first.length() + 1)}, 
-                    "TestDog_" + map_id, 
-                    geom::Point2D{10, 10}, 
-                    5
-                );
-                game->AddDog(map_id, dog);
-                std::cout << "Created test dog on map: " << map_id << std::endl;
-            }
-        }
-        
         // Восстанавливаем состояние из файла если он существует
         if (!state_file.empty() && std::filesystem::exists(state_file)) {
             serialization::GameState loaded_state;
@@ -161,9 +146,11 @@ int main(int argc, char* argv[]) {
                     std::cout << "Restored " << game->GetPlayers().size() << " players" << std::endl;
                 } catch (const std::exception& e) {
                     std::cerr << "Failed to restore state: " << e.what() << std::endl;
+                    return EXIT_FAILURE;
                 }
             } else {
                 std::cerr << "Failed to restore state from " << state_file << std::endl;
+                return EXIT_FAILURE;
             }
         } else if (!state_file.empty()) {
             std::cout << "Starting with clean state" << std::endl;
