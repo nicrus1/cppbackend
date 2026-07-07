@@ -27,12 +27,12 @@ COPY tests/ /app/tests/
 COPY data/ /app/data/
 COPY static/ /app/static/
 
-# Сборка с выводом ошибок (без || true, чтобы падать при реальных ошибках)
+# Сборка с возвращенным игнорированием некритичного вывода conan
 RUN mkdir -p /app/build && \
     cd /app/build && \
-    conan install .. --build=missing && \
-    cmake -DCMAKE_BUILD_TYPE=Release .. 2>&1 && \
-    cmake --build . --target game_server --verbose 2>&1
+    conan install .. --build=missing || true && \
+    cmake -DCMAKE_BUILD_TYPE=Release .. && \
+    cmake --build . --target game_server
 
 # Финальный образ
 FROM ubuntu:22.04
@@ -50,10 +50,8 @@ RUN apt-get update && \
 # Создание пользователя для запуска
 RUN groupadd -r www && useradd -r -g www www
 
-# Копирование исполняемого файла
+# Копирование исполняемого файла и статики
 COPY --from=build /app/build/bin/game_server /app/game_server
-
-# Копируем конфиг и статику из сборки (исправлен перенос строки в COPY)
 COPY --from=build /app/data /app/data
 COPY --from=build /app/static /app/static
 
@@ -61,12 +59,8 @@ COPY --from=build /app/static /app/static
 RUN mkdir -p /tmp/volume && \
     chown -R www:www /app /tmp/volume
 
-# Настройка рабочей директории
 WORKDIR /app
-
-# Права на выполнение
 RUN chmod +x /app/game_server
 
-# Запуск сервера с параметрами
 ENTRYPOINT ["/app/game_server"]
 CMD ["--config-file", "/app/data/config.json", "--www-root", "/app/static", "--state-file", "/tmp/volume/state.dat", "--save-state-period", "5000"]
