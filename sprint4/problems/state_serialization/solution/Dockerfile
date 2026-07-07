@@ -14,14 +14,14 @@ COPY conanfile.txt /app/
 COPY CMakeLists.txt /app/
 COPY src/ /app/src/
 COPY tests/ /app/tests/
+COPY data/ /app/data/
 
 # Сборка проекта
 RUN mkdir -p /app/build && \
     cd /app/build && \
     conan install .. --build=missing && \
     cmake -DCMAKE_BUILD_TYPE=Release .. && \
-    cmake --build . --target game_server && \
-    cmake --build . --target game_server_tests
+    cmake --build . --target game_server
 
 # Финальный образ
 FROM ubuntu:22.04
@@ -41,12 +41,13 @@ RUN groupadd -r www && useradd -r -g www www
 # Копирование исполняемого файла
 COPY --from=build /app/build/bin/game_server /app/game_server
 
-# Создаем директорию для состояния
-RUN mkdir -p /tmp/volume && chown www:www /tmp/volume
+# Копируем конфиг и статику из сборки
+COPY --from=build /app/data /app/data
 
-# Копируем конфиг и статику
-COPY config.json /app/data/config.json
-COPY static/ /app/static/
+# Создаем директорию для статики
+RUN mkdir -p /app/static /tmp/volume && \
+    echo '<html><body><h1>Game Server</h1></body></html>' > /app/static/index.html && \
+    chown -R www:www /app /tmp/volume
 
 # Настройка рабочей директории
 WORKDIR /app
