@@ -2,7 +2,7 @@ FROM gcc:11.3 AS build
 
 # Установка необходимых пакетов
 RUN apt update && \
-    apt install -y python3-pip cmake && \
+    apt install -y python3-pip cmake libboost-all-dev && \
     pip3 install conan==1.*
 
 # Настройка профиля Conan
@@ -30,13 +30,16 @@ RUN apt update && \
     apt install -y \
         libstdc++6 \
         ca-certificates \
+        libboost-system1.74.0 \
+        libboost-filesystem1.74.0 \
+        libboost-program-options1.74.0 \
         && \
     rm -rf /var/lib/apt/lists/*
 
 # Создание пользователя для запуска
 RUN groupadd -r www && useradd -r -g www www
 
-# Копирование исполняемого файла (исправленный путь)
+# Копирование исполняемого файла
 COPY --from=build /app/build/game_server /app/game_server
 
 # Создаем директорию для состояния
@@ -50,4 +53,4 @@ RUN chmod +x /app/game_server
 
 # Запуск сервера с параметрами
 ENTRYPOINT ["/app/game_server"]
-CMD ["--state-file", "/tmp/volume/state.dat", "--save-state-period", "5000"]
+CMD ["--config-file", "/app/data/config.json", "--www-root", "/app/static/", "--state-file", "/tmp/volume/state.dat", "--save-state-period", "5000"]
