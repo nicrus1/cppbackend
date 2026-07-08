@@ -7,6 +7,9 @@
 #include <unordered_map>
 #include <algorithm>
 #include <stdexcept>
+#include <chrono>
+#include <fstream>
+#include <random>
 
 #include "model.h"
 #include "app_listener.h"
@@ -14,7 +17,41 @@
 
 namespace model {
 
-// Структура для хранения информации об игроке
+struct RoadSegment {
+    double x0 = 0, y0 = 0;
+    double x1 = 0, y1 = 0;
+    bool has_x1 = false;
+    bool has_y1 = false;
+};
+
+struct Building {
+    double x = 0, y = 0;
+    double w = 0, h = 0;
+};
+
+struct Office {
+    std::string id;
+    double x = 0, y = 0;
+    double offsetX = 0, offsetY = 0;
+};
+
+struct LootType {
+    std::string name;
+    std::string file;
+    std::string type;
+    double rotation = 0;
+    std::string color;
+    double scale = 0.01;
+    uint32_t value = 0;
+};
+
+struct LootItem {
+    uint32_t id = 0;
+    uint32_t type = 0;
+    geom::Point2D position;
+    bool is_collected = false;
+};
+
 struct PlayerInfo {
     std::string token;
     std::string user_id;
@@ -22,27 +59,60 @@ struct PlayerInfo {
     std::string map_id;
 };
 
-// Структура для хранения предмета на карте
-struct LootItem {
-    uint32_t id;
-    uint32_t type;
-    geom::Point2D position;
-    bool is_collected = false;
-};
-
-// Структура для хранения состояния карты
 struct MapState {
     std::string map_id;
+    std::string name;
+    double default_dog_speed = 3.0;
+    double dog_speed = 3.0;
     std::vector<std::shared_ptr<Dog>> dogs;
     std::vector<LootItem> loot_items;
+    std::vector<RoadSegment> roads;
+    std::vector<Building> buildings;
+    std::vector<Office> offices;
+    std::vector<LootType> loot_types;
     uint64_t last_loot_generation_time = 0;
+    uint64_t loot_period_ms = 5000;
+    double loot_probability = 0.5;
+    uint64_t next_loot_id = 1;
+    
+    double map_width = 40.0;
+    double map_height = 30.0;
+};
+
+class Token {
+public:
+    Token() = default;
+    explicit Token(const std::string& token) : token_(token) {}
+    
+    const std::string& operator*() const { return token_; }
+    operator std::string() const { return token_; }
+    
+    bool operator==(const Token& other) const { return token_ == other.token_; }
+    bool operator!=(const Token& other) const { return token_ != other.token_; }
+    
+private:
+    std::string token_;
+};
+
+class Map {
+public:
+    using Id = util::Tagged<std::string, Map>;
+    
+    Map(Id id, std::string name) : id_(std::move(id)), name_(std::move(name)) {}
+    
+    const Id& GetId() const { return id_; }
+    const std::string& GetName() const { return name_; }
+    
+private:
+    Id id_;
+    std::string name_;
 };
 
 class Game {
 public:
     using ListenerPtr = std::shared_ptr<app::ApplicationListener>;
     
-    Game() = default;
+    Game() : rng_(std::random_device{}()) {}
     
     void AddListener(ListenerPtr listener) {
         listeners_.push_back(listener);
@@ -66,7 +136,49 @@ public:
         }
     }
     
-    // Методы для работы с собаками
+    void AddMap(const std::string& map_id, double dog_speed = 3.0) {
+        if (maps_.find(map_id) != maps_.end()) {
+            throw std::runtime_error("Map already exists: " + map_id);
+        }
+        MapState new_map;
+        new_map.map_id = map_id;
+        new_map.dog_speed = dog_speed;
+        new_map.default_dog_speed = dog_speed;
+        maps_[map_id] = new_map;
+    }
+    
+    bool HasMap(const std::string& map_id) const {
+        return maps_.find(map_id) != maps_.end();
+    }
+    
+    const std::unordered_map<std::string, MapState>& GetMaps() const {
+        return maps_;
+    }
+    
+    std::unordered_map<std::string, MapState>& GetMaps() {
+        return maps_;
+    }
+    
+    MapState* GetMapState(const std::string& map_id) {
+        auto it = maps_.find(map_id);
+        if (it == maps_.end()) {
+            return nullptr;
+        }
+        return &it->second;
+    }
+    
+    const MapState* GetMapState(const std::string& map_id) const {
+        auto it = maps_.find(map_id);
+        if (it == maps_.end()) {
+            return nullptr;
+        }
+        return &it->second;
+    }
+    
+    const MapState* FindMap(const std::string& map_id) const {
+        return GetMapState(map_id);
+    }
+    
     void AddDog(const std::string& map_id, std::shared_ptr<Dog> dog) {
         auto it = maps_.find(map_id);
         if (it == maps_.end()) {
@@ -93,7 +205,6 @@ public:
         return all_dogs;
     }
     
-    // Методы для работы с предметами
     void AddLootItem(const std::string& map_id, const LootItem& item) {
         auto it = maps_.find(map_id);
         if (it == maps_.end()) {
@@ -122,7 +233,6 @@ public:
         return all_items;
     }
     
-    // Методы для работы с игроками
     void AddPlayer(const std::string& token, const std::string& user_id, 
                    const std::string& map_id, std::shared_ptr<Dog> dog) {
         PlayerInfo player;
@@ -155,58 +265,27 @@ public:
         return players_;
     }
     
-    // Методы для работы с картами
-    void AddMap(const std::string& map_id) {
-        if (maps_.find(map_id) != maps_.end()) {
-            throw std::runtime_error("Map already exists: " + map_id);
-        }
-        MapState new_map;
-        new_map.map_id = map_id;
-        maps_[map_id] = new_map;
-    }
-    
-    bool HasMap(const std::string& map_id) const {
-        return maps_.find(map_id) != maps_.end();
-    }
-    
-    const std::unordered_map<std::string, MapState>& GetMaps() const {
-        return maps_;
+    std::unordered_map<std::string, PlayerInfo>& GetPlayers() {
+        return players_;
     }
     
     uint64_t GetGameTime() const {
         return game_time_ms_;
     }
     
-    // Методы для сохранения и восстановления состояния
     void SaveState(serialization::GameState& state) const {
         state.game_time_ms = game_time_ms_;
         
         for (const auto& map_pair : maps_) {
-            const auto& map_state = map_pair.second;
-            
-            serialization::GameState::MapState map_repr;
-            map_repr.map_id = map_pair.first;
-            
-            for (const auto& dog : map_state.dogs) {
-                map_repr.map_dogs.emplace_back(*dog);
-            }
-            
-            for (const auto& item : map_state.loot_items) {
-                if (!item.is_collected) {
-                    serialization::LootItemRepr item_repr;
-                    item_repr.id = item.id;
-                    item_repr.type = item.type;
-                    item_repr.position = item.position;
-                    map_repr.map_loot.push_back(item_repr);
-                }
-            }
-            
-            state.maps.push_back(map_repr);
+            state.map_ids.push_back(map_pair.first);
         }
         
         for (const auto& map_pair : maps_) {
             for (const auto& dog : map_pair.second.dogs) {
-                state.dogs.emplace_back(*dog);
+                if (dog) {
+                    state.dogs.emplace_back(*dog);
+                    state.dog_to_map[*dog->GetId()] = map_pair.first;
+                }
             }
         }
         
@@ -217,6 +296,7 @@ public:
                     item_repr.id = item.id;
                     item_repr.type = item.type;
                     item_repr.position = item.position;
+                    item_repr.map_id = map_pair.first;
                     state.loot_items.push_back(item_repr);
                 }
             }
@@ -228,44 +308,57 @@ public:
             player_repr.token = player.token;
             player_repr.user_id = player.user_id;
             if (player.dog) {
-                player_repr.dog_id = std::to_string((*player.dog->GetId()));
+                player_repr.dog_id = *player.dog->GetId();
+                player_repr.map_id = player.map_id;
             }
             state.players.push_back(player_repr);
         }
     }
     
     void RestoreState(const serialization::GameState& state) {
+        auto existing_maps = maps_;
         maps_.clear();
         players_.clear();
         
         game_time_ms_ = state.game_time_ms;
         
-        for (const auto& map_repr : state.maps) {
-            AddMap(map_repr.map_id);
+        for (const auto& map_id : state.map_ids) {
+            if (existing_maps.find(map_id) != existing_maps.end()) {
+                maps_[map_id] = existing_maps[map_id];
+            } else {
+                AddMap(map_id);
+            }
         }
         
         std::unordered_map<uint32_t, std::shared_ptr<Dog>> dog_map;
         
-        for (const auto& map_repr : state.maps) {
-            auto& map_state = maps_[map_repr.map_id];
+        for (const auto& dog_repr : state.dogs) {
+            auto dog = std::make_shared<model::Dog>(dog_repr.Restore());
+            uint32_t dog_id = *dog->GetId();
+            dog_map[dog_id] = dog;
             
-            for (const auto& dog_repr : map_repr.map_dogs) {
-                auto dog = std::make_shared<Dog>(dog_repr.Restore());
-                map_state.dogs.push_back(dog);
-                dog_map[(*dog->GetId())] = dog;
+            auto it = state.dog_to_map.find(dog_id);
+            if (it != state.dog_to_map.end()) {
+                auto map_it = maps_.find(it->second);
+                if (map_it != maps_.end()) {
+                    map_it->second.dogs.push_back(dog);
+                }
             }
         }
         
-        for (const auto& map_repr : state.maps) {
-            auto& map_state = maps_[map_repr.map_id];
+        for (const auto& item_repr : state.loot_items) {
+            LootItem item;
+            item.id = item_repr.id;
+            item.type = item_repr.type;
+            item.position = item_repr.position;
+            item.is_collected = false;
             
-            for (const auto& item_repr : map_repr.map_loot) {
-                LootItem item;
-                item.id = item_repr.id;
-                item.type = item_repr.type;
-                item.position = item_repr.position;
-                item.is_collected = false;
-                map_state.loot_items.push_back(item);
+            auto map_it = maps_.find(item_repr.map_id);
+            if (map_it != maps_.end()) {
+                map_it->second.loot_items.push_back(item);
+                if (item.id >= map_it->second.next_loot_id) {
+                    map_it->second.next_loot_id = item.id + 1;
+                }
             }
         }
         
@@ -273,13 +366,11 @@ public:
             PlayerInfo player;
             player.token = player_repr.token;
             player.user_id = player_repr.user_id;
+            player.map_id = player_repr.map_id;
             
-            if (!player_repr.dog_id.empty()) {
-                uint32_t dog_id = std::stoul(player_repr.dog_id);
-                auto it = dog_map.find(dog_id);
-                if (it != dog_map.end()) {
-                    player.dog = it->second;
-                }
+            auto it = dog_map.find(player_repr.dog_id);
+            if (it != dog_map.end()) {
+                player.dog = it->second;
             }
             
             players_[player.token] = player;
@@ -296,10 +387,38 @@ public:
                     geom::Point2D pos = dog->GetPosition();
                     double delta_seconds = delta.count() / 1000.0;
                     
-                    pos.x += speed_x * delta_seconds;
-                    pos.y += speed_y * delta_seconds;
+                    pos.x += speed_x * delta_seconds * map_state.dog_speed;
+                    pos.y += speed_y * delta_seconds * map_state.dog_speed;
+                    
+                    pos.x = std::max(0.0, std::min(map_state.map_width, pos.x));
+                    pos.y = std::max(0.0, std::min(map_state.map_height, pos.y));
                     
                     dog->SetPosition(pos);
+                }
+            }
+        }
+        
+        if (map_state.loot_period_ms > 0 && !map_state.loot_types.empty()) {
+            map_state.last_loot_generation_time += delta.count();
+            
+            while (map_state.last_loot_generation_time >= map_state.loot_period_ms) {
+                map_state.last_loot_generation_time -= map_state.loot_period_ms;
+                
+                std::uniform_real_distribution<double> dist(0.0, 1.0);
+                if (dist(rng_) < map_state.loot_probability) {
+                    LootItem item;
+                    item.id = map_state.next_loot_id++;
+                    
+                    std::uniform_int_distribution<size_t> type_dist(0, map_state.loot_types.size() - 1);
+                    item.type = type_dist(rng_);
+                    
+                    std::uniform_real_distribution<double> x_dist(1.0, map_state.map_width - 1.0);
+                    std::uniform_real_distribution<double> y_dist(1.0, map_state.map_height - 1.0);
+                    item.position.x = x_dist(rng_);
+                    item.position.y = y_dist(rng_);
+                    item.is_collected = false;
+                    
+                    map_state.loot_items.push_back(item);
                 }
             }
         }
@@ -310,6 +429,7 @@ private:
     std::unordered_map<std::string, PlayerInfo> players_;
     std::vector<ListenerPtr> listeners_;
     uint64_t game_time_ms_ = 0;
+    std::mt19937 rng_;
 };
 
 }  // namespace model

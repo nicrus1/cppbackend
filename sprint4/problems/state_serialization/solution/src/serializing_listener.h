@@ -6,6 +6,7 @@
 #include <atomic>
 #include <mutex>
 #include <iostream>
+#include <filesystem>
 
 #include "app_listener.h"
 #include "model_serialization.h"

@@ -2,7 +2,6 @@
 #include <memory>
 #include <string>
 #include <vector>
-#include <compare>
 
 #include "geom.h"
 #include "tagged.h"
@@ -37,8 +36,8 @@ struct FoundObject {
 enum class Direction {
     NORTH,
     EAST,
-    SOUTH,
     WEST,
+    SOUTH,
 };
 
 class Dog {
@@ -58,7 +57,7 @@ public:
         return id_;
     }
 
-    const std::string& GetName() const noexcept {
+    const std::string GetName() const noexcept {
         return name_;
     }
 

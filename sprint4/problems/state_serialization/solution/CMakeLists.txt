@@ -9,24 +9,38 @@ conan_basic_setup(TARGETS)
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
 
+file(MAKE_DIRECTORY ${CMAKE_SOURCE_DIR}/src/db)
+
 add_library(game_model STATIC
     src/geom.h
     src/model_serialization.h
     src/model.h
     src/model.cpp
     src/tagged.h
-    src/app_listener.h
-    src/serializing_listener.h
     src/game.h
+    src/app_listener.h
+    src/logger.h
+    src/sdk.h
+    src/extra_data.h
+    src/db/record_manager.h
 )
 
 target_link_libraries(game_model PUBLIC CONAN_PKG::boost Threads::Threads)
 
 add_executable(game_server
     src/main.cpp
+    src/serializing_listener.h
+    src/api_handler.h
+    src/request_handler.h
+    src/request_handler.cpp
+    src/http_server.h
+    src/http_server.cpp
+    src/command_line.h
+    src/boost_json.cpp
+    src/game_state.h
 )
 
-target_link_libraries(game_server game_model CONAN_PKG::boost)
+target_link_libraries(game_server game_model CONAN_PKG::boost Threads::Threads)
 
 add_executable(game_server_tests
     tests/state-serialization-tests.cpp
