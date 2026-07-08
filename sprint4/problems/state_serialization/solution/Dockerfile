@@ -36,8 +36,12 @@ RUN apt update && \
 # Создание пользователя для запуска
 RUN groupadd -r www && useradd -r -g www www
 
-# Копирование исполняемого файла (исправленный путь)
+# Копирование исполняемого файла
 COPY --from=build /app/build/game_server /app/game_server
+
+# Копирование статики и конфигурации
+COPY data/ /app/data/
+COPY static/ /app/static/
 
 # Создаем директорию для состояния
 RUN mkdir -p /tmp/volume && chown www:www /tmp/volume

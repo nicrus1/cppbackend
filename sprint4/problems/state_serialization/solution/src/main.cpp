@@ -259,7 +259,7 @@ int main(int argc, char* argv[]) {
             (*handler)(std::forward<decltype(req)>(req), std::forward<decltype(send)>(send));
         });
 
-        std::cout << "Server started on port " << port << std::endl;
+        std::cout << "server started on port " << port << std::endl;
         std::cout << "Game time: " << game->GetGameTime() << " ms" << std::endl;
         std::cout << "Number of maps: " << game->GetMaps().size() << std::endl;
         std::cout << "Number of dogs: " << game->GetAllDogs().size() << std::endl;
