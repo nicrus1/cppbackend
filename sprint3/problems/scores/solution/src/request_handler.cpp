@@ -1,0 +1,178 @@
+#include "request_handler.h"
+#include <fstream>
+#include <sstream>
+
+namespace http_handler {
+
+void RequestHandler::LoadExtraData(const std::filesystem::path& config_path) {
+    std::ifstream file(config_path);
+    if (!file.is_open()) {
+        logger::LogError(0, "Failed to open config file: " + config_path.string(), "LoadExtraData");
+        return;
+    }
+    
+    std::stringstream buffer;
+    buffer << file.rdbuf();
+    std::string json_str = buffer.str();
+    
+    try {
+        boost::json::value json_value = boost::json::parse(json_str);
+        boost::json::object json_obj = json_value.as_object();
+        
+        auto get_double = [](const boost::json::value& val) -> double {
+            if (val.is_double()) {
+                return val.as_double();
+            }
+            if (val.is_int64()) {
+                return static_cast<double>(val.as_int64());
+            }
+            if (val.is_uint64()) {
+                return static_cast<double>(val.as_uint64());
+            }
+            throw std::runtime_error("Not a number");
+        };
+        
+        auto get_int = [](const boost::json::value& val) -> int {
+            if (val.is_int64()) {
+                return static_cast<int>(val.as_int64());
+            }
+            if (val.is_uint64()) {
+                return static_cast<int>(val.as_uint64());
+            }
+            throw std::runtime_error("Not an integer");
+        };
+
+        if (auto config_ptr = json_obj.if_contains("lootGeneratorConfig")) {
+            const auto& config = config_ptr->as_object();
+            double period = get_double(config.at("period"));
+            double probability = get_double(config.at("probability"));
+            extra_data_.SetLootGeneratorConfig(period, probability);
+            api_handler_.SetLootGeneratorConfig(period, probability);
+            logger::LogDebug("Loot generator config loaded: period=" + std::to_string(period) + 
+                           ", probability=" + std::to_string(probability));
+        }
+        
+        if (auto maps_ptr = json_obj.if_contains("maps")) {
+            const auto& maps_array = maps_ptr->as_array();
+            for (const auto& map_value : maps_array) {
+                const auto& map_obj = map_value.as_object();
+                std::string map_id = std::string(map_obj.at("id").as_string());
+                
+                if (auto loot_ptr = map_obj.if_contains("lootTypes")) {
+                    extra_data::MapExtraData map_data;
+                    const auto& loot_array = loot_ptr->as_array();
+                    extra_data::MapExtraData::LootTypes loot_types;
+                    
+                    for (const auto& loot_value : loot_array) {
+                        const auto& loot_obj = loot_value.as_object();
+                        extra_data::LootTypeInfo info;
+                        info.data = loot_obj;
+                        
+                        if (auto value_ptr = loot_obj.if_contains("value")) {
+                            info.value = get_int(*value_ptr);
+                        } else {
+                            info.value = 0;
+                        }
+                        loot_types.push_back(info);
+                    }
+                    
+                    map_data.SetLootTypes(std::move(loot_types));
+                    extra_data_.SetMapExtraData(map_id, std::move(map_data));
+                    
+                    const model::Map* map = game_.FindMap(model::Map::Id{map_id});
+                    if (map) {
+                        const_cast<model::Map*>(map)->SetLootTypesCount(loot_array.size());
+                        logger::LogDebug("Map " + map_id + " has " + std::to_string(loot_array.size()) + 
+                                       " loot types");
+                    }
+                }
+            }
+        }
+    } catch (const std::exception& e) {
+        logger::LogError(0, "Failed to load extra data: " + std::string(e.what()), "LoadExtraData");
+    }
+}
+
+std::string RequestHandler::SerializeMaps() const {
+    boost::json::array maps_array;
+    for (const auto& map : game_.GetMaps()) {
+        maps_array.push_back(boost::json::object{
+            {"id", *map.GetId()},
+            {"name", map.GetName()}
+        });
+    }
+    return boost::json::serialize(maps_array);
+}
+
+std::string RequestHandler::SerializeMap(const model::Map& map) const {
+    boost::json::object map_obj;
+    map_obj["id"] = *map.GetId();
+    map_obj["name"] = map.GetName();
+    map_obj["roads"] = SerializeRoads(map);
+    map_obj["buildings"] = SerializeBuildings(map);
+    map_obj["offices"] = SerializeOffices(map);
+    
+    const auto* map_data = extra_data_.GetMapExtraData(*map.GetId());
+    if (map_data) {
+        boost::json::array loot_array;
+        for (const auto& loot : map_data->GetLootTypes()) {
+            loot_array.push_back(loot.data);
+        }
+        map_obj["lootTypes"] = loot_array;
+    } else {
+        map_obj["lootTypes"] = boost::json::array();
+    }
+    
+    return boost::json::serialize(map_obj);
+}
+
+boost::json::array RequestHandler::SerializeRoads(const model::Map& map) const {
+    boost::json::array roads_array;
+    for (const auto& road : map.GetRoads()) {
+        boost::json::object road_obj;
+        auto start = road.GetStart();
+        auto end = road.GetEnd();
+        
+        if (road.IsHorizontal()) {
+            road_obj["x0"] = start.x;
+            road_obj["y0"] = start.y;
+            road_obj["x1"] = end.x;
+        } else {
+            road_obj["x0"] = start.x;
+            road_obj["y0"] = start.y;
+            road_obj["y1"] = end.y;
+        }
+        roads_array.push_back(road_obj);
+    }
+    return roads_array;
+}
+
+boost::json::array RequestHandler::SerializeBuildings(const model::Map& map) const {
+    boost::json::array buildings_array;
+    for (const auto& building : map.GetBuildings()) {
+        const auto& bounds = building.GetBounds();
+        buildings_array.push_back(boost::json::object{
+            {"x", bounds.position.x},
+            {"y", bounds.position.y},
+            {"w", bounds.size.width},
+            {"h", bounds.size.height}
+        });
+    }
+    return buildings_array;
+}
+
+boost::json::array RequestHandler::SerializeOffices(const model::Map& map) const {
+    boost::json::array offices_array;
+    for (const auto& office : map.GetOffices()) {
+        offices_array.push_back(boost::json::object{
+            {"id", *office.GetId()},
+            {"x", office.GetPosition().x},
+            {"y", office.GetPosition().y},
+            {"offsetX", office.GetOffset().dx},
+            {"offsetY", office.GetOffset().dy}
+        });
+    }
+    return offices_array;
+}
+
+} // namespace http_handler
